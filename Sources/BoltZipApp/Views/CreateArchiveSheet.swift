@@ -65,35 +65,35 @@ struct CreateArchiveSheet: View {
             Divider()
 
             Form {
-                Section("输出目标") {
-                    TextField("归档名称（不含扩展名）", text: $archiveName)
+                Section(vm.l10n.outputTargetSection) {
+                    TextField(vm.l10n.archiveNameField, text: $archiveName)
                     HStack {
-                        Text("保存位置")
+                        Text(vm.l10n.saveLocationLabel)
                         Spacer()
                         Text(destinationDir.path)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.middle)
-                        Button("更改...") {
+                        Button(vm.l10n.change) {
                             chooseDestinationDir()
                         }
                         .buttonStyle(.glass)
                     }
                     HStack {
-                        Text("待压缩项目 (\(inputs.count))")
+                        Text("\(vm.l10n.inputItemsLabel) (\(inputs.count))")
                         Spacer()
                         Text(inputs.map(\.lastPathComponent).joined(separator: ", "))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                        Button("添加...") { addMoreInputs() }
+                        Button(vm.l10n.add) { addMoreInputs() }
                             .buttonStyle(.glass)
                     }
                 }
 
-                Section("格式与开源算法") {
-                    Picker("归档格式", selection: $format) {
+                Section(vm.l10n.formatAlgoSection) {
+                    Picker(vm.l10n.archiveFormatLabel, selection: $format) {
                         ForEach(ArchiveFormat.creatableFormats) { fmt in
                             Text(fmt.displayName).tag(fmt)
                         }
@@ -107,7 +107,7 @@ struct CreateArchiveSheet: View {
                         if !newFmt.supportsSplitVolumes { splitPreset = .none }
                     }
 
-                    Picker("压缩算法", selection: $algorithm) {
+                    Picker(vm.l10n.compressionAlgoLabel, selection: $algorithm) {
                         ForEach(format.supportedAlgorithms) { algo in
                             Text("\(algo.displayName) — \(algo.openSourceLicenseNote)").tag(algo)
                         }
@@ -117,7 +117,7 @@ struct CreateArchiveSheet: View {
                     }
 
                     if algorithm != .store {
-                        Picker("压缩级别预设", selection: $preset) {
+                        Picker(vm.l10n.compressionPresetLabel, selection: $preset) {
                             ForEach(CompressionPreset.allCases.filter { $0 != .store }) { p in
                                 Text(p.displayName).tag(p)
                             }
@@ -130,7 +130,7 @@ struct CreateArchiveSheet: View {
                         let range = algorithm.levelRange
                         if range.lowerBound < range.upperBound {
                             HStack {
-                                Text("算法精细级别：\(level)")
+                                Text("\(vm.l10n.fineLevelLabel): \(level)")
                                 Slider(
                                     value: Binding(
                                         get: { Double(level) },
@@ -145,17 +145,17 @@ struct CreateArchiveSheet: View {
                 }
 
                 if format.supportsEncryption {
-                    Section("加密保护 (WinZip 兼容)") {
-                        Picker("加密方式", selection: $encryption) {
+                    Section(vm.l10n.encryptionSection) {
+                        Picker(vm.l10n.encryptionMethodLabel, selection: $encryption) {
                             ForEach(EncryptionMethod.allCases) { enc in
                                 Text(enc.displayName).tag(enc)
                             }
                         }
                         if encryption != .none {
-                            SecureField("输入密码", text: $password)
-                            SecureField("确认密码", text: $confirmPassword)
+                            SecureField(vm.l10n.passwordPlaceholder, text: $password)
+                            SecureField(vm.l10n.confirmPasswordField, text: $confirmPassword)
                             if !password.isEmpty && !confirmPassword.isEmpty && password != confirmPassword {
-                                Text("两次输入的密码不一致")
+                                Text(vm.l10n.passwordMismatch)
                                     .font(.caption)
                                     .foregroundStyle(.red)
                             }
@@ -163,24 +163,24 @@ struct CreateArchiveSheet: View {
                     }
                 }
 
-                Section("高级选项与跨平台兼容") {
+                Section(vm.l10n.advancedOptionsSection) {
                     if format.supportsSplitVolumes {
-                        Picker("分卷大小", selection: $splitPreset) {
+                        Picker(vm.l10n.splitVolumeLabel, selection: $splitPreset) {
                             ForEach(SplitPreset.allCases) { sp in
                                 Text(sp.rawValue).tag(sp)
                             }
                         }
                         if splitPreset == .custom {
-                            TextField("单卷体积 (MB)", text: $customSplitMB)
+                            TextField(vm.l10n.customSplitMBField, text: $customSplitMB)
                         }
                     }
 
-                    Toggle("排除 Mac 系统隐藏文件 (.DS_Store / __MACOSX / ._*)", isOn: $excludeMacJunk)
+                    Toggle(vm.l10n.stripMacJunkToggle, isOn: $excludeMacJunk)
 
                     if format == .zip {
-                        Picker("文件名编码", selection: $encoding) {
+                        Picker(vm.l10n.filenameEncoding, selection: $encoding) {
                             ForEach([FilenameEncodingOption.utf8, .gb18030, .cp437]) { enc in
-                                Text(enc.displayName).tag(enc)
+                                Text(vm.l10n.encodingTitle(enc)).tag(enc)
                             }
                         }
                     }
@@ -191,7 +191,7 @@ struct CreateArchiveSheet: View {
             Divider()
 
             HStack {
-                Text("将生成：\(resolvedOutputURL.lastPathComponent)")
+                Text("\(vm.l10n.willGeneratePrefix)\(resolvedOutputURL.lastPathComponent)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()

@@ -6,52 +6,52 @@ struct WelcomeDropZoneView: View {
     @Bindable var vm: WorkspaceViewModel
     @State private var isDropTargeted = false
     @State private var finderActionToast: String?
-    @State private var containerSize: CGSize = CGSize(width: 720, height: 460)
-
-    private var isNarrow: Bool { containerSize.width < 540 }
-    private var isCompactHeight: Bool { containerSize.height < 350 }
-    private var showBannerHere: Bool { vm.showFinderBanner && containerSize.height >= 330 }
-    private var showLowerCardsHere: Bool { (vm.showFeatureHighlights || vm.showRecentArchives) && containerSize.height >= 390 }
 
     var body: some View {
         let l = vm.l10n
-        Group {
-            if showLowerCardsHere {
-                ScrollView(.vertical) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        if showBannerHere {
-                            finderBanner(l: l)
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let isNarrow = w < 540
+            let isCompactHeight = h < 350
+            let showBannerHere = vm.showFinderBanner && h >= 330
+            let showLowerCardsHere = (vm.showFeatureHighlights || vm.showRecentArchives) && h >= 390
+            let contentWidth = max(280, w - 24)
+
+            Group {
+                if showLowerCardsHere {
+                    ScrollView(.vertical) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if showBannerHere {
+                                finderBanner(l: l, isNarrow: isNarrow)
+                            }
+                            heroDropZone(l: l, isNarrow: isNarrow, isCompactHeight: isCompactHeight, fillsSpace: false)
+                            lowerCards(l: l, availableWidth: w)
                         }
-                        heroDropZone(l: l, fillsSpace: false)
-                        lowerCards(l: l)
+                        .frame(width: contentWidth, alignment: .topLeading)
+                        .padding(12)
+                    }
+                    .frame(width: w, height: h)
+                } else {
+                    VStack(spacing: 10) {
+                        if showBannerHere {
+                            finderBanner(l: l, isNarrow: isNarrow)
+                        }
+                        heroDropZone(l: l, isNarrow: isNarrow, isCompactHeight: isCompactHeight, fillsSpace: true)
                     }
                     .padding(12)
-                    .frame(width: max(300, containerSize.width), alignment: .top)
+                    .frame(width: w, height: h)
                 }
-            } else {
-                // Compact / Minimal height mode: only keep the main interface, zero overflow
-                VStack(spacing: 10) {
-                    if showBannerHere {
-                        finderBanner(l: l)
-                    }
-                    heroDropZone(l: l, fillsSpace: true)
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .onGeometryChange(for: CGSize.self) { proxy in
-            proxy.size
-        } action: { newSize in
-            containerSize = newSize
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             vm.refreshQuickActionsStatus()
         }
     }
 
     @ViewBuilder
-    private func finderBanner(l: L10n) -> some View {
+    private func finderBanner(l: L10n, isNarrow: Bool) -> some View {
         GlassEffectContainer(spacing: 8) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
@@ -130,7 +130,7 @@ struct WelcomeDropZoneView: View {
     }
 
     @ViewBuilder
-    private func heroDropZone(l: L10n, fillsSpace: Bool) -> some View {
+    private func heroDropZone(l: L10n, isNarrow: Bool, isCompactHeight: Bool, fillsSpace: Bool) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(
@@ -215,7 +215,7 @@ struct WelcomeDropZoneView: View {
                 .frame(maxWidth: fullWidth ? .infinity : nil)
         }
         .buttonStyle(.glassProminent)
-        .controlSize(isNarrow ? .regular : .regular)
+        .controlSize(.regular)
 
         Button {
             vm.openArchivePanel()
@@ -252,8 +252,8 @@ struct WelcomeDropZoneView: View {
     }
 
     @ViewBuilder
-    private func lowerCards(l: L10n) -> some View {
-        let stackVertically = containerSize.width < 660
+    private func lowerCards(l: L10n, availableWidth: CGFloat) -> some View {
+        let stackVertically = availableWidth < 660
         if stackVertically {
             VStack(spacing: 10) {
                 if vm.showFeatureHighlights { featuresCard(l: l) }
@@ -346,7 +346,7 @@ struct WelcomeDropZoneView: View {
                                     .font(.system(size: 13, weight: .medium))
                                     .lineLimit(1)
                                     .truncationMode(.middle)
-                                Text(url.deletingLastPathComponent().path)
+                                Text((url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)
                                     .font(.system(size: 11))
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)

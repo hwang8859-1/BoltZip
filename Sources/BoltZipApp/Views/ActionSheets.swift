@@ -60,7 +60,7 @@ struct ExtractOptionsSheet: View {
             Divider()
 
             Form {
-                Section(l.colName) {
+                Section(l.destFolderLabel) {
                     HStack {
                         Text(destinationURL.path)
                             .font(.callout)
@@ -72,8 +72,8 @@ struct ExtractOptionsSheet: View {
                     }
                 }
 
-                Section(l.extractOptionsTitle) {
-                    Picker(l.extractOptionsTitle, selection: $choice) {
+                Section(l.extractModeLabel) {
+                    Picker(l.extractModeLabel, selection: $choice) {
                         Text(l.ctxSmartExtractAll).tag(Choice.smart)
                         Text(l.ctxExtractSelHere).tag(Choice.here)
                         Text(l.ctxExtractAllSubfolder).tag(Choice.subfolder)
@@ -82,7 +82,7 @@ struct ExtractOptionsSheet: View {
                         }
                     }
 
-                    Picker(l.colMethod, selection: $overwritePolicy) {
+                    Picker(l.overwriteLabel, selection: $overwritePolicy) {
                         ForEach(OverwritePolicy.allCases) { pol in
                             Text(pol.displayName).tag(pol)
                         }
@@ -92,7 +92,7 @@ struct ExtractOptionsSheet: View {
                 }
 
                 if vm.listing?.hasEncryptedEntries == true {
-                    Section(l.encryptedBadge) {
+                    Section(l.decryptPasswordSection) {
                         SecureField(l.passwordPlaceholder, text: $password)
                     }
                 }
@@ -376,10 +376,10 @@ struct BenchmarkSheet: View {
                     TableColumn(l.colRatio) { r in
                         Text(String(format: "%.1f%%", r.ratioPercent)).foregroundStyle(.green).monospacedDigit()
                     }
-                    TableColumn("Compress") { r in
+                    TableColumn(l.compressSpeedCol) { r in
                         Text(String(format: "%.1f MB/s", r.compressMBps)).monospacedDigit()
                     }
-                    TableColumn("Decompress") { r in
+                    TableColumn(l.decompressSpeedCol) { r in
                         Text(String(format: "%.1f MB/s", r.decompressMBps)).monospacedDigit()
                     }
                 }

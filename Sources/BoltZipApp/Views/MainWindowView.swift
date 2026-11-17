@@ -25,6 +25,7 @@ struct MainWindowView: View {
                 WelcomeDropZoneView(vm: vm)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(windowBackingLayer)
         .background(
             WindowStyleConfigurator(
@@ -408,6 +409,18 @@ struct MainWindowView: View {
                           let entry = vm.visibleEntries.first(where: { $0.id == firstID }) else { return }
                     vm.previewOrOpenEntry(entry)
                 }
+                .onKeyPress(.space) {
+                    guard let firstID = vm.selectedEntryIDs.first,
+                          let entry = vm.visibleEntries.first(where: { $0.id == firstID }) else { return .ignored }
+                    vm.previewOrOpenEntry(entry)
+                    return .handled
+                }
+                .onKeyPress(.return) {
+                    guard let firstID = vm.selectedEntryIDs.first,
+                          let entry = vm.visibleEntries.first(where: { $0.id == firstID }) else { return .ignored }
+                    vm.previewOrOpenEntry(entry)
+                    return .handled
+                }
                 .overlay {
                     if isTableDropTargeted && listing.format.supportsInPlaceEditing {
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -454,6 +467,7 @@ struct MainWindowView: View {
                 }
             }
         }
+        .navigationSplitViewStyle(.balanced)
     }
 
     @ViewBuilder

@@ -237,5 +237,32 @@ struct L10n: Sendable {
     var renameEntryTitle: String { t("重命名归档条目", "重新命名封存檔項目", "Rename Archive Entry", "書庫内の項目名を変更") }
     var createBtn: String { t("创建", "建立", "Create", "作成") }
     var renameBtn: String { t("重命名", "重新命名", "Rename", "変更") }
+
+    // MARK: - Create & Extract Form Labels
+    var outputTargetSection: String { t("输出目标", "輸出目標", "Output", "出力先") }
+    var archiveNameField: String { t("归档名称（不含扩展名）", "封存檔名稱（不含副檔名）", "Archive Name", "書庫名（拡張子なし）") }
+    var saveLocationLabel: String { t("保存位置", "儲存位置", "Location", "保存先") }
+    var inputItemsLabel: String { t("待压缩项目", "待壓縮項目", "Items", "対象項目") }
+    var formatAlgoSection: String { t("格式与开源算法", "格式與開源演算法", "Format & Open-Source Codec", "形式と圧縮エンジン") }
+    var archiveFormatLabel: String { t("归档格式", "封存格式", "Format", "形式") }
+    var compressionAlgoLabel: String { t("压缩算法", "壓縮演算法", "Algorithm", "圧縮方式") }
+    var compressionPresetLabel: String { t("压缩级别预设", "壓縮等級預設", "Preset", "圧縮プリセット") }
+    var fineLevelLabel: String { t("算法精细级别", "演算法精細等級", "Compression Level", "圧縮レベル") }
+    var encryptionSection: String { t("加密保护 (WinZip 兼容)", "加密保護 (WinZip 相容)", "Encryption (WinZip Compatible)", "暗号化保護 (WinZip 互換)") }
+    var encryptionMethodLabel: String { t("加密方式", "加密方式", "Encryption", "暗号化方式") }
+    var confirmPasswordField: String { t("确认密码", "確認密碼", "Confirm Password", "パスワード確認") }
+    var passwordMismatch: String { t("两次输入的密码不一致", "兩次輸入的密碼不一致", "Passwords do not match", "パスワードが一致しません") }
+    var advancedOptionsSection: String { t("高级选项与跨平台兼容", "進階選項與跨平台相容", "Advanced & Compatibility", "詳細・互換オプション") }
+    var splitVolumeLabel: String { t("分卷大小", "分卷大小", "Split Volumes", "分割サイズ") }
+    var customSplitMBField: String { t("单卷体积 (MB)", "單卷大小 (MB)", "Volume Size (MB)", "分割サイズ (MB)") }
+    var willGeneratePrefix: String { t("将生成：", "將產生：", "Output: ", "作成ファイル：") }
+
+    var destFolderLabel: String { t("目标文件夹", "目標資料夾", "Destination", "展開先フォルダ") }
+    var extractModeLabel: String { t("解压模式", "解壓模式", "Extract Mode", "展開モード") }
+    var overwriteLabel: String { t("遇到重名文件", "遇到同名檔案", "If File Exists", "同名ファイルの扱い") }
+    var decryptPasswordSection: String { t("解密密码", "解密密碼", "Password", "パスワード") }
+    var compressSpeedCol: String { t("压缩速度", "壓縮速度", "Compress", "圧縮速度") }
+    var decompressSpeedCol: String { t("解压速度", "解壓速度", "Decompress", "展開速度") }
+
     var alertTitle: String { t("BoltZip 提示", "BoltZip 提示", "BoltZip", "BoltZip") }
 }
