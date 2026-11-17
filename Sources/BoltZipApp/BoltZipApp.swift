@@ -49,6 +49,7 @@ struct BoltZipApp: App {
                     appDelegate.flushPending(to: vm)
                 }
         }
+        .defaultSize(width: 760, height: 480)
         .handlesExternalEvents(matching: Set(["*"]))
         .commands {
             CommandGroup(replacing: .newItem) {

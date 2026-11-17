@@ -4,6 +4,8 @@ import SwiftUI
 struct WindowStyleConfigurator: NSViewRepresentable {
     let isTranslucent: Bool
     let backgroundOpacity: Double
+    let minWidth: CGFloat
+    let minHeight: CGFloat
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
@@ -21,9 +23,12 @@ struct WindowStyleConfigurator: NSViewRepresentable {
 
     private func apply(to window: NSWindow?) {
         guard let window else { return }
+        let minSz = NSSize(width: minWidth, height: minHeight)
+        window.contentMinSize = minSz
+        window.minSize = minSz
+
         if isTranslucent {
             window.isOpaque = false
-            // Keep window background subtle so SwiftUI Liquid Glass & material layer shine through
             window.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(max(0.02, min(0.95, backgroundOpacity * 0.45)))
             window.titlebarAppearsTransparent = true
         } else {

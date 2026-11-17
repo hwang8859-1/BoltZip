@@ -28,10 +28,12 @@ struct MainWindowView: View {
         .background(
             WindowStyleConfigurator(
                 isTranslucent: vm.isWindowTranslucent,
-                backgroundOpacity: vm.windowBackgroundOpacity
+                backgroundOpacity: vm.windowBackgroundOpacity,
+                minWidth: vm.listing == nil ? 360 : 440,
+                minHeight: vm.listing == nil ? 240 : 300
             )
         )
-        .frame(minWidth: 880, minHeight: 540)
+        .frame(minWidth: 360, minHeight: 240)
         .containerBackground(
             vm.isWindowTranslucent ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)),
             for: .window
@@ -110,9 +112,9 @@ struct MainWindowView: View {
                     } label: {
                         Label(l.verify, systemImage: "checkmark.shield")
                     }
-                }
 
-                Divider()
+                    Divider()
+                }
 
                 Button {
                     showAppearancePopover.toggle()
@@ -272,7 +274,7 @@ struct MainWindowView: View {
                     .padding([.horizontal, .bottom], 8)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 205, ideal: 235, max: 280)
+            .navigationSplitViewColumnWidth(min: 165, ideal: 210, max: 260)
         } detail: {
             VStack(spacing: 8) {
                 GlassEffectContainer(spacing: 8) {
@@ -317,7 +319,7 @@ struct MainWindowView: View {
                             TextField(l.searchPlaceholder, text: $vm.searchText)
                                 .textFieldStyle(.plain)
                                 .font(.caption)
-                                .frame(width: 160)
+                                .frame(minWidth: 90, maxWidth: 160)
                         }
                         .padding(.horizontal, 9)
                         .padding(.vertical, 4)
@@ -344,21 +346,21 @@ struct MainWindowView: View {
                             }
                         }
                     }
-                    .width(min: 200, ideal: 280)
+                    .width(min: 110, ideal: 220)
 
                     TableColumn(l.colOriginalSize) { entry in
                         Text(entry.isDirectory ? "—" : DropHelper.formatBytes(entry.uncompressedSize))
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
-                    .width(min: 75, ideal: 90)
+                    .width(min: 55, ideal: 75)
 
                     TableColumn(l.colPackedSize) { entry in
                         Text(entry.isDirectory || entry.compressedSize == 0 ? "—" : DropHelper.formatBytes(entry.compressedSize))
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
-                    .width(min: 75, ideal: 90)
+                    .width(min: 55, ideal: 75)
 
                     TableColumn(l.colRatio) { entry in
                         if entry.isDirectory || entry.uncompressedSize == 0 {
@@ -369,7 +371,7 @@ struct MainWindowView: View {
                                 .foregroundStyle(.green)
                         }
                     }
-                    .width(min: 60, ideal: 70)
+                    .width(min: 48, ideal: 60)
 
                     TableColumn(l.colMethod) { entry in
                         let label = entry.isEncrypted ? "\(entry.compressionMethodName) · \(entry.encryptionLabel)" : entry.compressionMethodName
@@ -377,14 +379,14 @@ struct MainWindowView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    .width(min: 90, ideal: 120)
+                    .width(min: 65, ideal: 100)
 
                     TableColumn(l.colModified) { entry in
                         Text(Self.dateFormatter.string(from: entry.modifiedDate))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    .width(min: 105, ideal: 125)
+                    .width(min: 80, ideal: 110)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
