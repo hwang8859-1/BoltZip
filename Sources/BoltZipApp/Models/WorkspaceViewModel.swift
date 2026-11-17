@@ -2,10 +2,11 @@ import AppKit
 import BoltZipCore
 import Foundation
 import Observation
+import SwiftUI
 import UniformTypeIdentifiers
 
 struct FolderTreeNode: Identifiable, Hashable, Sendable {
-    let id: String // "" for root, or "a/b/"
+    let id: String
     let name: String
     let path: String
     var children: [FolderTreeNode]
@@ -21,17 +22,6 @@ enum SortColumn: String, CaseIterable, Identifiable {
     case modifiedDate
 
     var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .name: return "名称"
-        case .uncompressedSize: return "原始大小"
-        case .compressedSize: return "压缩后大小"
-        case .ratio: return "压缩率"
-        case .method: return "算法 / 加密"
-        case .modifiedDate: return "修改时间"
-        }
-    }
 }
 
 enum ActiveSheet: Identifiable {
@@ -74,10 +64,11 @@ final class WorkspaceViewModel {
     var encodingOption: FilenameEncodingOption = .auto
     var sortColumn: SortColumn = .name
     var sortAscending: Bool = true
+    var columnVisibility: NavigationSplitViewVisibility = .all
 
     var isBusy: Bool = false
     var progress: OperationProgress?
-    var statusMessage: String = "就绪 · 拖入压缩包浏览，或拖入文件立即打包"
+    var statusMessage: String = ""
     var alertMessage: String?
     var activeSheet: ActiveSheet?
     var savedPassword: String?
@@ -86,17 +77,98 @@ final class WorkspaceViewModel {
     var defaultStripMacJunk: Bool = true
     var quickActionsInstalled: Bool = QuickActionInstaller.isExtensionEnabled()
 
-    private let recentsKey = "BoltZip.RecentArchives"
-    private let stripJunkKey = "BoltZip.ExcludeMacJunk"
+    // Localization, Translucency & Modular Panel Visibility Preferences
+    var appLanguage: AppLanguage = .system {
+        didSet {
+            UserDefaults.standard.set(appLanguage.rawValue, forKey: Keys.appLanguage)
+        }
+    }
+    var isWindowTranslucent: Bool = true {
+        didSet {
+            UserDefaults.standard.set(isWindowTranslucent, forKey: Keys.windowTranslucent)
+        }
+    }
+    var windowBackgroundOpacity: Double = 0.72 {
+        didSet {
+            UserDefaults.standard.set(windowBackgroundOpacity, forKey: Keys.windowOpacity)
+        }
+    }
+    var showFinderBanner: Bool = true {
+        didSet {
+            UserDefaults.standard.set(showFinderBanner, forKey: Keys.showFinderBanner)
+        }
+    }
+    var showFeatureHighlights: Bool = true {
+        didSet {
+            UserDefaults.standard.set(showFeatureHighlights, forKey: Keys.showFeatures)
+        }
+    }
+    var showRecentArchives: Bool = true {
+        didSet {
+            UserDefaults.standard.set(showRecentArchives, forKey: Keys.showRecents)
+        }
+    }
+    var showSidebarInspector: Bool = true {
+        didSet {
+            UserDefaults.standard.set(showSidebarInspector, forKey: Keys.showInspector)
+        }
+    }
+    var showStatusBar: Bool = true {
+        didSet {
+            UserDefaults.standard.set(showStatusBar, forKey: Keys.showStatusBar)
+        }
+    }
+
+    var l10n: L10n { L10n(language: appLanguage) }
+
+    private enum Keys {
+        static let recents = "BoltZip.RecentArchives"
+        static let stripJunk = "BoltZip.ExcludeMacJunk"
+        static let appLanguage = "BoltZip.AppLanguage"
+        static let windowTranslucent = "BoltZip.IsWindowTranslucent"
+        static let windowOpacity = "BoltZip.WindowOpacity"
+        static let showFinderBanner = "BoltZip.ShowFinderBanner"
+        static let showFeatures = "BoltZip.ShowFeatureHighlights"
+        static let showRecents = "BoltZip.ShowRecentArchives"
+        static let showInspector = "BoltZip.ShowSidebarInspector"
+        static let showStatusBar = "BoltZip.ShowStatusBar"
+    }
+
     private let previewTempRoot: URL
 
     init() {
+        let defaults = UserDefaults.standard
         self.previewTempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("BoltZipPreview-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
-        self.recentArchivePaths = UserDefaults.standard.stringArray(forKey: recentsKey) ?? []
-        if UserDefaults.standard.object(forKey: stripJunkKey) != nil {
-            self.defaultStripMacJunk = UserDefaults.standard.bool(forKey: stripJunkKey)
+        self.recentArchivePaths = defaults.stringArray(forKey: Keys.recents) ?? []
+        if defaults.object(forKey: Keys.stripJunk) != nil {
+            self.defaultStripMacJunk = defaults.bool(forKey: Keys.stripJunk)
         }
+        if let rawLang = defaults.string(forKey: Keys.appLanguage), let parsed = AppLanguage(rawValue: rawLang) {
+            self.appLanguage = parsed
+        }
+        if defaults.object(forKey: Keys.windowTranslucent) != nil {
+            self.isWindowTranslucent = defaults.bool(forKey: Keys.windowTranslucent)
+        }
+        if defaults.object(forKey: Keys.windowOpacity) != nil {
+            self.windowBackgroundOpacity = defaults.double(forKey: Keys.windowOpacity)
+        }
+        if defaults.object(forKey: Keys.showFinderBanner) != nil {
+            self.showFinderBanner = defaults.bool(forKey: Keys.showFinderBanner)
+        }
+        if defaults.object(forKey: Keys.showFeatures) != nil {
+            self.showFeatureHighlights = defaults.bool(forKey: Keys.showFeatures)
+        }
+        if defaults.object(forKey: Keys.showRecents) != nil {
+            self.showRecentArchives = defaults.bool(forKey: Keys.showRecents)
+        }
+        if defaults.object(forKey: Keys.showInspector) != nil {
+            self.showSidebarInspector = defaults.bool(forKey: Keys.showInspector)
+        }
+        if defaults.object(forKey: Keys.showStatusBar) != nil {
+            self.showStatusBar = defaults.bool(forKey: Keys.showStatusBar)
+        }
+        self.statusMessage = L10n(language: self.appLanguage).readyStatus
     }
 
     var recentArchiveURLs: [URL] {
@@ -107,7 +179,7 @@ final class WorkspaceViewModel {
 
     func updateDefaultStripMacJunk(_ value: Bool) {
         defaultStripMacJunk = value
-        UserDefaults.standard.set(value, forKey: stripJunkKey)
+        UserDefaults.standard.set(value, forKey: Keys.stripJunk)
     }
 
     func refreshQuickActionsStatus() {
@@ -119,15 +191,14 @@ final class WorkspaceViewModel {
             let enabled = try QuickActionInstaller.installTopLevelFinderMenu()
             refreshQuickActionsStatus()
             if enabled {
-                statusMessage = "已启用访达一级右键「Bolt >」菜单！"
-                return "已将 Bolt 目录注册至访达一级右键菜单（已清理旧服务项）"
+                statusMessage = l10n.finderBannerEnabledTitle
+                return l10n.finderBannerEnabledTitle
             } else {
                 QuickActionInstaller.openSystemExtensionSettings()
-                statusMessage = "请在系统设置中勾选 Bolt 访达扩展"
-                return "已完成注册，请在打开的系统扩展设置中启用「Bolt」"
+                return l10n.finderDisabledSummary
             }
         } catch {
-            return "启用失败：\(error.localizedDescription)"
+            return error.localizedDescription
         }
     }
 
@@ -139,13 +210,21 @@ final class WorkspaceViewModel {
         QuickActionInstaller.disableTopLevelFinderMenu()
         try? QuickActionInstaller.uninstallLegacyWorkflows()
         refreshQuickActionsStatus()
-        statusMessage = "已停用访达右键菜单"
+        statusMessage = l10n.finderDisabledSummary
+    }
+
+    func restoreAllHomeSections() {
+        showFinderBanner = true
+        showFeatureHighlights = true
+        showRecentArchives = true
+        showSidebarInspector = true
+        showStatusBar = true
     }
 
     // MARK: - Breadcrumbs & Folder Tree
 
     var breadcrumbComponents: [(title: String, path: String)] {
-        var crumbs: [(String, String)] = [("根目录", "")]
+        var crumbs: [(String, String)] = [(l10n.rootLabel, "")]
         let parts = currentFolder.split(separator: "/").map(String.init)
         var acc = ""
         for p in parts {
@@ -170,7 +249,7 @@ final class WorkspaceViewModel {
 
     var folderTree: FolderTreeNode {
         guard let entries = listing?.entries else {
-            return FolderTreeNode(id: "", name: "根目录", path: "", children: [], fileCount: 0)
+            return FolderTreeNode(id: "", name: l10n.rootLabel, path: "", children: [], fileCount: 0)
         }
 
         var allFolders: Set<String> = [""]
@@ -218,7 +297,7 @@ final class WorkspaceViewModel {
             )
         }
 
-        return buildNode(path: "", name: listing?.archiveURL.lastPathComponent ?? "根目录")
+        return buildNode(path: "", name: listing?.archiveURL.lastPathComponent ?? l10n.rootLabel)
     }
 
     var visibleEntries: [ArchiveEntry] {
@@ -368,7 +447,7 @@ final class WorkspaceViewModel {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.title = "选择要浏览或解压的压缩包"
+        panel.title = l10n.openArchive
         if panel.runModal() == .OK, let url = panel.url {
             openArchive(url: url)
         }
@@ -379,7 +458,7 @@ final class WorkspaceViewModel {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
-        panel.title = "选择要压缩的文件或文件夹"
+        panel.title = l10n.newArchive
         if panel.runModal() == .OK, !panel.urls.isEmpty {
             activeSheet = .createArchive(panel.urls)
         }
@@ -388,7 +467,7 @@ final class WorkspaceViewModel {
     func openArchive(url: URL) {
         let encoding = encodingOption
         isBusy = true
-        statusMessage = "正在读取 \(url.lastPathComponent)..."
+        statusMessage = "\(url.lastPathComponent)..."
         Task.detached(priority: .userInitiated) {
             do {
                 let result = try BoltArchiveEngine.inspect(archiveURL: url, encoding: encoding)
@@ -400,13 +479,12 @@ final class WorkspaceViewModel {
                     self.savedPassword = nil
                     self.isBusy = false
                     self.recordRecent(url)
-                    self.statusMessage = "已打开 \(url.lastPathComponent) · 共 \(result.entries.count) 个条目"
+                    self.statusMessage = "\(url.lastPathComponent) · \(self.l10n.itemCount(result.entries.count))"
                 }
             } catch {
                 await MainActor.run {
                     self.isBusy = false
                     self.alertMessage = error.localizedDescription
-                    self.statusMessage = "打开压缩包失败"
                 }
             }
         }
@@ -424,13 +502,13 @@ final class WorkspaceViewModel {
         selectedEntryIDs.removeAll()
         searchText = ""
         savedPassword = nil
-        statusMessage = "就绪 · 拖入压缩包浏览，或拖入文件立即打包"
+        statusMessage = l10n.readyStatus
     }
 
     func createArchive(inputs: [URL], outputURL: URL, options: CreateArchiveOptions) {
         isBusy = true
-        progress = OperationProgress(fractionCompleted: 0, currentItem: "准备压缩...")
-        statusMessage = "正在创建 \(outputURL.lastPathComponent)..."
+        progress = OperationProgress(fractionCompleted: 0, currentItem: outputURL.lastPathComponent)
+        statusMessage = "\(outputURL.lastPathComponent)..."
 
         Task.detached(priority: .userInitiated) {
             do {
@@ -448,14 +526,13 @@ final class WorkspaceViewModel {
                     self.currentFolder = ""
                     self.selectedEntryIDs.removeAll()
                     self.recordRecent(mainCreated)
-                    self.statusMessage = "创建成功：\(created.map(\.lastPathComponent).joined(separator: ", "))"
+                    self.statusMessage = created.map(\.lastPathComponent).joined(separator: ", ")
                 }
             } catch {
                 await MainActor.run {
                     self.isBusy = false
                     self.progress = nil
                     self.alertMessage = error.localizedDescription
-                    self.statusMessage = "创建压缩包失败"
                 }
             }
         }
@@ -482,8 +559,8 @@ final class WorkspaceViewModel {
     func runExtract(options: ExtractOptions, archiveURL overrideURL: URL? = nil) {
         guard let archiveURL = overrideURL ?? listing?.archiveURL else { return }
         isBusy = true
-        progress = OperationProgress(fractionCompleted: 0, currentItem: "正在解压...")
-        statusMessage = "正在解压 \(archiveURL.lastPathComponent)..."
+        progress = OperationProgress(fractionCompleted: 0, currentItem: archiveURL.lastPathComponent)
+        statusMessage = "\(archiveURL.lastPathComponent)..."
 
         Task.detached(priority: .userInitiated) {
             do {
@@ -498,7 +575,7 @@ final class WorkspaceViewModel {
                     if let pw = options.password, !pw.isEmpty {
                         self.savedPassword = pw
                     }
-                    self.statusMessage = "解压完成 -> \(outDir.lastPathComponent)"
+                    self.statusMessage = "-> \(outDir.lastPathComponent)"
                     NSWorkspace.shared.activateFileViewerSelecting([outDir])
                 }
             } catch BoltZipError.passwordRequired, BoltZipError.wrongPassword {
@@ -512,7 +589,6 @@ final class WorkspaceViewModel {
                     self.isBusy = false
                     self.progress = nil
                     self.alertMessage = error.localizedDescription
-                    self.statusMessage = "解压失败"
                 }
             }
         }
@@ -523,14 +599,13 @@ final class WorkspaceViewModel {
         let savePanel = NSSavePanel()
         savePanel.allowedContentTypes = [.zip]
         savePanel.nameFieldStringValue = "Selected_Export.zip"
-        savePanel.title = "将选中条目导出为新 ZIP 归档"
         guard savePanel.runModal() == .OK, let destZip = savePanel.url else { return }
 
         let pw = savedPassword
         let enc = encodingOption
         let strip = defaultStripMacJunk
         isBusy = true
-        progress = OperationProgress(fractionCompleted: 0.1, currentItem: "正在抽取选中条目...")
+        progress = OperationProgress(fractionCompleted: 0.1, currentItem: destZip.lastPathComponent)
 
         Task.detached(priority: .userInitiated) {
             let tempStage = FileManager.default.temporaryDirectory
@@ -552,7 +627,7 @@ final class WorkspaceViewModel {
                 await MainActor.run {
                     self.isBusy = false
                     self.progress = nil
-                    self.statusMessage = "已导出新 ZIP：\(destZip.lastPathComponent)"
+                    self.statusMessage = destZip.lastPathComponent
                     NSWorkspace.shared.activateFileViewerSelecting([destZip])
                 }
             } catch {
@@ -570,8 +645,7 @@ final class WorkspaceViewModel {
         let pw = password ?? savedPassword
         let enc = encodingOption
         isBusy = true
-        progress = OperationProgress(fractionCompleted: 0, currentItem: "正在校验 CRC32 / HMAC...")
-        statusMessage = "正在校验归档完整性..."
+        progress = OperationProgress(fractionCompleted: 0, currentItem: "CRC32 / HMAC...")
 
         Task.detached(priority: .userInitiated) {
             do {
@@ -588,7 +662,7 @@ final class WorkspaceViewModel {
                     } else {
                         if let pw, !pw.isEmpty { self.savedPassword = pw }
                         self.activeSheet = .integrityReport(report)
-                        self.statusMessage = report.isHealthy ? "完整性校验通过 (\(report.passedCount)/\(report.totalEntries))" : "校验发现异常项"
+                        self.statusMessage = "\(report.passedCount)/\(report.totalEntries)"
                     }
                 }
             } catch {
@@ -613,8 +687,6 @@ final class WorkspaceViewModel {
         let previewRoot = previewTempRoot
 
         isBusy = true
-        statusMessage = "正在提取预览 \(entry.name)..."
-
         Task.detached(priority: .userInitiated) {
             do {
                 let data = try BoltArchiveEngine.readEntryData(
@@ -631,7 +703,7 @@ final class WorkspaceViewModel {
                 await MainActor.run {
                     self.isBusy = false
                     if let pw, !pw.isEmpty { self.savedPassword = pw }
-                    self.statusMessage = "正在预览 \(entry.name)"
+                    self.statusMessage = entry.name
                     QuickLookPreviewController.shared.preview(url: fileURL)
                 }
             } catch BoltZipError.passwordRequired, BoltZipError.wrongPassword {
@@ -655,7 +727,7 @@ final class WorkspaceViewModel {
         panel.allowsMultipleSelection = true
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
-        panel.title = "选择要添加到归档的文件或文件夹"
+        panel.title = l10n.ctxAddHere
         if panel.runModal() == .OK, !panel.urls.isEmpty {
             let folder = targetFolder ?? currentFolder
             editCurrentZip([.addItems(urls: panel.urls, targetFolder: folder)])
@@ -699,10 +771,7 @@ final class WorkspaceViewModel {
     }
 
     private func editCurrentZip(_ ops: [ZipEditOperation]) {
-        guard let listing, listing.format.supportsInPlaceEditing else {
-            alertMessage = "当前格式暂不支持包内原地编辑，仅 ZIP 格式支持。"
-            return
-        }
+        guard let listing, listing.format.supportsInPlaceEditing else { return }
         let url = listing.archiveURL
         let enc = encodingOption
         let opts = CreateArchiveOptions(
@@ -713,7 +782,7 @@ final class WorkspaceViewModel {
             excludeMacJunk: defaultStripMacJunk
         )
         isBusy = true
-        progress = OperationProgress(fractionCompleted: 0, currentItem: "正在更新归档...")
+        progress = OperationProgress(fractionCompleted: 0, currentItem: url.lastPathComponent)
 
         Task.detached(priority: .userInitiated) {
             do {
@@ -728,7 +797,7 @@ final class WorkspaceViewModel {
                     self.progress = nil
                     self.listing = updated
                     self.selectedEntryIDs.removeAll()
-                    self.statusMessage = "归档已更新 · 共 \(updated.entries.count) 个条目"
+                    self.statusMessage = "\(updated.archiveURL.lastPathComponent) · \(self.l10n.itemCount(updated.entries.count))"
                 }
             } catch {
                 await MainActor.run {
@@ -742,10 +811,10 @@ final class WorkspaceViewModel {
 
     // MARK: - Utilities
 
-    func copyToPasteboard(_ text: String, label: String) {
+    func copyToPasteboard(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-        statusMessage = "已复制\(label)：\(text)"
+        statusMessage = text
     }
 
     func showInFinder(_ url: URL) {
@@ -754,19 +823,38 @@ final class WorkspaceViewModel {
 
     func removeRecent(_ url: URL) {
         recentArchivePaths.removeAll { $0 == url.path }
-        UserDefaults.standard.set(recentArchivePaths, forKey: recentsKey)
+        UserDefaults.standard.set(recentArchivePaths, forKey: Keys.recents)
     }
 
     func openShowcaseWebsite() {
-        let candidates: [URL?] = [
-            Bundle.main.resourceURL?.appendingPathComponent("showcase/index.html"),
-            URL(fileURLWithPath: "/Users/xuyang/Codes/BoltZip/showcase/index.html")
-        ]
-        for case let candidate? in candidates where FileManager.default.fileExists(atPath: candidate.path) {
-            NSWorkspace.shared.open(candidate)
+        if let bundled = Bundle.main.resourceURL?.appendingPathComponent("showcase/index.html"),
+           FileManager.default.fileExists(atPath: bundled.path) {
+            NSWorkspace.shared.open(bundled)
             return
         }
-        alertMessage = "未找到展示页面 showcase/index.html"
+
+        // Dynamic ancestor lookup (zero hardcoded local paths)
+        let roots = [
+            Bundle.main.bundleURL,
+            URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        ]
+        for base in roots {
+            var cur = base
+            for _ in 0..<6 {
+                let candidate = cur.appendingPathComponent("showcase/index.html")
+                if FileManager.default.fileExists(atPath: candidate.path) {
+                    NSWorkspace.shared.open(candidate)
+                    return
+                }
+                let parent = cur.deletingLastPathComponent()
+                if parent.path == cur.path { break }
+                cur = parent
+            }
+        }
+
+        if let repoURL = URL(string: "https://github.com/hwang8859-1/BoltZip") {
+            NSWorkspace.shared.open(repoURL)
+        }
     }
 
     private func recordRecent(_ url: URL) {
@@ -774,6 +862,6 @@ final class WorkspaceViewModel {
         paths.insert(url.path, at: 0)
         if paths.count > 8 { paths = Array(paths.prefix(8)) }
         recentArchivePaths = paths
-        UserDefaults.standard.set(paths, forKey: recentsKey)
+        UserDefaults.standard.set(paths, forKey: Keys.recents)
     }
 }

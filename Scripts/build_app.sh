@@ -208,7 +208,7 @@ pluginkit -e use -i dev.boltzip.macos.FinderSync || true
 
 # Clean up legacy Services workflows so BoltZip only appears in top-level "Bolt >"
 if [ -d "$HOME/Library/Services" ]; then
-    rm -rf "$HOME/Library/Services"/BoltZip*.workflow 2>/dev/null || true
+    find "$HOME/Library/Services" -maxdepth 1 -name "BoltZip*.workflow" -exec rm -rf {} + 2>/dev/null || true
     /System/Library/CoreServices/pbs -update || true
 fi
 

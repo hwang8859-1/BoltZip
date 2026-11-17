@@ -15,9 +15,28 @@ enum QuickActionInstaller {
         if FileManager.default.fileExists(atPath: embedded.path) {
             return embedded
         }
-        let distAppex = URL(fileURLWithPath: "/Users/xuyang/Codes/BoltZip/dist/BoltZip.app/Contents/PlugIns/BoltZipFinderSync.appex", isDirectory: true)
-        if FileManager.default.fileExists(atPath: distAppex.path) {
-            return distAppex
+
+        // Walk up from current binary/working dir so `swift run` in development finds dist/BoltZip.app dynamically
+        let roots: [URL] = [
+            Bundle.main.bundleURL,
+            URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        ]
+        for base in roots {
+            var cur = base
+            for _ in 0..<6 {
+                let candidate = cur.appendingPathComponent("dist/BoltZip.app/Contents/PlugIns/BoltZipFinderSync.appex", isDirectory: true)
+                if FileManager.default.fileExists(atPath: candidate.path) {
+                    return candidate
+                }
+                let parent = cur.deletingLastPathComponent()
+                if parent.path == cur.path { break }
+                cur = parent
+            }
+        }
+
+        let installedApp = URL(fileURLWithPath: "/Applications/BoltZip.app/Contents/PlugIns/BoltZipFinderSync.appex", isDirectory: true)
+        if FileManager.default.fileExists(atPath: installedApp.path) {
+            return installedApp
         }
         return nil
     }
@@ -38,7 +57,6 @@ enum QuickActionInstaller {
     }
 
     static func installTopLevelFinderMenu() throws -> Bool {
-        // 1. Clean out legacy Services workflows so BoltZip lives cleanly in top-level "Bolt >"
         try uninstallLegacyWorkflows()
 
         guard let appex = appexURL else {

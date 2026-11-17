@@ -7,10 +7,10 @@ struct ExtractOptionsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     enum Choice: String, CaseIterable, Identifiable {
-        case smart = "智能解压 (推荐：单目录不套娃)"
-        case here = "解压到目标目录 (不建子目录)"
-        case subfolder = "始终创建同名子目录"
-        case selected = "仅解压选中的条目"
+        case smart
+        case here
+        case subfolder
+        case selected
 
         var id: String { rawValue }
     }
@@ -45,53 +45,55 @@ struct ExtractOptionsSheet: View {
     }
 
     var body: some View {
+        let l = vm.l10n
         VStack(spacing: 0) {
             HStack {
                 Image(systemName: "square.and.arrow.down.on.square.fill")
-                    .font(.title2)
+                    .font(.title3)
                     .foregroundStyle(.cyan)
-                Text("解压选项")
+                Text(l.extractOptionsTitle)
                     .font(.headline)
                 Spacer()
             }
-            .padding(18)
+            .padding(14)
 
             Divider()
 
             Form {
-                Section("目标文件夹") {
+                Section(l.colName) {
                     HStack {
                         Text(destinationURL.path)
                             .font(.callout)
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Spacer()
-                        Button("浏览...") { chooseDest() }
+                        Button(l.browse) { chooseDest() }
                             .buttonStyle(.glass)
                     }
                 }
 
-                Section("解压策略") {
-                    Picker("解压模式", selection: $choice) {
-                        ForEach(Choice.allCases) { c in
-                            if c != .selected || !selectedIDs.isEmpty {
-                                Text(c.rawValue).tag(c)
-                            }
+                Section(l.extractOptionsTitle) {
+                    Picker(l.extractOptionsTitle, selection: $choice) {
+                        Text(l.ctxSmartExtractAll).tag(Choice.smart)
+                        Text(l.ctxExtractSelHere).tag(Choice.here)
+                        Text(l.ctxExtractAllSubfolder).tag(Choice.subfolder)
+                        if !selectedIDs.isEmpty {
+                            Text(l.ctxExtractSelTo).tag(Choice.selected)
                         }
                     }
 
-                    Picker("遇到重名文件", selection: $overwritePolicy) {
+                    Picker(l.colMethod, selection: $overwritePolicy) {
                         ForEach(OverwritePolicy.allCases) { pol in
                             Text(pol.displayName).tag(pol)
                         }
                     }
 
-                    Toggle("过滤 __MACOSX / .DS_Store 隐藏文件", isOn: $stripMacJunk)
+                    Toggle(l.stripMacJunkToggle, isOn: $stripMacJunk)
                 }
 
                 if vm.listing?.hasEncryptedEntries == true {
-                    Section("解密密码") {
-                        SecureField("输入压缩包密码", text: $password)
+                    Section(l.encryptedBadge) {
+                        SecureField(l.passwordPlaceholder, text: $password)
                     }
                 }
             }
@@ -102,10 +104,10 @@ struct ExtractOptionsSheet: View {
             GlassEffectContainer(spacing: 10) {
                 HStack {
                     Spacer()
-                    Button("取消") { dismiss() }
+                    Button(l.cancel) { dismiss() }
                         .buttonStyle(.glass)
                         .keyboardShortcut(.cancelAction)
-                    Button("开始解压") {
+                    Button(l.startExtract) {
                         let mode: ExtractMode
                         switch choice {
                         case .smart: mode = .smart
@@ -128,9 +130,9 @@ struct ExtractOptionsSheet: View {
                     .keyboardShortcut(.defaultAction)
                 }
             }
-            .padding(16)
+            .padding(14)
         }
-        .frame(width: 500, height: 430)
+        .frame(width: 480, height: 390)
     }
 
     private func chooseDest() {
@@ -150,27 +152,28 @@ struct PasswordPromptSheet: View {
     @State private var password: String = ""
 
     var body: some View {
-        VStack(spacing: 16) {
+        let l = vm.l10n
+        VStack(spacing: 14) {
             Image(systemName: "lock.shield.fill")
-                .font(.system(size: 36))
+                .font(.system(size: 32))
                 .foregroundStyle(.orange)
-            Text("该压缩包已加密")
+            Text(l.passwordPromptTitle)
                 .font(.headline)
-            Text("请输入解密密码以继续操作（支持 WinZip AE-2 AES-256 与 ZipCrypto）")
+            Text(l.passwordPromptDesc)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
-            SecureField("输入密码", text: $password)
+            SecureField(l.passwordPlaceholder, text: $password)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 280)
+                .frame(width: 260)
 
             GlassEffectContainer(spacing: 10) {
                 HStack {
-                    Button("取消") { dismiss() }
+                    Button(l.cancel) { dismiss() }
                         .buttonStyle(.glass)
                         .keyboardShortcut(.cancelAction)
-                    Button("确认") {
+                    Button(l.confirm) {
                         let pw = password
                         dismiss()
                         switch purpose {
@@ -189,12 +192,13 @@ struct PasswordPromptSheet: View {
                 }
             }
         }
-        .padding(24)
-        .frame(width: 360)
+        .padding(20)
+        .frame(width: 340)
     }
 }
 
 struct EntryPropertiesSheet: View {
+    @Bindable var vm: WorkspaceViewModel
     let entry: ArchiveEntry
     @Environment(\.dismiss) private var dismiss
 
@@ -206,10 +210,11 @@ struct EntryPropertiesSheet: View {
     }()
 
     var body: some View {
+        let l = vm.l10n
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Image(systemName: entry.isDirectory ? "folder.fill" : "doc.text.magnifyingglass")
-                    .font(.title)
+                    .font(.title2)
                     .foregroundStyle(.cyan)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(entry.name).font(.headline)
@@ -220,36 +225,35 @@ struct EntryPropertiesSheet: View {
                 }
                 Spacer()
             }
-            .padding(18)
+            .padding(14)
 
             Divider()
 
-            VStack(spacing: 10) {
-                PropRow(title: "类型", value: entry.isDirectory ? "文件夹" : "文件")
-                PropRow(title: "原始大小", value: "\(DropHelper.formatBytes(entry.uncompressedSize)) (\(entry.uncompressedSize) B)")
-                PropRow(title: "压缩后大小", value: entry.isDirectory ? "—" : "\(DropHelper.formatBytes(entry.compressedSize)) (\(entry.compressedSize) B)")
-                PropRow(title: "空间节省", value: entry.isDirectory ? "—" : String(format: "%.2f%%", entry.compressionRatioPercent))
-                PropRow(title: "压缩算法", value: entry.compressionMethodName)
-                PropRow(title: "加密状态", value: entry.isEncrypted ? entry.encryptionLabel : "未加密")
-                PropRow(title: "CRC32", value: entry.crc32 == 0 ? "0x00000000 (或 AE-2 HMAC)" : String(format: "0x%08X", entry.crc32))
-                PropRow(title: "POSIX 权限", value: String(format: "0o%03o", entry.permissions))
-                PropRow(title: "修改时间", value: Self.formatter.string(from: entry.modifiedDate))
+            VStack(spacing: 8) {
+                PropRow(title: l.colOriginalSize, value: entry.isDirectory ? "—" : "\(DropHelper.formatBytes(entry.uncompressedSize)) (\(entry.uncompressedSize) B)")
+                PropRow(title: l.colPackedSize, value: entry.isDirectory ? "—" : "\(DropHelper.formatBytes(entry.compressedSize)) (\(entry.compressedSize) B)")
+                PropRow(title: l.colRatio, value: entry.isDirectory ? "—" : String(format: "%.2f%%", entry.compressionRatioPercent))
+                PropRow(title: l.colMethod, value: entry.compressionMethodName)
+                PropRow(title: l.encryptedBadge, value: entry.isEncrypted ? entry.encryptionLabel : "—")
+                PropRow(title: "CRC32", value: entry.crc32 == 0 ? "0x00000000" : String(format: "0x%08X", entry.crc32))
+                PropRow(title: "POSIX", value: String(format: "0o%03o", entry.permissions))
+                PropRow(title: l.colModified, value: Self.formatter.string(from: entry.modifiedDate))
             }
-            .padding(16)
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .padding(16)
+            .padding(14)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(14)
 
             Spacer()
 
             HStack {
                 Spacer()
-                Button("关闭") { dismiss() }
+                Button(l.close) { dismiss() }
                     .buttonStyle(.glassProminent)
                     .keyboardShortcut(.defaultAction)
             }
-            .padding([.horizontal, .bottom], 16)
+            .padding([.horizontal, .bottom], 14)
         }
-        .frame(width: 470, height: 410)
+        .frame(width: 440, height: 360)
     }
 }
 
@@ -272,25 +276,27 @@ private struct PropRow: View {
 }
 
 struct IntegrityReportSheet: View {
+    @Bindable var vm: WorkspaceViewModel
     let report: IntegrityReport
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        let l = vm.l10n
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Image(systemName: report.isHealthy ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                    .font(.largeTitle)
+                    .font(.title)
                     .foregroundStyle(report.isHealthy ? .green : .red)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("完整性校验报告 · \(report.archiveName)")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(l.verify) · \(report.archiveName)")
                         .font(.headline)
-                    Text("通过 \(report.passedCount)/\(report.totalEntries) · 失败 \(report.failedCount) · 缺少密码 \(report.skippedEncryptedCount) · 耗时 \(String(format: "%.2fs", report.elapsedSeconds))")
+                    Text("\(report.passedCount)/\(report.totalEntries) · \(String(format: "%.2fs", report.elapsedSeconds))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
             }
-            .padding(18)
+            .padding(14)
 
             Divider()
 
@@ -312,66 +318,68 @@ struct IntegrityReportSheet: View {
 
             HStack {
                 Spacer()
-                Button("关闭") { dismiss() }
+                Button(l.close) { dismiss() }
                     .buttonStyle(.glassProminent)
                     .keyboardShortcut(.defaultAction)
             }
-            .padding(14)
+            .padding(12)
         }
-        .frame(width: 600, height: 420)
+        .frame(width: 560, height: 390)
     }
 }
 
 struct BenchmarkSheet: View {
+    @Bindable var vm: WorkspaceViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var results: [BenchmarkEntryResult] = []
     @State private var isRunning = false
     @State private var errorMsg: String?
 
     var body: some View {
+        let l = vm.l10n
         VStack(spacing: 0) {
             HStack {
                 Image(systemName: "gauge.with.dots.needle.67percent")
-                    .font(.title2)
+                    .font(.title3)
                     .foregroundStyle(.cyan)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("开源算法本机性能跑分")
+                    Text(l.benchmarkTitle)
                         .font(.headline)
-                    Text("基于 2 MB 混合结构化样本实时压测 5 大开源压缩内核")
+                    Text(l.benchmarkSub)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button(isRunning ? "测试中..." : "重新跑分") {
+                Button(isRunning ? "..." : l.rerunBench) {
                     runBench()
                 }
                 .buttonStyle(.glass)
                 .disabled(isRunning)
             }
-            .padding(18)
+            .padding(14)
 
             Divider()
 
             if isRunning {
-                ProgressView("正在运行本机基准测试...")
+                ProgressView(l.runningBench)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let errorMsg {
                 Text(errorMsg).foregroundStyle(.red).padding()
             } else {
                 Table(results) {
-                    TableColumn("开源算法") { r in
+                    TableColumn(l.colMethod) { r in
                         Text("\(r.algorithm.shortName) (lvl \(r.level))").fontWeight(.medium)
                     }
-                    TableColumn("压缩后体积") { r in
+                    TableColumn(l.colPackedSize) { r in
                         Text(DropHelper.formatBytes(UInt64(r.compressedBytes))).monospacedDigit()
                     }
-                    TableColumn("空间节省") { r in
+                    TableColumn(l.colRatio) { r in
                         Text(String(format: "%.1f%%", r.ratioPercent)).foregroundStyle(.green).monospacedDigit()
                     }
-                    TableColumn("压缩速度") { r in
+                    TableColumn("Compress") { r in
                         Text(String(format: "%.1f MB/s", r.compressMBps)).monospacedDigit()
                     }
-                    TableColumn("解压速度") { r in
+                    TableColumn("Decompress") { r in
                         Text(String(format: "%.1f MB/s", r.decompressMBps)).monospacedDigit()
                     }
                 }
@@ -380,17 +388,17 @@ struct BenchmarkSheet: View {
             Divider()
 
             HStack {
-                Text("说明：结果均为当前 Mac 硬件实际测量值")
+                Text(l.benchHardwareNote)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("完成") { dismiss() }
+                Button(l.done) { dismiss() }
                     .buttonStyle(.glassProminent)
                     .keyboardShortcut(.defaultAction)
             }
-            .padding(14)
+            .padding(12)
         }
-        .frame(width: 620, height: 380)
+        .frame(width: 580, height: 350)
         .onAppear {
             if results.isEmpty { runBench() }
         }
@@ -417,6 +425,7 @@ struct BenchmarkSheet: View {
 }
 
 struct SimpleNamePromptSheet: View {
+    @Bindable var vm: WorkspaceViewModel
     let title: String
     let placeholder: String
     let confirmLabel: String
@@ -425,7 +434,8 @@ struct SimpleNamePromptSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var text: String
 
-    init(title: String, initialValue: String = "", placeholder: String, confirmLabel: String, onConfirm: @escaping (String) -> Void) {
+    init(vm: WorkspaceViewModel, title: String, initialValue: String = "", placeholder: String, confirmLabel: String, onConfirm: @escaping (String) -> Void) {
+        self.vm = vm
         self.title = title
         self.placeholder = placeholder
         self.confirmLabel = confirmLabel
@@ -434,14 +444,15 @@ struct SimpleNamePromptSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 14) {
+        let l = vm.l10n
+        VStack(spacing: 12) {
             Text(title).font(.headline)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 280)
+                .frame(width: 260)
             GlassEffectContainer(spacing: 10) {
                 HStack {
-                    Button("取消") { dismiss() }
+                    Button(l.cancel) { dismiss() }
                         .buttonStyle(.glass)
                         .keyboardShortcut(.cancelAction)
                     Button(confirmLabel) {
@@ -454,7 +465,7 @@ struct SimpleNamePromptSheet: View {
                 }
             }
         }
-        .padding(22)
+        .padding(18)
     }
 }
 
@@ -463,42 +474,48 @@ struct SettingsView: View {
     @State private var feedbackMessage: String?
 
     var body: some View {
+        let l = vm.l10n
         TabView {
             Form {
-                Section("跨平台与打包默认项") {
-                    Toggle("创建或解压时自动过滤 Mac 隐藏垃圾文件 (.DS_Store / __MACOSX / ._*)", isOn: Binding(
+                Section(l.settingsTabGeneral) {
+                    Toggle(l.stripMacJunkToggle, isOn: Binding(
                         get: { vm.defaultStripMacJunk },
                         set: { vm.updateDefaultStripMacJunk($0) }
                     ))
-                    Picker("默认文件名编码识别", selection: Binding(
+                    Picker(l.defaultEncodingLabel, selection: Binding(
                         get: { vm.encodingOption },
                         set: { vm.encodingOption = $0 }
                     )) {
                         ForEach(FilenameEncodingOption.allCases) { enc in
-                            Text(enc.displayName).tag(enc)
+                            Text(l.encodingTitle(enc)).tag(enc)
                         }
                     }
                 }
 
-                Section("macOS 访达一级右键菜单 (Bolt >)") {
+                Section(l.finderIntegrationSection) {
                     HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(vm.quickActionsInstalled ? "已启用访达一级右键「Bolt >」目录" : "尚未启用访达一级右键「Bolt >」目录")
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(vm.quickActionsInstalled ? l.finderEnabledSummary : l.finderDisabledSummary)
                                 .font(.subheadline.weight(.medium))
-                            Text("直接出现在访达右键菜单顶层「Bolt >」：智能解压、解压到文件夹、压缩 ZIP/TAR.ZST/7z、加密打包")
+                            Text(l.finderBannerSubtitle)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Button(vm.quickActionsInstalled ? "重新安装" : "一键安装") {
+                        Button(l.extensionSettings) {
+                            vm.openFinderExtensionSettings()
+                        }
+                        .buttonStyle(.glass)
+
+                        Button(vm.quickActionsInstalled ? l.reinstallOrSync : l.installNow) {
                             feedbackMessage = vm.installFinderQuickActions()
                         }
                         .buttonStyle(.glassProminent)
 
                         if vm.quickActionsInstalled {
-                            Button("卸载") {
+                            Button(l.disableNow) {
                                 vm.uninstallFinderQuickActions()
-                                feedbackMessage = "已从 ~/Library/Services 移除"
+                                feedbackMessage = l.finderDisabledSummary
                             }
                             .buttonStyle(.glass)
                         }
@@ -512,14 +529,46 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
             .tabItem {
-                Label("通用与访达集成", systemImage: "gearshape")
+                Label(l.settingsTabGeneral, systemImage: "gearshape")
+            }
+
+            Form {
+                Section(l.languageLabel) {
+                    Picker(l.languageLabel, selection: $vm.appLanguage) {
+                        ForEach(AppLanguage.allCases) { lang in
+                            Text(lang.nativePickerTitle).tag(lang)
+                        }
+                    }
+                }
+
+                Section(l.appearanceTitle) {
+                    Toggle(l.enableTranslucency, isOn: $vm.isWindowTranslucent)
+                    if vm.isWindowTranslucent {
+                        HStack {
+                            Text("\(l.opacityLabel): \(Int((vm.windowBackgroundOpacity * 100).rounded()))%")
+                            Slider(value: $vm.windowBackgroundOpacity, in: 0.25...1.0, step: 0.05)
+                        }
+                    }
+                }
+
+                Section(l.visibleSectionsTitle) {
+                    Toggle(l.toggleFinderBanner, isOn: $vm.showFinderBanner)
+                    Toggle(l.toggleFeatureCard, isOn: $vm.showFeatureHighlights)
+                    Toggle(l.toggleRecentsCard, isOn: $vm.showRecentArchives)
+                    Toggle(l.toggleSidebarInspector, isOn: $vm.showSidebarInspector)
+                    Toggle(l.toggleStatusBar, isOn: $vm.showStatusBar)
+                }
+            }
+            .formStyle(.grouped)
+            .tabItem {
+                Label(l.settingsTabAppearance, systemImage: "slider.horizontal.3")
             }
 
             List(CompressionCodec.engineVersions()) { info in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(info.name).font(.headline)
-                        Text("开源协议：\(info.license)")
+                        Text(info.license)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -532,10 +581,10 @@ struct SettingsView: View {
                 }
             }
             .tabItem {
-                Label("开源算法内核", systemImage: "cpu")
+                Label(l.settingsTabCodecs, systemImage: "cpu")
             }
         }
-        .frame(width: 580, height: 360)
+        .frame(width: 600, height: 380)
         .onAppear {
             vm.refreshQuickActionsStatus()
         }

@@ -42,6 +42,7 @@ struct BoltZipApp: App {
     @State private var vm = WorkspaceViewModel()
 
     var body: some Scene {
+        let l = vm.l10n
         WindowGroup {
             MainWindowView(vm: vm)
                 .onAppear {
@@ -51,25 +52,35 @@ struct BoltZipApp: App {
         .handlesExternalEvents(matching: Set(["*"]))
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("新建压缩包...") {
+                Button(l.newArchive) {
                     vm.startNewArchivePanel()
                 }
                 .keyboardShortcut("n", modifiers: .command)
 
-                Button("打开压缩包...") {
+                Button(l.openArchive) {
                     vm.openArchivePanel()
                 }
                 .keyboardShortcut("o", modifiers: .command)
             }
 
-            CommandMenu("归档操作") {
-                Button("智能解压") {
+            CommandMenu(l.layoutMenuTitle) {
+                Toggle(l.enableTranslucency, isOn: $vm.isWindowTranslucent)
+                Divider()
+                Toggle(l.toggleFinderBanner, isOn: $vm.showFinderBanner)
+                Toggle(l.toggleFeatureCard, isOn: $vm.showFeatureHighlights)
+                Toggle(l.toggleRecentsCard, isOn: $vm.showRecentArchives)
+                Toggle(l.toggleSidebarInspector, isOn: $vm.showSidebarInspector)
+                Toggle(l.toggleStatusBar, isOn: $vm.showStatusBar)
+            }
+
+            CommandMenu(l.smartExtract) {
+                Button(l.smartExtract) {
                     vm.triggerSmartExtractNow()
                 }
                 .keyboardShortcut("e", modifiers: .command)
                 .disabled(vm.listing == nil)
 
-                Button("完整性校验") {
+                Button(l.verify) {
                     vm.testIntegrity()
                 }
                 .keyboardShortcut("t", modifiers: .command)
@@ -77,21 +88,21 @@ struct BoltZipApp: App {
 
                 Divider()
 
-                Button("启用访达一级右键菜单 (Bolt >)...") {
+                Button(l.finderBannerEnabledTitle) {
                     vm.alertMessage = vm.installFinderQuickActions()
                 }
 
-                Button("打开访达扩展系统设置...") {
+                Button(l.extensionSettings) {
                     vm.openFinderExtensionSettings()
                 }
 
                 Divider()
 
-                Button("本机算法性能跑分...") {
+                Button(l.benchmark) {
                     vm.activeSheet = .benchmark
                 }
 
-                Button("打开展示页面") {
+                Button(l.showcasePage) {
                     vm.openShowcaseWebsite()
                 }
             }

@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct MainWindowView: View {
     @Bindable var vm: WorkspaceViewModel
     @State private var isTableDropTargeted = false
+    @State private var showAppearancePopover = false
 
     private static let dateFormatter: DateFormatter = {
         let df = DateFormatter()
@@ -14,29 +15,40 @@ struct MainWindowView: View {
     }()
 
     var body: some View {
-        Group {
+        let l = vm.l10n
+        ZStack {
+            windowBackingLayer
+
             if let listing = vm.listing {
-                archiveExplorer(listing: listing)
+                archiveExplorer(listing: listing, l: l)
             } else {
                 WelcomeDropZoneView(vm: vm)
             }
         }
-        .frame(minWidth: 980, minHeight: 640)
-        .containerBackground(.ultraThinMaterial, for: .window)
+        .background(
+            WindowStyleConfigurator(
+                isTranslucent: vm.isWindowTranslucent,
+                backgroundOpacity: vm.windowBackgroundOpacity
+            )
+        )
+        .frame(minWidth: 880, minHeight: 540)
+        .containerBackground(
+            vm.isWindowTranslucent ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)),
+            for: .window
+        )
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 if vm.listing != nil {
                     Button {
                         vm.closeArchive()
                     } label: {
-                        Label("返回首页", systemImage: "house")
+                        Label(l.backHome, systemImage: "house")
                     }
-                    .help("关闭当前压缩包并返回欢迎页")
 
                     Button {
                         vm.navigateUp()
                     } label: {
-                        Label("上一级", systemImage: "chevron.up")
+                        Label(l.goUp, systemImage: "chevron.up")
                     }
                     .disabled(!vm.canNavigateUp)
                     .keyboardShortcut(.upArrow, modifiers: .command)
@@ -47,13 +59,13 @@ struct MainWindowView: View {
                 Button {
                     vm.startNewArchivePanel()
                 } label: {
-                    Label("新建压缩", systemImage: "plus.rectangle.on.folder")
+                    Label(l.newCompress, systemImage: "plus.rectangle.on.folder")
                 }
 
                 Button {
                     vm.openArchivePanel()
                 } label: {
-                    Label("打开", systemImage: "folder")
+                    Label(l.open, systemImage: "folder")
                 }
 
                 if let listing = vm.listing {
@@ -62,34 +74,33 @@ struct MainWindowView: View {
                     Button {
                         vm.triggerSmartExtractNow()
                     } label: {
-                        Label("智能解压", systemImage: "arrow.down.doc.fill")
+                        Label(l.smartExtract, systemImage: "arrow.down.doc.fill")
                     }
-                    .help("单目录直接解压，多目录自动新建同名文件夹")
 
                     Button {
                         let mode: ExtractMode = vm.selectedEntryIDs.isEmpty ? .smart : .selected(vm.selectedEntryIDs)
                         vm.activeSheet = .extractOptions(mode)
                     } label: {
-                        Label("解压到...", systemImage: "square.and.arrow.down.on.square")
+                        Label(l.extractTo, systemImage: "square.and.arrow.down.on.square")
                     }
 
                     if listing.format.supportsInPlaceEditing {
                         Button {
                             vm.addItemsToCurrentZipPanel()
                         } label: {
-                            Label("包内添加", systemImage: "doc.badge.plus")
+                            Label(l.addInside, systemImage: "doc.badge.plus")
                         }
 
                         Button {
                             vm.activeSheet = .createFolder(parentFolder: vm.currentFolder)
                         } label: {
-                            Label("新建目录", systemImage: "folder.badge.plus")
+                            Label(l.newFolder, systemImage: "folder.badge.plus")
                         }
 
                         Button {
                             vm.deleteSelectedEntries()
                         } label: {
-                            Label("删除", systemImage: "trash")
+                            Label(l.delete, systemImage: "trash")
                         }
                         .disabled(vm.selectedEntryIDs.isEmpty)
                     }
@@ -97,27 +108,38 @@ struct MainWindowView: View {
                     Button {
                         vm.testIntegrity()
                     } label: {
-                        Label("校验", systemImage: "checkmark.shield")
+                        Label(l.verify, systemImage: "checkmark.shield")
                     }
-                    .help("验证所有条目的 CRC32 / HMAC-SHA1 完整性")
+                }
+
+                Divider()
+
+                Button {
+                    showAppearancePopover.toggle()
+                } label: {
+                    Label(l.layoutMenuTitle, systemImage: "slider.horizontal.3")
+                }
+                .help(l.appearanceTitle)
+                .popover(isPresented: $showAppearancePopover, arrowEdge: .bottom) {
+                    AppearancePopoverView(vm: vm)
                 }
             }
         }
         .overlay {
             if vm.isBusy {
                 ZStack {
-                    Color.black.opacity(0.20).ignoresSafeArea()
-                    VStack(spacing: 12) {
+                    Color.black.opacity(0.18).ignoresSafeArea()
+                    VStack(spacing: 10) {
                         ProgressView(value: vm.progress?.fractionCompleted ?? 0.3)
                             .progressViewStyle(.linear)
-                            .frame(width: 280)
+                            .frame(width: 240)
                         Text(vm.progress?.currentItem ?? vm.statusMessage)
                             .font(.callout.weight(.medium))
                             .lineLimit(1)
                     }
-                    .padding(24)
-                    .glassEffect(.regular.tint(.cyan.opacity(0.08)), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .shadow(radius: 20)
+                    .padding(18)
+                    .glassEffect(.regular.tint(.cyan.opacity(0.08)), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .shadow(radius: 16)
                 }
             }
         }
@@ -128,46 +150,64 @@ struct MainWindowView: View {
             case .extractOptions(let mode):
                 ExtractOptionsSheet(vm: vm, initialMode: mode)
             case .integrityReport(let report):
-                IntegrityReportSheet(report: report)
+                IntegrityReportSheet(vm: vm, report: report)
             case .benchmark:
-                BenchmarkSheet()
+                BenchmarkSheet(vm: vm)
             case .passwordPrompt(let purpose):
                 PasswordPromptSheet(vm: vm, purpose: purpose)
             case .createFolder(let parentFolder):
                 SimpleNamePromptSheet(
-                    title: "在归档内新建文件夹",
-                    placeholder: "例如：docs",
-                    confirmLabel: "创建"
+                    vm: vm,
+                    title: l.createFolderTitle,
+                    placeholder: "docs",
+                    confirmLabel: l.createBtn
                 ) { name in
                     vm.createFolderInZip(parentFolder: parentFolder, name: name)
                 }
             case .renamePath(let oldPath, let currentName):
                 SimpleNamePromptSheet(
-                    title: "重命名归档条目",
+                    vm: vm,
+                    title: l.renameEntryTitle,
                     initialValue: currentName,
-                    placeholder: "新名称",
-                    confirmLabel: "重命名"
+                    placeholder: l.colName,
+                    confirmLabel: l.renameBtn
                 ) { newName in
                     vm.renamePath(oldPath, to: newName)
                 }
             case .entryProperties(let entry):
-                EntryPropertiesSheet(entry: entry)
+                EntryPropertiesSheet(vm: vm, entry: entry)
             }
         }
-        .alert("BoltZip 提示", isPresented: Binding(
+        .alert(l.alertTitle, isPresented: Binding(
             get: { vm.alertMessage != nil },
             set: { if !$0 { vm.alertMessage = nil } }
         )) {
-            Button("确定", role: .cancel) { vm.alertMessage = nil }
+            Button(l.confirm, role: .cancel) { vm.alertMessage = nil }
         } message: {
             Text(vm.alertMessage ?? "")
         }
     }
 
     @ViewBuilder
-    private func archiveExplorer(listing: ArchiveListing) -> some View {
-        NavigationSplitView {
-            VStack(alignment: .leading, spacing: 10) {
+    private var windowBackingLayer: some View {
+        if vm.isWindowTranslucent {
+            ZStack {
+                BoltAmbientBackdrop()
+                    .opacity(max(0.15, 0.9 - vm.windowBackgroundOpacity * 0.45))
+                Color(nsColor: .windowBackgroundColor)
+                    .opacity(max(0.0, vm.windowBackgroundOpacity - 0.35))
+                    .ignoresSafeArea()
+            }
+        } else {
+            Color(nsColor: .windowBackgroundColor)
+                .ignoresSafeArea()
+        }
+    }
+
+    @ViewBuilder
+    private func archiveExplorer(listing: ArchiveListing, l: L10n) -> some View {
+        NavigationSplitView(columnVisibility: $vm.columnVisibility) {
+            VStack(alignment: .leading, spacing: 8) {
                 List(selection: Binding(
                     get: { vm.currentFolder },
                     set: { newValue in
@@ -177,7 +217,7 @@ struct MainWindowView: View {
                         }
                     }
                 )) {
-                    Section("目录结构") {
+                    Section(l.folderTreeSection) {
                         FolderTreeRow(
                             node: vm.folderTree,
                             vm: vm,
@@ -187,278 +227,281 @@ struct MainWindowView: View {
                 }
                 .listStyle(.sidebar)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text(listing.format.displayName)
-                            .font(.caption.weight(.bold))
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 3)
-                            .glassEffect(.regular.tint(.cyan.opacity(0.18)), in: Capsule())
-                        Spacer()
-                        if listing.hasEncryptedEntries {
-                            Label("已加密", systemImage: "lock.fill")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.orange)
+                if vm.showSidebarInspector {
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Text(listing.format.displayName)
+                                .font(.caption2.weight(.bold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .glassEffect(.regular.tint(.cyan.opacity(0.18)), in: Capsule())
+                            Spacer()
+                            if listing.hasEncryptedEntries {
+                                Label(l.encryptedBadge, systemImage: "lock.fill")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.orange)
+                            }
+                        }
+
+                        InfoMetricRow(label: l.totalEntries, value: l.itemCount(listing.entries.count))
+                        InfoMetricRow(label: l.originalSize, value: DropHelper.formatBytes(listing.totalUncompressedBytes))
+                        InfoMetricRow(label: l.packedSize, value: DropHelper.formatBytes(listing.totalCompressedBytes))
+                        InfoMetricRow(label: l.spaceSaved, value: String(format: "%.1f%%", listing.overallCompressionRatioPercent))
+
+                        Divider()
+
+                        HStack {
+                            Text(l.filenameEncoding)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Picker("", selection: Binding(
+                                get: { vm.encodingOption },
+                                set: { vm.reloadWithEncoding($0) }
+                            )) {
+                                ForEach(FilenameEncodingOption.allCases) { enc in
+                                    Text(l.encodingTitle(enc)).tag(enc)
+                                }
+                            }
+                            .labelsHidden()
+                            .controlSize(.mini)
                         }
                     }
+                    .padding(10)
+                    .glassEffect(.regular.tint(.cyan.opacity(0.06)), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding([.horizontal, .bottom], 8)
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 205, ideal: 235, max: 280)
+        } detail: {
+            VStack(spacing: 8) {
+                GlassEffectContainer(spacing: 8) {
+                    HStack(spacing: 8) {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 3) {
+                                ForEach(Array(vm.breadcrumbComponents.enumerated()), id: \.offset) { idx, crumb in
+                                    if idx > 0 {
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    Button {
+                                        vm.currentFolder = crumb.path
+                                        vm.selectedEntryIDs.removeAll()
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            if idx == 0 { Image(systemName: "archivebox.fill") }
+                                            Text(crumb.title)
+                                        }
+                                        .font(.caption.weight(crumb.path == vm.currentFolder ? .semibold : .regular))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .glassEffect(
+                                        crumb.path == vm.currentFolder
+                                            ? .regular.tint(.cyan.opacity(0.18)).interactive()
+                                            : .clear.interactive(),
+                                        in: Capsule()
+                                    )
+                                }
+                            }
+                        }
 
-                    InfoMetricRow(label: "条目总数", value: "\(listing.entries.count) 项")
-                    InfoMetricRow(label: "原始体积", value: DropHelper.formatBytes(listing.totalUncompressedBytes))
-                    InfoMetricRow(label: "压缩后", value: DropHelper.formatBytes(listing.totalCompressedBytes))
-                    InfoMetricRow(label: "节省空间", value: String(format: "%.1f%%", listing.overallCompressionRatioPercent))
+                        Spacer()
 
-                    Divider()
+                        HStack(spacing: 5) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextField(l.searchPlaceholder, text: $vm.searchText)
+                                .textFieldStyle(.plain)
+                                .font(.caption)
+                                .frame(width: 160)
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .glassEffect(.regular, in: Capsule())
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
 
-                    HStack {
-                        Text("文件名编码")
+                Table(vm.visibleEntries, selection: $vm.selectedEntryIDs) {
+                    TableColumn(l.colName) { entry in
+                        HStack(spacing: 6) {
+                            Image(systemName: entry.isDirectory ? "folder.fill" : iconForFile(entry.name))
+                                .foregroundStyle(entry.isDirectory ? Color.cyan : Color.secondary)
+                            Text(entry.name)
+                                .lineLimit(1)
+                            if entry.isEncrypted {
+                                Image(systemName: "lock.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                            }
+                        }
+                    }
+                    .width(min: 200, ideal: 280)
+
+                    TableColumn(l.colOriginalSize) { entry in
+                        Text(entry.isDirectory ? "—" : DropHelper.formatBytes(entry.uncompressedSize))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    .width(min: 75, ideal: 90)
+
+                    TableColumn(l.colPackedSize) { entry in
+                        Text(entry.isDirectory || entry.compressedSize == 0 ? "—" : DropHelper.formatBytes(entry.compressedSize))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    .width(min: 75, ideal: 90)
+
+                    TableColumn(l.colRatio) { entry in
+                        if entry.isDirectory || entry.uncompressedSize == 0 {
+                            Text("—").foregroundStyle(.tertiary)
+                        } else {
+                            Text(String(format: "%.1f%%", entry.compressionRatioPercent))
+                                .monospacedDigit()
+                                .foregroundStyle(.green)
+                        }
+                    }
+                    .width(min: 60, ideal: 70)
+
+                    TableColumn(l.colMethod) { entry in
+                        let label = entry.isEncrypted ? "\(entry.compressionMethodName) · \(entry.encryptionLabel)" : entry.compressionMethodName
+                        Text(label)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Spacer()
-                        Picker("", selection: Binding(
-                            get: { vm.encodingOption },
-                            set: { vm.reloadWithEncoding($0) }
-                        )) {
-                            ForEach(FilenameEncodingOption.allCases) { enc in
-                                Text(enc.displayName).tag(enc)
+                    }
+                    .width(min: 90, ideal: 120)
+
+                    TableColumn(l.colModified) { entry in
+                        Text(Self.dateFormatter.string(from: entry.modifiedDate))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .width(min: 105, ideal: 125)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                )
+                .padding(.horizontal, 10)
+                .padding(.bottom, vm.showStatusBar ? 0 : 10)
+                .contextMenu(forSelectionType: String.self) { ids in
+                    if ids.isEmpty {
+                        emptySpaceContextMenu(listing: listing, l: l)
+                    } else {
+                        rowContextMenu(ids: ids, listing: listing, l: l)
+                    }
+                } primaryAction: { ids in
+                    guard let firstID = ids.first,
+                          let entry = vm.visibleEntries.first(where: { $0.id == firstID }) else { return }
+                    vm.previewOrOpenEntry(entry)
+                }
+                .overlay {
+                    if isTableDropTargeted && listing.format.supportsInPlaceEditing {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color.cyan, style: StrokeStyle(lineWidth: 2.5, dash: [7, 5]))
+                            .background(Color.cyan.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                Label(l.dropToAddLabel(vm.currentFolder.isEmpty ? l.rootLabel : vm.currentFolder), systemImage: "plus.circle.fill")
+                                    .font(.subheadline.weight(.semibold))
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .glassEffect(.regular.tint(.cyan.opacity(0.22)).interactive(), in: Capsule())
                             }
-                        }
-                        .labelsHidden()
-                        .controlSize(.small)
+                            .padding(.horizontal, 10)
                     }
                 }
-                .padding(14)
-                .glassEffect(.regular.tint(.cyan.opacity(0.06)), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .padding([.horizontal, .bottom], 10)
-            }
-            .navigationSplitViewColumnWidth(min: 235, ideal: 265, max: 325)
-        } detail: {
-            ZStack {
-                BoltAmbientBackdrop().opacity(0.55)
-
-                VStack(spacing: 10) {
-                    GlassEffectContainer(spacing: 10) {
-                        HStack(spacing: 8) {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 4) {
-                                    ForEach(Array(vm.breadcrumbComponents.enumerated()), id: \.offset) { idx, crumb in
-                                        if idx > 0 {
-                                            Image(systemName: "chevron.right")
-                                                .font(.caption2)
-                                                .foregroundStyle(.tertiary)
-                                        }
-                                        Button {
-                                            vm.currentFolder = crumb.path
-                                            vm.selectedEntryIDs.removeAll()
-                                        } label: {
-                                            HStack(spacing: 4) {
-                                                if idx == 0 { Image(systemName: "archivebox.fill") }
-                                                Text(crumb.title)
-                                            }
-                                            .font(.callout.weight(crumb.path == vm.currentFolder ? .semibold : .regular))
-                                            .padding(.horizontal, 9)
-                                            .padding(.vertical, 4)
-                                        }
-                                        .buttonStyle(.plain)
-                                        .glassEffect(
-                                            crumb.path == vm.currentFolder
-                                                ? .regular.tint(.cyan.opacity(0.18)).interactive()
-                                                : .clear.interactive(),
-                                            in: Capsule()
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer()
-
-                            HStack(spacing: 6) {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundStyle(.secondary)
-                                TextField("搜索归档内文件...", text: $vm.searchText)
-                                    .textFieldStyle(.plain)
-                                    .frame(width: 185)
-                            }
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 6)
-                            .glassEffect(.regular, in: Capsule())
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .onDrop(of: [.fileURL], isTargeted: $isTableDropTargeted) { providers in
+                    guard listing.format.supportsInPlaceEditing else { return false }
+                    return DropHelper.extractFileURLs(from: providers) { urls in
+                        vm.addItemsToCurrentZip(urls)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
+                }
 
-                    Table(vm.visibleEntries, selection: $vm.selectedEntryIDs) {
-                        TableColumn("名称") { entry in
-                            HStack(spacing: 8) {
-                                Image(systemName: entry.isDirectory ? "folder.fill" : iconForFile(entry.name))
-                                    .foregroundStyle(entry.isDirectory ? Color.cyan : Color.secondary)
-                                Text(entry.name)
-                                    .lineLimit(1)
-                                if entry.isEncrypted {
-                                    Image(systemName: "lock.fill")
-                                        .font(.caption2)
-                                        .foregroundStyle(.orange)
-                                }
-                            }
-                        }
-                        .width(min: 220, ideal: 300)
-
-                        TableColumn("原始大小") { entry in
-                            Text(entry.isDirectory ? "—" : DropHelper.formatBytes(entry.uncompressedSize))
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                        }
-                        .width(min: 80, ideal: 95)
-
-                        TableColumn("压缩后") { entry in
-                            Text(entry.isDirectory || entry.compressedSize == 0 ? "—" : DropHelper.formatBytes(entry.compressedSize))
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                        }
-                        .width(min: 80, ideal: 95)
-
-                        TableColumn("压缩率") { entry in
-                            if entry.isDirectory || entry.uncompressedSize == 0 {
-                                Text("—").foregroundStyle(.tertiary)
-                            } else {
-                                Text(String(format: "%.1f%%", entry.compressionRatioPercent))
-                                    .monospacedDigit()
-                                    .foregroundStyle(.green)
-                            }
-                        }
-                        .width(min: 65, ideal: 75)
-
-                        TableColumn("算法 / 加密") { entry in
-                            let label = entry.isEncrypted ? "\(entry.compressionMethodName) · \(entry.encryptionLabel)" : entry.compressionMethodName
-                            Text(label)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .width(min: 95, ideal: 130)
-
-                        TableColumn("修改时间") { entry in
-                            Text(Self.dateFormatter.string(from: entry.modifiedDate))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .width(min: 110, ideal: 130)
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
-                    )
-                    .padding(.horizontal, 12)
-                    .contextMenu(forSelectionType: String.self) { ids in
-                        if ids.isEmpty {
-                            emptySpaceContextMenu(listing: listing)
-                        } else {
-                            rowContextMenu(ids: ids, listing: listing)
-                        }
-                    } primaryAction: { ids in
-                        guard let firstID = ids.first,
-                              let entry = vm.visibleEntries.first(where: { $0.id == firstID }) else { return }
-                        vm.previewOrOpenEntry(entry)
-                    }
-                    .overlay {
-                        if isTableDropTargeted && listing.format.supportsInPlaceEditing {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(Color.cyan, style: StrokeStyle(lineWidth: 2.5, dash: [8, 6]))
-                                .background(Color.cyan.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                .overlay {
-                                    Label("松手即可直接添加到「\(vm.currentFolder.isEmpty ? "根目录" : vm.currentFolder)」", systemImage: "plus.circle.fill")
-                                        .font(.headline)
-                                        .padding(.horizontal, 18)
-                                        .padding(.vertical, 10)
-                                        .glassEffect(.regular.tint(.cyan.opacity(0.22)).interactive(), in: Capsule())
-                                }
-                                .padding(.horizontal, 12)
-                        }
-                    }
-                    .onDrop(of: [.fileURL], isTargeted: $isTableDropTargeted) { providers in
-                        guard listing.format.supportsInPlaceEditing else { return false }
-                        return DropHelper.extractFileURLs(from: providers) { urls in
-                            vm.addItemsToCurrentZip(urls)
-                        }
-                    }
-
-                    HStack(spacing: 14) {
+                if vm.showStatusBar {
+                    HStack(spacing: 12) {
                         Text(vm.statusMessage)
                             .lineLimit(1)
                         Spacer()
                         if !vm.selectedEntryIDs.isEmpty {
                             let selBytes = vm.selectedEntries.reduce(UInt64(0)) { $0 + $1.uncompressedSize }
-                            Text("已选 \(vm.selectedEntryIDs.count) 项 (\(DropHelper.formatBytes(selBytes)))")
+                            Text(l.selectedSummary(vm.selectedEntryIDs.count, DropHelper.formatBytes(selBytes)))
                                 .foregroundStyle(.cyan)
                         }
                         if listing.format.supportsInPlaceEditing {
-                            Text("右键支持全部高频操作 · 支持直接拖入文件")
+                            Text(l.editableHint)
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .padding([.horizontal, .bottom], 12)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .padding([.horizontal, .bottom], 10)
                 }
             }
         }
     }
 
     @ViewBuilder
-    private func rowContextMenu(ids: Set<String>, listing: ArchiveListing) -> some View {
+    private func rowContextMenu(ids: Set<String>, listing: ArchiveListing, l: L10n) -> some View {
         let picked = vm.visibleEntries.filter { ids.contains($0.id) }
         if let first = picked.first, picked.count == 1 {
-            Button(first.isDirectory ? "打开文件夹" : "Quick Look 快速预览") {
+            Button(first.isDirectory ? l.ctxOpenFolder : l.ctxQuickLook) {
                 vm.previewOrOpenEntry(first)
             }
-            Button("查看属性详情...") {
+            Button(l.ctxProperties) {
                 vm.activeSheet = .entryProperties(first)
             }
             Divider()
-            Button("复制文件名 (\(first.name))") {
-                vm.copyToPasteboard(first.name, label: "文件名")
+            Button("\(l.ctxCopyName) (\(first.name))") {
+                vm.copyToPasteboard(first.name)
             }
-            Button("复制归档内路径") {
-                vm.copyToPasteboard(first.path, label: "内部路径")
+            Button(l.ctxCopyPath) {
+                vm.copyToPasteboard(first.path)
             }
             Divider()
         }
 
-        Button("智能解压选中项到所在目录") {
+        Button(l.ctxExtractSelHere) {
             vm.quickExtract(mode: .selected(ids))
         }
-        Button("解压选中项到指定位置...") {
+        Button(l.ctxExtractSelTo) {
             vm.activeSheet = .extractOptions(.selected(ids))
         }
-        Button("单独导出选中项为新 ZIP...") {
+        Button(l.ctxExportNewZip) {
             vm.exportSelectedAsNewZip(entryIDs: ids)
         }
 
         Divider()
 
-        Button("校验归档完整性") {
+        Button(l.ctxVerifyArchive) {
             vm.testIntegrity()
         }
 
         if listing.format.supportsInPlaceEditing {
             Divider()
-            Button("在此目录添加文件/文件夹...") {
+            Button(l.ctxAddHere) {
                 vm.addItemsToCurrentZipPanel()
             }
-            Button("在此目录新建文件夹...") {
+            Button(l.ctxNewFolderHere) {
                 vm.activeSheet = .createFolder(parentFolder: vm.currentFolder)
             }
             if let single = picked.first, picked.count == 1 {
-                Button("重命名...") {
+                Button(l.ctxRename) {
                     vm.activeSheet = .renamePath(oldPath: single.path, currentName: single.name)
                 }
             }
-            Button("从归档中删除", role: .destructive) {
+            Button(l.ctxDeleteFromArchive, role: .destructive) {
                 vm.selectedEntryIDs = ids
                 vm.deleteSelectedEntries()
             }
@@ -466,48 +509,48 @@ struct MainWindowView: View {
     }
 
     @ViewBuilder
-    private func emptySpaceContextMenu(listing: ArchiveListing) -> some View {
-        Button("智能解压全部") {
+    private func emptySpaceContextMenu(listing: ArchiveListing, l: L10n) -> some View {
+        Button(l.ctxSmartExtractAll) {
             vm.quickExtract(mode: .smart)
         }
-        Button("全部解压到同名文件夹") {
+        Button(l.ctxExtractAllSubfolder) {
             vm.quickExtract(mode: .subfolder)
         }
-        Button("解压全部到指定位置...") {
+        Button(l.ctxExtractAllTo) {
             vm.activeSheet = .extractOptions(.smart)
         }
 
         if listing.format.supportsInPlaceEditing {
             Divider()
-            Button("添加文件到当前目录...") {
+            Button(l.ctxAddHere) {
                 vm.addItemsToCurrentZipPanel()
             }
-            Button("在当前目录新建文件夹...") {
+            Button(l.ctxNewFolderHere) {
                 vm.activeSheet = .createFolder(parentFolder: vm.currentFolder)
             }
         }
 
         Divider()
 
-        Button("校验全部文件完整性") {
+        Button(l.ctxVerifyAll) {
             vm.testIntegrity()
         }
 
-        Menu("切换文件名编码") {
+        Menu(l.ctxSwitchEncoding) {
             ForEach(FilenameEncodingOption.allCases) { enc in
                 Button {
                     vm.reloadWithEncoding(enc)
                 } label: {
                     if vm.encodingOption == enc {
-                        Label(enc.displayName, systemImage: "checkmark")
+                        Label(l.encodingTitle(enc), systemImage: "checkmark")
                     } else {
-                        Text(enc.displayName)
+                        Text(l.encodingTitle(enc))
                     }
                 }
             }
         }
 
-        Menu("排序方式") {
+        Menu(l.ctxSortBy) {
             ForEach(SortColumn.allCases) { col in
                 Button {
                     if vm.sortColumn == col {
@@ -518,16 +561,16 @@ struct MainWindowView: View {
                     }
                 } label: {
                     if vm.sortColumn == col {
-                        Label("\(col.displayName) (\(vm.sortAscending ? "升序" : "降序"))", systemImage: "checkmark")
+                        Label(l.sortColumnTitle(col), systemImage: vm.sortAscending ? "arrow.up" : "arrow.down")
                     } else {
-                        Text(col.displayName)
+                        Text(l.sortColumnTitle(col))
                     }
                 }
             }
         }
 
         Divider()
-        Button("在访达中定位压缩包") {
+        Button(l.ctxShowInFinder) {
             vm.showInFinder(listing.archiveURL)
         }
     }
@@ -567,39 +610,40 @@ private struct FolderTreeRow: View {
     }
 
     private var rowLabel: some View {
-        Label(node.name, systemImage: node.path.isEmpty ? "archivebox.fill" : "folder.fill")
+        let l = vm.l10n
+        return Label(node.name, systemImage: node.path.isEmpty ? "archivebox.fill" : "folder.fill")
             .tag(node.path)
             .contextMenu {
-                Button("打开此目录") {
+                Button(l.ctxOpenDir) {
                     vm.currentFolder = node.path
                     vm.selectedEntryIDs.removeAll()
                 }
                 if !node.path.isEmpty {
-                    Button("解压此目录到...") {
+                    Button(l.ctxExtractDir) {
                         vm.activeSheet = .extractOptions(.selected([node.path]))
                     }
-                    Button("复制目录路径") {
-                        vm.copyToPasteboard(node.path, label: "目录路径")
+                    Button(l.ctxCopyDirPath) {
+                        vm.copyToPasteboard(node.path)
                     }
                 } else {
-                    Button("智能解压全部") {
+                    Button(l.ctxSmartExtractAll) {
                         vm.quickExtract(mode: .smart)
                     }
                 }
 
                 if canEditZip {
                     Divider()
-                    Button("在此目录添加文件...") {
+                    Button(l.ctxAddToDir) {
                         vm.addItemsToCurrentZipPanel(targetFolder: node.path)
                     }
-                    Button("在此目录新建子文件夹...") {
+                    Button(l.ctxNewSubfolder) {
                         vm.activeSheet = .createFolder(parentFolder: node.path)
                     }
                     if !node.path.isEmpty {
-                        Button("重命名此目录...") {
+                        Button(l.ctxRenameDir) {
                             vm.activeSheet = .renamePath(oldPath: node.path, currentName: node.name)
                         }
-                        Button("删除此目录", role: .destructive) {
+                        Button(l.ctxDeleteDir, role: .destructive) {
                             vm.deletePaths([node.path])
                         }
                     }
@@ -615,11 +659,11 @@ private struct InfoMetricRow: View {
     var body: some View {
         HStack {
             Text(label)
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
-                .font(.caption.weight(.medium))
+                .font(.caption2.weight(.medium))
                 .monospacedDigit()
         }
     }

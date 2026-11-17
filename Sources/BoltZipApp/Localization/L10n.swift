@@ -1,0 +1,241 @@
+import BoltZipCore
+import Foundation
+
+enum ResolvedLanguage: String, Sendable {
+    case zhHans
+    case zhHant
+    case en
+    case ja
+}
+
+enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
+    case system
+    case zhHans = "zh-Hans"
+    case zhHant = "zh-Hant"
+    case en
+    case ja
+
+    var id: String { rawValue }
+
+    var nativePickerTitle: String {
+        switch self {
+        case .system: return "跟随系统 / Follow System"
+        case .zhHans: return "简体中文"
+        case .zhHant: return "繁體中文"
+        case .en: return "English"
+        case .ja: return "日本語"
+        }
+    }
+
+    var resolved: ResolvedLanguage {
+        switch self {
+        case .zhHans: return .zhHans
+        case .zhHant: return .zhHant
+        case .en: return .en
+        case .ja: return .ja
+        case .system:
+            let preferred = Locale.preferredLanguages.first?.lowercased() ?? "en"
+            if preferred.hasPrefix("ja") { return .ja }
+            if preferred.hasPrefix("zh-hant") || preferred.hasPrefix("zh-tw") || preferred.hasPrefix("zh-hk") || preferred.hasPrefix("zh-mo") {
+                return .zhHant
+            }
+            if preferred.hasPrefix("zh") { return .zhHans }
+            return .en
+        }
+    }
+}
+
+struct L10n: Sendable {
+    let lang: ResolvedLanguage
+
+    init(language: AppLanguage) {
+        self.lang = language.resolved
+    }
+
+    private func t(_ sc: String, _ tc: String, _ en: String, _ ja: String) -> String {
+        switch lang {
+        case .zhHans: return sc
+        case .zhHant: return tc
+        case .en: return en
+        case .ja: return ja
+        }
+    }
+
+    // MARK: - General & Welcome
+    var readyStatus: String { t("就绪 · 拖入压缩包浏览，或拖入文件立即打包", "就緒 · 拖入封存檔瀏覽，或拖入檔案立即打包", "Ready — Drop an archive to browse, or files to compress", "準備完了 — 書庫をドロップして閲覧、またはファイルを圧縮") }
+    var dropZoneTitle: String { t("拖放压缩包直接浏览，或拖入文件立即打包", "拖放封存檔直接瀏覽，或拖入檔案立即打包", "Drop an archive to browse, or files to compress", "書庫を開いて閲覧、またはファイルをここにドロップ") }
+    var dropZoneSubtitle: String { t("macOS 27.3 液态玻璃原生体验 · 支持 ZIP / 7z / TAR.ZST / XZ / LZ4 · AE-2 加密与 GBK 自动纠偏", "macOS 27.3 液態玻璃原生體驗 · 支援 ZIP / 7z / TAR.ZST / XZ / LZ4 · AE-2 加密與編碼自動修正", "Native macOS 27.3 Liquid Glass · ZIP, 7z, TAR.ZST, XZ, LZ4 · AE-2 AES-256 & CJK auto-fix", "macOS 27.3 Liquid Glass 対応 · ZIP / 7z / TAR.ZST / XZ / LZ4 · AE-2暗号化・文字コード自動補正") }
+
+    var newArchive: String { t("新建压缩包", "新增封存檔", "New Archive", "新規圧縮") }
+    var openArchive: String { t("打开压缩包", "開啟封存檔", "Open Archive", "書庫を開く") }
+    var benchmark: String { t("算法跑分", "演算法跑分", "Benchmark", "ベンチマーク") }
+    var showcasePage: String { t("展示页面", "產品展示頁", "Showcase", "紹介ページ") }
+
+    // MARK: - Finder Banner
+    var finderBannerEnabledTitle: String { t("访达一级右键目录「Bolt >」已启用", "Finder 第一層右鍵選單「Bolt >」已啟用", "Finder top-level menu “Bolt ›” is active", "Finder 第一階層メニュー「Bolt ›」が有効です") }
+    var finderBannerDisabledTitle: String { t("将高频操作添加到访达右键一级目录「Bolt >」", "將常用功能加入 Finder 右鍵第一層選單「Bolt >」", "Add quick actions to Finder’s top-level “Bolt ›” menu", "よく使う操作を Finder 右クリック第一階層「Bolt ›」へ追加") }
+    var finderBannerSubtitle: String { t("右键顶层直达：智能解压 · 解压到文件夹 · 压缩 ZIP / TAR.ZST / 7z · 加密打包", "右鍵頂層直達：智慧解壓 · 解壓至資料夾 · 壓縮 ZIP / TAR.ZST / 7z · 加密打包", "Right-click anywhere in Finder: Smart Extract, Compress ZIP / TAR.ZST / 7z & Encrypt", "右クリック最上位から即実行：スマート展開・ZIP/TAR.ZST/7z圧縮・暗号化") }
+    var extensionSettings: String { t("扩展设置", "延伸功能設定", "Extensions", "拡張設定") }
+    var resync: String { t("同步", "同步", "Sync", "同期") }
+    var enableBoltMenu: String { t("一键启用", "一鍵啟用", "Enable", "有効にする") }
+    var hideThisSection: String { t("隐藏此模块", "隱藏此區塊", "Hide section", "この項目を隠す") }
+
+    // MARK: - Feature & Recents Cards
+    var featuresTitle: String { t("Windows Zip 经典效率特性", "Windows Zip 經典效率功能", "Desktop-Class Archive Workflow", "Windows Zip 級の快適操作") }
+    var featBrowseTitle: String { t("包内直览 & 全能右键", "封存檔內建瀏覽與右鍵選單", "Browse Inside & Context Actions", "展開せずに中身を閲覧＆編集") }
+    var featBrowseDesc: String { t("双击/空格预览，右键直接解压、单独导出 ZIP、重命名与删改", "雙擊或空白鍵預覽，右鍵快速解壓、匯出新 ZIP、重新命名與編輯", "Double-click or press Space to Quick Look; add, rename, or delete inside ZIPs", "スペースキーでプレビュー、右クリックで直接編集や個別ZIP書き出し") }
+    var featSmartTitle: String { t("智能解压 (Smart Extract)", "智慧解壓縮 (Smart Extract)", "Smart Extract", "スマート展開（二重フォルダ防止）") }
+    var featSmartDesc: String { t("单目录不套娃，多文件自动归入同名子目录", "單一資料夾直接釋放，多項目自動建立同名資料夾", "Avoids nested duplicate folders automatically", "単一フォルダはそのまま、複数項目は同名フォルダを作成して展開") }
+    var featEncodingTitle: String { t("Windows 中文编码自愈", "Windows 編碼亂碼自動修正", "Auto-Fix CJK Filenames", "文字化け自動補正 (GBK / Shift-JIS)") }
+    var featEncodingDesc: String { t("自动识别 GB18030 / Big5 / Shift-JIS，彻底告别乱码", "自動辨識 GB18030 / Big5 / Shift-JIS，徹底告別亂碼", "Detects GB18030, Big5 & Shift-JIS archives created on Windows", "Windows 製アーカイブの日本語・中国語ファイル名を自動判別") }
+    var featCryptoTitle: String { t("AE-2 AES-256 & 分卷压缩", "AE-2 AES-256 與分卷壓縮", "WinZip AE-2 & Split Volumes", "AES-256 暗号化 ＆ 分割圧縮") }
+    var featCryptoDesc: String { t("支持密码跨平台互通与 .z01/.zip 分卷切分", "支援跨平台密碼互通與 .z01/.zip 分卷切分", "Standard AE-2 encryption & .z01 multi-volume archives", "WinZip/7-Zip互換暗号化と .z01 分割ボリュームに対応") }
+
+    var recentsTitle: String { t("最近打开（右键快捷操作）", "最近開啟（右鍵快速操作）", "Recent Archives (Right-Click)", "最近の書庫（右クリック対応）") }
+    var noRecents: String { t("暂无最近打开的压缩包", "尚無最近開啟的封存檔", "No recent archives yet", "最近開いた書庫はありません") }
+    func itemCount(_ n: Int) -> String { t("\(n) 项", "\(n) 項", "\(n) items", "\(n) 項目") }
+
+    // MARK: - Explorer Toolbar & Sidebar
+    var backHome: String { t("首页", "首頁", "Home", "ホーム") }
+    var goUp: String { t("上一级", "上一層", "Up", "上へ") }
+    var newCompress: String { t("新建", "新增", "Compress", "新規圧縮") }
+    var open: String { t("打开", "開啟", "Open", "開く") }
+    var smartExtract: String { t("智能解压", "智慧解壓", "Smart Extract", "スマート展開") }
+    var extractTo: String { t("解压到...", "解壓至...", "Extract...", "展開先を指定...") }
+    var addInside: String { t("添加", "加入", "Add", "追加") }
+    var newFolder: String { t("新建目录", "新增資料夾", "New Folder", "新規フォルダ") }
+    var delete: String { t("删除", "刪除", "Delete", "削除") }
+    var verify: String { t("校验", "驗證", "Verify", "整合性検証") }
+    var layoutMenuTitle: String { t("界面与透明度", "介面與透明度", "Appearance", "表示・透過設定") }
+
+    var folderTreeSection: String { t("目录结构", "目錄結構", "Folders", "フォルダ構成") }
+    var rootLabel: String { t("根目录", "根目錄", "Root", "ルート") }
+    var encryptedBadge: String { t("已加密", "已加密", "Encrypted", "暗号化") }
+    var totalEntries: String { t("条目总数", "項目總數", "Entries", "総項目数") }
+    var originalSize: String { t("原始大小", "原始大小", "Original", "元のサイズ") }
+    var packedSize: String { t("压缩后", "壓縮後", "Packed", "圧縮後") }
+    var spaceSaved: String { t("节省空间", "節省空間", "Saved", "削減率") }
+    var filenameEncoding: String { t("文件名编码", "檔名編碼", "Encoding", "文字コード") }
+    var searchPlaceholder: String { t("过滤归档内文件...", "搜尋封存檔內容...", "Filter archive entries...", "書庫内を検索...") }
+
+    // MARK: - Table Columns & Drop Hint
+    var colName: String { t("名称", "名稱", "Name", "名前") }
+    var colOriginalSize: String { t("原始大小", "原始大小", "Size", "サイズ") }
+    var colPackedSize: String { t("压缩后", "壓縮後", "Packed", "圧縮後") }
+    var colRatio: String { t("压缩率", "壓縮率", "Ratio", "圧縮率") }
+    var colMethod: String { t("算法 / 加密", "演算法 / 加密", "Method", "方式") }
+    var colModified: String { t("修改时间", "修改時間", "Modified", "更新日時") }
+    func dropToAddLabel(_ folder: String) -> String {
+        t("松手即可添加到「\(folder)」", "放開即可加入「\(folder)」", "Drop to add into “\(folder)”", "ドロップして「\(folder)」へ追加")
+    }
+    func selectedSummary(_ count: Int, _ size: String) -> String {
+        t("已选 \(count) 项 (\(size))", "已選 \(count) 項 (\(size))", "\(count) selected (\(size))", "\(count) 項目選択中 (\(size))")
+    }
+    var editableHint: String { t("右键支持全套操作 · 可直接拖入文件", "右鍵支援完整操作 · 可直接拖入檔案", "Right-click for actions · Drop files to add", "右クリック操作・ドラッグで直接追加可能") }
+
+    // MARK: - Context Menus
+    var ctxOpenFolder: String { t("打开文件夹", "開啟資料夾", "Open Folder", "フォルダを開く") }
+    var ctxQuickLook: String { t("Quick Look 快速预览", "Quick Look 快速預覽", "Quick Look Preview", "Quick Look でプレビュー") }
+    var ctxProperties: String { t("查看属性详情...", "檢視屬性詳細資訊...", "Get Info...", "詳細情報を見る...") }
+    var ctxCopyName: String { t("复制文件名", "複製檔名", "Copy Name", "名前をコピー") }
+    var ctxCopyPath: String { t("复制归档内路径", "複製封存檔內路徑", "Copy Archive Path", "書庫内パスをコピー") }
+    var ctxExtractSelHere: String { t("智能解压选中项到所在目录", "智慧解壓選取項目至所在目錄", "Smart Extract Selected Here", "選択項目をここにスマート展開") }
+    var ctxExtractSelTo: String { t("解压选中项到指定位置...", "解壓選取項目至指定位置...", "Extract Selected To...", "選択項目を指定先へ展開...") }
+    var ctxExportNewZip: String { t("单独导出选中项为新 ZIP...", "單獨匯出選取項目為新 ZIP...", "Export Selected as New ZIP...", "選択項目を新規 ZIP として書き出し...") }
+    var ctxVerifyArchive: String { t("校验归档完整性", "驗證封存檔完整性", "Verify Archive Integrity", "書庫の整合性を検証") }
+    var ctxAddHere: String { t("在此目录添加文件...", "在此目錄加入檔案...", "Add Files Here...", "ここにファイルを追加...") }
+    var ctxNewFolderHere: String { t("在此目录新建文件夹...", "在此目錄新增資料夾...", "New Folder Here...", "ここに新規フォルダ...") }
+    var ctxRename: String { t("重命名...", "重新命名...", "Rename...", "名称変更...") }
+    var ctxDeleteFromArchive: String { t("从归档中删除", "從封存檔中刪除", "Delete from Archive", "書庫から削除") }
+    var ctxSmartExtractAll: String { t("智能解压全部", "智慧解壓全部", "Smart Extract All", "すべてスマート展開") }
+    var ctxExtractAllSubfolder: String { t("全部解压到同名文件夹", "全部解壓至同名資料夾", "Extract All to Subfolder", "すべて同名フォルダへ展開") }
+    var ctxExtractAllTo: String { t("解压全部到指定位置...", "解壓全部至指定位置...", "Extract All To...", "すべて指定先へ展開...") }
+    var ctxVerifyAll: String { t("校验全部文件完整性", "驗證全部檔案完整性", "Verify All Entries", "全項目の整合性を検証") }
+    var ctxSwitchEncoding: String { t("切换文件名编码", "切換檔名編碼", "Filename Encoding", "文字コード切り替え") }
+    var ctxSortBy: String { t("排序方式", "排序方式", "Sort By", "並び替え") }
+    var ctxShowInFinder: String { t("在访达中显示", "在 Finder 中顯示", "Reveal in Finder", "Finder で表示") }
+    var ctxOpenDir: String { t("打开此目录", "開啟此目錄", "Open Directory", "このフォルダを開く") }
+    var ctxExtractDir: String { t("解压此目录到...", "解壓此目錄至...", "Extract Directory...", "このフォルダを展開...") }
+    var ctxCopyDirPath: String { t("复制目录路径", "複製目錄路徑", "Copy Directory Path", "フォルダパスをコピー") }
+    var ctxAddToDir: String { t("在此目录添加文件...", "在此目錄加入檔案...", "Add Files to Directory...", "このフォルダへファイルを追加...") }
+    var ctxNewSubfolder: String { t("在此目录新建子文件夹...", "在此目錄新增子資料夾...", "New Subfolder...", "サブフォルダを作成...") }
+    var ctxRenameDir: String { t("重命名此目录...", "重新命名此目錄...", "Rename Directory...", "フォルダ名を変更...") }
+    var ctxDeleteDir: String { t("删除此目录", "刪除此目錄", "Delete Directory", "このフォルダを削除") }
+    var ctxOpenBrowse: String { t("打开浏览", "開啟瀏覽", "Open & Browse", "開いて閲覧") }
+    var ctxRemoveRecent: String { t("从最近记录移除", "從最近紀錄移除", "Remove from Recents", "履歴から削除") }
+
+    // MARK: - View / Appearance / Settings
+    var appearanceTitle: String { t("界面显示与透明度", "介面顯示與透明度", "Appearance & Translucency", "外観と透過設定") }
+    var languageLabel: String { t("界面语言", "介面語言", "Language", "表示言語") }
+    var enableTranslucency: String { t("启用液态玻璃半透明背景", "啟用液態玻璃半透明背景", "Enable Liquid Glass translucency", "Liquid Glass 半透明背景を有効化") }
+    var opacityLabel: String { t("窗口背景不透明度", "視窗背景不透明度", "Window opacity", "ウィンドウ背景の不透明度") }
+    var visibleSectionsTitle: String { t("主界面模块显示开关", "主介面區塊顯示開關", "Home Screen Modules", "ホーム画面の表示項目") }
+    var toggleFinderBanner: String { t("显示访达一级右键菜单提示条", "顯示 Finder 第一層右鍵提示列", "Show Finder “Bolt ›” setup banner", "Finder「Bolt ›」設定バナーを表示") }
+    var toggleFeatureCard: String { t("显示功能特性介绍卡片", "顯示功能特色介紹卡片", "Show feature highlights card", "機能紹介カードを表示") }
+    var toggleRecentsCard: String { t("显示最近打开归档列表", "顯示最近開啟封存檔清單", "Show recent archives card", "最近開いた書庫リストを表示") }
+    var toggleSidebarInspector: String { t("显示侧栏归档摘要与编码卡", "顯示側欄封存檔摘要與編碼卡", "Show archive summary inspector", "サイドバーの概要・文字コードカードを表示") }
+    var toggleStatusBar: String { t("显示底部状态栏", "顯示底部狀態列", "Show bottom status bar", "下部ステータスバーを表示") }
+
+    var settingsTabGeneral: String { t("通用与访达集成", "一般與 Finder 整合", "General & Finder", "一般・Finder 連携") }
+    var settingsTabAppearance: String { t("界面与多语言", "介面與多語言", "Appearance & Language", "外観と言語") }
+    var settingsTabCodecs: String { t("开源算法内核", "開源演算法核心", "Open-Source Codecs", "オープンソースエンジン") }
+    var stripMacJunkToggle: String { t("创建或解压时自动过滤 Mac 隐藏文件 (.DS_Store / __MACOSX / ._*)", "建立或解壓時自動過濾 Mac 隱藏檔 (.DS_Store / __MACOSX / ._*)", "Exclude macOS metadata (.DS_Store, __MACOSX, ._*) automatically", "Mac の不要ファイル (.DS_Store / __MACOSX / ._*) を自動除外") }
+    var defaultEncodingLabel: String { t("默认文件名编码识别", "預設檔名編碼辨識", "Default filename encoding", "既定の文字コード判定") }
+    var finderIntegrationSection: String { t("macOS 访达一级右键菜单 (Bolt >)", "macOS Finder 第一層右鍵選單 (Bolt >)", "macOS Finder Top-Level Menu (Bolt ›)", "macOS Finder 第一階層メニュー (Bolt ›)") }
+    var finderEnabledSummary: String { t("已启用访达一级右键「Bolt >」目录", "已啟用 Finder 第一層右鍵「Bolt >」選單", "Top-level Finder menu “Bolt ›” is enabled", "Finder 第一階層メニュー「Bolt ›」は有効です") }
+    var finderDisabledSummary: String { t("尚未启用访达一级右键「Bolt >」目录", "尚未啟用 Finder 第一層右鍵「Bolt >」選單", "Top-level Finder menu “Bolt ›” is not enabled", "Finder 第一階層メニュー「Bolt ›」は未設定です") }
+    var reinstallOrSync: String { t("重新同步", "重新同步", "Re-sync", "再同期") }
+    var installNow: String { t("一键启用", "一鍵啟用", "Enable Now", "今すぐ有効化") }
+    var disableNow: String { t("停用", "停用", "Disable", "無効化") }
+
+    // MARK: - Domain Enums Localized Display
+    func sortColumnTitle(_ col: SortColumn) -> String {
+        switch col {
+        case .name: return colName
+        case .uncompressedSize: return colOriginalSize
+        case .compressedSize: return colPackedSize
+        case .ratio: return colRatio
+        case .method: return colMethod
+        case .modifiedDate: return colModified
+        }
+    }
+
+    func encodingTitle(_ enc: FilenameEncodingOption) -> String {
+        switch enc {
+        case .auto: return t("智能自动识别 (推荐)", "智慧自動辨識 (推薦)", "Auto-Detect (Recommended)", "自動判別 (推奨)")
+        case .utf8: return "UTF-8 (Unicode)"
+        case .gb18030: return t("简体中文 (GB18030 / GBK)", "簡體中文 (GB18030 / GBK)", "Simplified Chinese (GB18030 / GBK)", "簡体字中国語 (GB18030 / GBK)")
+        case .big5: return t("繁体中文 (Big5)", "繁體中文 (Big5)", "Traditional Chinese (Big5)", "繁体字中国語 (Big5)")
+        case .shiftJIS: return t("日文 (Shift-JIS)", "日文 (Shift-JIS)", "Japanese (Shift-JIS)", "日本語 (Shift-JIS)")
+        case .eucKR: return t("韩文 (EUC-KR)", "韓文 (EUC-KR)", "Korean (EUC-KR)", "韓国語 (EUC-KR)")
+        case .cp437: return t("DOS / 英文 (CP437)", "DOS / 英文 (CP437)", "DOS / Western (CP437)", "DOS / 欧文 (CP437)")
+        }
+    }
+
+    // MARK: - Sheets & Buttons
+    var cancel: String { t("取消", "取消", "Cancel", "キャンセル") }
+    var confirm: String { t("确认", "確認", "Confirm", "確認") }
+    var close: String { t("关闭", "關閉", "Close", "閉じる") }
+    var done: String { t("完成", "完成", "Done", "完了") }
+    var browse: String { t("浏览...", "瀏覽...", "Browse...", "選択...") }
+    var change: String { t("更改...", "變更...", "Change...", "変更...") }
+    var add: String { t("添加...", "加入...", "Add...", "追加...") }
+    var startCompress: String { t("开始压缩", "開始壓縮", "Compress", "圧縮を開始") }
+    var startExtract: String { t("开始解压", "開始解壓", "Extract", "展開を開始") }
+    var createArchiveTitle: String { t("新建压缩归档", "新增壓縮封存檔", "Create Archive", "新規アーカイブを作成") }
+    var createArchiveSub: String { t("选择开源压缩算法、加密强度与分卷策略", "選擇開源壓縮演算法、加密強度與分卷策略", "Choose open-source codec, encryption & split volumes", "オープンソース圧縮方式・暗号化・分割設定を選択") }
+    var extractOptionsTitle: String { t("解压选项", "解壓縮選項", "Extract Options", "展開オプション") }
+    var benchmarkTitle: String { t("开源算法本机性能跑分", "開源演算法本機效能測試", "Open-Source Codec Benchmark", "オープンソース圧縮ベンチマーク") }
+    var benchmarkSub: String { t("基于 2 MB 混合结构化样本实时压测 5 大开源压缩内核", "使用 2 MB 混合樣本即時測試 5 大開源壓縮核心", "Real-time test across 5 open-source codecs (2 MB mixed payload)", "2 MB の混合データで 5 つの圧縮エンジンを実測") }
+    var rerunBench: String { t("重新跑分", "重新測試", "Re-run", "再計測") }
+    var runningBench: String { t("正在运行本机基准测试...", "正在執行本機基準測試...", "Running local benchmark...", "ベンチマークを実行中...") }
+    var benchHardwareNote: String { t("说明：结果均为当前 Mac 硬件实际测量值", "說明：結果均為目前 Mac 硬體實測數據", "Measured live on your Mac hardware", "お使いの Mac 実機で計測された結果です") }
+    var passwordPromptTitle: String { t("该压缩包已加密", "此封存檔已加密", "Archive Is Encrypted", "この書庫は暗号化されています") }
+    var passwordPromptDesc: String { t("请输入解密密码（支持 WinZip AE-2 AES-256 与 ZipCrypto）", "請輸入解密密碼（支援 WinZip AE-2 AES-256 與 ZipCrypto）", "Enter password (WinZip AE-2 AES-256 & ZipCrypto supported)", "パスワードを入力してください (AE-2 AES-256 / ZipCrypto 対応)") }
+    var passwordPlaceholder: String { t("输入密码", "輸入密碼", "Password", "パスワード") }
+    var createFolderTitle: String { t("在归档内新建文件夹", "在封存檔內新增資料夾", "New Folder in Archive", "書庫内に新規フォルダを作成") }
+    var renameEntryTitle: String { t("重命名归档条目", "重新命名封存檔項目", "Rename Archive Entry", "書庫内の項目名を変更") }
+    var createBtn: String { t("创建", "建立", "Create", "作成") }
+    var renameBtn: String { t("重命名", "重新命名", "Rename", "変更") }
+    var alertTitle: String { t("BoltZip 提示", "BoltZip 提示", "BoltZip", "BoltZip") }
+}

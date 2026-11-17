@@ -52,9 +52,9 @@ struct CreateArchiveSheet: View {
                     .font(.title2)
                     .foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("新建压缩归档")
+                    Text(vm.l10n.createArchiveTitle)
                         .font(.headline)
-                    Text("选择开源压缩算法、加密强度与分卷策略")
+                    Text(vm.l10n.createArchiveSub)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -195,17 +195,17 @@ struct CreateArchiveSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("取消") { dismiss() }
+                Button(vm.l10n.cancel) { dismiss() }
                     .buttonStyle(.glass)
                     .keyboardShortcut(.cancelAction)
-                Button("开始压缩") { startCompress() }
+                Button(vm.l10n.startCompress) { startCompress() }
                     .buttonStyle(.glassProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(!isValidInput)
             }
             .padding(16)
         }
-        .frame(width: 580, height: 610)
+        .frame(width: 540, height: 550)
     }
 
     private var resolvedOutputURL: URL {

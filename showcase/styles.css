@@ -205,12 +205,12 @@ code, pre {
 }
 
 .section {
-  padding: 76px 0;
+  padding: 50px 0;
 }
 
 /* Hero */
 .hero {
-  padding-top: 64px;
+  padding-top: 42px;
 }
 
 .hero-grid {
@@ -421,7 +421,7 @@ code, pre {
 .section-head {
   text-align: center;
   max-width: 720px;
-  margin: 0 auto 40px;
+  margin: 0 auto 26px;
 }
 
 .eyebrow {
@@ -762,7 +762,7 @@ code, pre {
 }
 
 .bento-card {
-  padding: 24px;
+  padding: 18px;
   border-radius: 18px;
   transition: transform 0.18s ease, border-color 0.2s ease;
 }
@@ -794,7 +794,7 @@ code, pre {
 /* Algorithm Lab */
 .algo-lab {
   border-radius: 20px;
-  padding: 24px;
+  padding: 18px;
 }
 
 .lab-controls {
@@ -972,4 +972,19 @@ code, pre {
   .nav-links {
     display: none;
   }
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lang-select {
+  background: rgba(15, 23, 42, 0.85);
+  color: var(--text-main);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 9px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  cursor: pointer;
 }
