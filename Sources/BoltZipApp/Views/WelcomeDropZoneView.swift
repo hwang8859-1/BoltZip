@@ -20,18 +20,26 @@ struct WelcomeDropZoneView: View {
 
             Group {
                 if showLowerCardsHere {
-                    ScrollView(.vertical) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            if showBannerHere {
-                                finderBanner(l: l, isNarrow: isNarrow)
+                    VStack(spacing: 0) {
+                        // Prevent macOS ScrollView from expanding up behind the floating titlebar/toolbar
+                        Color.clear.frame(height: 2)
+
+                        ScrollView(.vertical) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                if showBannerHere {
+                                    finderBanner(l: l, isNarrow: isNarrow)
+                                }
+                                heroDropZone(l: l, isNarrow: isNarrow, isCompactHeight: isCompactHeight, fillsSpace: false)
+                                lowerCards(l: l, availableWidth: w)
                             }
-                            heroDropZone(l: l, isNarrow: isNarrow, isCompactHeight: isCompactHeight, fillsSpace: false)
-                            lowerCards(l: l, availableWidth: w)
+                            .frame(width: contentWidth, alignment: .topLeading)
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 12)
+                            .padding(.top, 0)
                         }
-                        .frame(width: contentWidth, alignment: .topLeading)
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 12)
-                        .padding(.top, 2)
+                        .scrollEdgeEffectHidden(true, for: .all)
+                        .clipped()
+                        .frame(width: w, height: max(100, h - 2))
                     }
                     .frame(width: w, height: h)
                 } else {
