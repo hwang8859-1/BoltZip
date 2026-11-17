@@ -6,6 +6,7 @@ struct WindowStyleConfigurator: NSViewRepresentable {
     let backgroundOpacity: Double
     let minWidth: CGFloat
     let minHeight: CGFloat
+    @Binding var titlebarHeight: CGFloat
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
@@ -23,6 +24,12 @@ struct WindowStyleConfigurator: NSViewRepresentable {
 
     private func apply(to window: NSWindow?) {
         guard let window else { return }
+
+        let measuredTB = window.frame.height - window.contentLayoutRect.height
+        if measuredTB > 20 && abs(measuredTB - titlebarHeight) > 0.5 {
+            titlebarHeight = measuredTB
+        }
+
         let targetMin = NSSize(width: minWidth, height: minHeight)
         if window.contentMinSize != targetMin {
             window.contentMinSize = targetMin
@@ -31,7 +38,6 @@ struct WindowStyleConfigurator: NSViewRepresentable {
             window.minSize = targetMin
         }
 
-        // Only clamp frame if transitioning into a larger minimum outside active drag resize
         if !window.inLiveResize {
             var frame = window.frame
             var needsResize = false

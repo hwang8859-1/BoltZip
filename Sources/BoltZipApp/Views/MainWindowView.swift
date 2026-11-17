@@ -6,6 +6,7 @@ struct MainWindowView: View {
     @Bindable var vm: WorkspaceViewModel
     @State private var isTableDropTargeted = false
     @State private var showAppearancePopover = false
+    @State private var titlebarHeight: CGFloat = 52
 
     private static let dateFormatter: DateFormatter = {
         let df = DateFormatter()
@@ -22,7 +23,7 @@ struct MainWindowView: View {
             if let listing = vm.listing {
                 archiveExplorer(listing: listing, l: l)
             } else {
-                WelcomeDropZoneView(vm: vm)
+                WelcomeDropZoneView(vm: vm, titlebarHeight: titlebarHeight)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -32,7 +33,8 @@ struct MainWindowView: View {
                 isTranslucent: vm.isWindowTranslucent,
                 backgroundOpacity: vm.windowBackgroundOpacity,
                 minWidth: minW,
-                minHeight: minH
+                minHeight: minH,
+                titlebarHeight: $titlebarHeight
             )
         )
         .frame(minWidth: minW, minHeight: minH)

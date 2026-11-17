@@ -4,6 +4,9 @@ import UniformTypeIdentifiers
 
 struct WelcomeDropZoneView: View {
     @Bindable var vm: WorkspaceViewModel
+    let titlebarHeight: CGFloat
+
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isDropTargeted = false
     @State private var finderActionToast: String?
 
@@ -12,35 +15,31 @@ struct WelcomeDropZoneView: View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
+            let topOffset = max(46, titlebarHeight)
             let isNarrow = w < 540
-            let isCompactHeight = h < 350
-            let showBannerHere = vm.showFinderBanner && h >= 330
-            let showLowerCardsHere = (vm.showFeatureHighlights || vm.showRecentArchives) && h >= 390
+            let isCompactHeight = h < (topOffset + 345)
+            let showBannerHere = vm.showFinderBanner && h >= (topOffset + 330)
+            let showLowerCardsHere = (vm.showFeatureHighlights || vm.showRecentArchives) && h >= (topOffset + 390)
             let contentWidth = max(280, w - 24)
 
-            Group {
+            ZStack(alignment: .top) {
+                // Layer 2: Scrollable or compact main content (slides underneath Layer 3 when scrolling)
                 if showLowerCardsHere {
-                    VStack(spacing: 0) {
-                        // Prevent macOS ScrollView from expanding up behind the floating titlebar/toolbar
-                        Color.clear.frame(height: 2)
-
-                        ScrollView(.vertical) {
-                            VStack(alignment: .leading, spacing: 10) {
-                                if showBannerHere {
-                                    finderBanner(l: l, isNarrow: isNarrow)
-                                }
-                                heroDropZone(l: l, isNarrow: isNarrow, isCompactHeight: isCompactHeight, fillsSpace: false)
-                                lowerCards(l: l, availableWidth: w)
+                    ScrollView(.vertical) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if showBannerHere {
+                                finderBanner(l: l, isNarrow: isNarrow)
                             }
-                            .frame(width: contentWidth, alignment: .topLeading)
-                            .padding(.horizontal, 12)
-                            .padding(.bottom, 12)
-                            .padding(.top, 0)
+                            heroDropZone(l: l, isNarrow: isNarrow, isCompactHeight: isCompactHeight, fillsSpace: false)
+                            lowerCards(l: l, availableWidth: w)
                         }
-                        .scrollEdgeEffectHidden(true, for: .all)
-                        .clipped()
-                        .frame(width: w, height: max(100, h - 2))
+                        .frame(width: contentWidth, alignment: .topLeading)
+                        .padding(.horizontal, 12)
+                        .padding(.top, topOffset + 4)
+                        .padding(.bottom, 12)
                     }
+                    .contentMargins(.top, topOffset, for: .scrollIndicators)
+                    .scrollEdgeEffectStyle(.soft, for: .top)
                     .frame(width: w, height: h)
                 } else {
                     VStack(spacing: 10) {
@@ -50,16 +49,48 @@ struct WelcomeDropZoneView: View {
                         heroDropZone(l: l, isNarrow: isNarrow, isCompactHeight: isCompactHeight, fillsSpace: true)
                     }
                     .padding(.horizontal, 12)
+                    .padding(.top, topOffset + 4)
                     .padding(.bottom, 12)
-                    .padding(.top, 2)
                     .frame(width: w, height: h)
                 }
+
+                // Layer 3: Dedicated Liquid Glass Titlebar Cap floating cleanly over scrolled content
+                titlebarGlassOverlay(width: w, height: topOffset)
             }
         }
+        .ignoresSafeArea(.container, edges: .top)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             vm.refreshQuickActionsStatus()
         }
+    }
+
+    @ViewBuilder
+    private func titlebarGlassOverlay(width: CGFloat, height: CGFloat) -> some View {
+        let isDark = colorScheme == .dark
+        Group {
+            if vm.isWindowTranslucent {
+                Rectangle()
+                    .fill(Color.clear)
+                    .glassEffect(
+                        .regular.tint(Color.white.opacity(isDark ? 0.04 : 0.10)),
+                        in: Rectangle()
+                    )
+                    .overlay(alignment: .bottom) {
+                        Rectangle()
+                            .fill(Color.white.opacity(isDark ? 0.10 : 0.28))
+                            .frame(height: 0.5)
+                    }
+            } else {
+                Rectangle()
+                    .fill(Color(nsColor: .windowBackgroundColor))
+                    .overlay(alignment: .bottom) {
+                        Divider()
+                    }
+            }
+        }
+        .frame(width: width, height: height)
+        .allowsHitTesting(false)
     }
 
     @ViewBuilder
