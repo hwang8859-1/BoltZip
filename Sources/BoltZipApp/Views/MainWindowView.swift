@@ -6,7 +6,7 @@ struct MainWindowView: View {
     @Bindable var vm: WorkspaceViewModel
     @State private var isTableDropTargeted = false
     @State private var showAppearancePopover = false
-    @State private var titlebarHeight: CGFloat = 52
+    @State private var titlebarHeight: CGFloat = 40
 
     private static let dateFormatter: DateFormatter = {
         let df = DateFormatter()
@@ -51,12 +51,16 @@ struct MainWindowView: View {
                         vm.closeArchive()
                     } label: {
                         Label(l.backHome, systemImage: "house")
+                            .font(.system(size: 12.5))
+                            .imageScale(.small)
                     }
 
                     Button {
                         vm.navigateUp()
                     } label: {
                         Label(l.goUp, systemImage: "chevron.up")
+                            .font(.system(size: 12.5))
+                            .imageScale(.small)
                     }
                     .disabled(!vm.canNavigateUp)
                     .keyboardShortcut(.upArrow, modifiers: .command)
@@ -68,12 +72,16 @@ struct MainWindowView: View {
                     vm.startNewArchivePanel()
                 } label: {
                     Label(l.newCompress, systemImage: "plus.rectangle.on.folder")
+                            .font(.system(size: 12.5))
+                            .imageScale(.small)
                 }
 
                 Button {
                     vm.openArchivePanel()
                 } label: {
                     Label(l.open, systemImage: "folder")
+                            .font(.system(size: 12.5))
+                            .imageScale(.small)
                 }
 
                 if let listing = vm.listing {
@@ -83,6 +91,8 @@ struct MainWindowView: View {
                         vm.triggerSmartExtractNow()
                     } label: {
                         Label(l.smartExtract, systemImage: "arrow.down.doc.fill")
+                            .font(.system(size: 12.5))
+                            .imageScale(.small)
                     }
 
                     Button {
@@ -90,6 +100,8 @@ struct MainWindowView: View {
                         vm.activeSheet = .extractOptions(mode)
                     } label: {
                         Label(l.extractTo, systemImage: "square.and.arrow.down.on.square")
+                            .font(.system(size: 12.5))
+                            .imageScale(.small)
                     }
 
                     if listing.format.supportsInPlaceEditing {
@@ -97,18 +109,24 @@ struct MainWindowView: View {
                             vm.addItemsToCurrentZipPanel()
                         } label: {
                             Label(l.addInside, systemImage: "doc.badge.plus")
+                            .font(.system(size: 12.5))
+                            .imageScale(.small)
                         }
 
                         Button {
                             vm.activeSheet = .createFolder(parentFolder: vm.currentFolder)
                         } label: {
                             Label(l.newFolder, systemImage: "folder.badge.plus")
+                            .font(.system(size: 12.5))
+                            .imageScale(.small)
                         }
 
                         Button {
                             vm.deleteSelectedEntries()
                         } label: {
                             Label(l.delete, systemImage: "trash")
+                            .font(.system(size: 12.5))
+                            .imageScale(.small)
                         }
                         .disabled(vm.selectedEntryIDs.isEmpty)
                     }
@@ -117,6 +135,8 @@ struct MainWindowView: View {
                         vm.testIntegrity()
                     } label: {
                         Label(l.verify, systemImage: "checkmark.shield")
+                            .font(.system(size: 12.5))
+                            .imageScale(.small)
                     }
 
                     Divider()
@@ -126,6 +146,8 @@ struct MainWindowView: View {
                     showAppearancePopover.toggle()
                 } label: {
                     Label(l.layoutMenuTitle, systemImage: "slider.horizontal.3")
+                            .font(.system(size: 12.5))
+                            .imageScale(.small)
                 }
                 .help(l.appearanceTitle)
                 .popover(isPresented: $showAppearancePopover, arrowEdge: .bottom) {

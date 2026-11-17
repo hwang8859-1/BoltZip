@@ -25,6 +25,12 @@ struct WindowStyleConfigurator: NSViewRepresentable {
     private func apply(to window: NSWindow?) {
         guard let window else { return }
 
+        if window.toolbarStyle != .unifiedCompact {
+            window.toolbarStyle = .unifiedCompact
+        }
+        if let tb = window.toolbar, tb.sizeMode != .small {
+            tb.sizeMode = .small
+        }
         let measuredTB = window.frame.height - window.contentLayoutRect.height
         if measuredTB > 20 && abs(measuredTB - titlebarHeight) > 0.5 {
             titlebarHeight = measuredTB

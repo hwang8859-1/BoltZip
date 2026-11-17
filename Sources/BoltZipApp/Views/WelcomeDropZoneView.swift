@@ -15,7 +15,7 @@ struct WelcomeDropZoneView: View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
-            let topOffset = max(46, titlebarHeight)
+            let topOffset = max(36, titlebarHeight)
             let isNarrow = w < 540
             let isCompactHeight = h < (topOffset + 345)
             let showBannerHere = vm.showFinderBanner && h >= (topOffset + 330)
