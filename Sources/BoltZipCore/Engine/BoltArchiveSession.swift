@@ -1,0 +1,328 @@
+import Foundation
+
+public struct ArchiveListing: Sendable {
+    public let archiveURL: URL
+    public let format: ArchiveFormat
+    public let entries: [ArchiveEntry]
+    public let comment: String
+    public let totalUncompressedBytes: UInt64
+    public let totalCompressedBytes: UInt64
+    public let archiveFileSize: UInt64
+    public let hasEncryptedEntries: Bool
+
+    public var overallCompressionRatioPercent: Double {
+        guard totalUncompressedBytes > 0 else { return 0 }
+        let ratio = (1.0 - Double(totalCompressedBytes) / Double(totalUncompressedBytes)) * 100.0
+        return max(-999.0, min(100.0, ratio))
+    }
+}
+
+public enum BoltArchiveEngine {
+    public static func inspect(
+        archiveURL: URL,
+        encoding: FilenameEncodingOption = .auto
+    ) throws -> ArchiveListing {
+        guard let format = ArchiveFormat.detect(from: archiveURL) else {
+            throw BoltZipError.unsupportedFormat(archiveURL.pathExtension)
+        }
+
+        let attrs = try FileManager.default.attributesOfItem(atPath: archiveURL.path)
+        let archiveFileSize = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
+
+        let entries: [ArchiveEntry]
+        var comment = ""
+
+        switch format {
+        case .zip:
+            let res = try ZipReader(url: archiveURL).listEntries(encoding: encoding)
+            entries = res.entries
+            comment = res.comment
+        case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
+            entries = try TarCodec.listEntries(at: archiveURL, format: format)
+        case .sevenZip, .iso, .cab, .xar:
+            entries = try ExtendedArchiveDriver.listEntries(at: archiveURL, format: format)
+        }
+
+        let totalUncomp = entries.reduce(UInt64(0)) { $0 + ($1.isDirectory ? 0 : $1.uncompressedSize) }
+        let totalComp = entries.reduce(UInt64(0)) { $0 + ($1.isDirectory ? 0 : $1.compressedSize) }
+        let hasEnc = entries.contains { $0.isEncrypted }
+
+        return ArchiveListing(
+            archiveURL: archiveURL,
+            format: format,
+            entries: entries,
+            comment: comment,
+            totalUncompressedBytes: totalUncomp,
+            totalCompressedBytes: totalComp > 0 ? totalComp : archiveFileSize,
+            archiveFileSize: archiveFileSize,
+            hasEncryptedEntries: hasEnc
+        )
+    }
+
+    public static func readEntryData(
+        archiveURL: URL,
+        entryPath: String,
+        password: String? = nil,
+        encoding: FilenameEncodingOption = .auto
+    ) throws -> Data {
+        guard let format = ArchiveFormat.detect(from: archiveURL) else {
+            throw BoltZipError.unsupportedFormat(archiveURL.pathExtension)
+        }
+        switch format {
+        case .zip:
+            return try ZipReader(url: archiveURL).readEntryData(path: entryPath, password: password, encoding: encoding)
+        case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
+            return try TarCodec.readEntryData(at: archiveURL, format: format, path: entryPath)
+        case .sevenZip, .iso, .cab, .xar:
+            return try ExtendedArchiveDriver.readEntryData(at: archiveURL, path: entryPath)
+        }
+    }
+
+    @discardableResult
+    public static func createArchive(
+        from inputURLs: [URL],
+        to outputURL: URL,
+        options: CreateArchiveOptions,
+        progress: ((OperationProgress) -> Void)? = nil
+    ) throws -> [URL] {
+        switch options.format {
+        case .zip:
+            return try ZipWriter.create(from: inputURLs, to: outputURL, options: options, progress: progress)
+        case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4:
+            try TarCodec.create(from: inputURLs, to: outputURL, options: options, progress: progress)
+            return [outputURL]
+        case .sevenZip:
+            progress?(OperationProgress(fractionCompleted: 0.1, currentItem: "正在使用 libarchive 打包 7z..."))
+            try ExtendedArchiveDriver.create7z(from: inputURLs, to: outputURL, excludeMacJunk: options.excludeMacJunk)
+            progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outputURL.lastPathComponent))
+            return [outputURL]
+        default:
+            throw BoltZipError.unsupportedFormat(options.format.displayName)
+        }
+    }
+
+    public static func editZip(
+        at archiveURL: URL,
+        operations: [ZipEditOperation],
+        options: CreateArchiveOptions = CreateArchiveOptions(),
+        encoding: FilenameEncodingOption = .auto,
+        progress: ((OperationProgress) -> Void)? = nil
+    ) throws {
+        guard ArchiveFormat.detect(from: archiveURL) == .zip else {
+            throw BoltZipError.unsupportedFormat("仅 ZIP 格式支持包内原地增删改")
+        }
+        try ZipWriter.editArchive(at: archiveURL, operations: operations, options: options, encoding: encoding, progress: progress)
+    }
+
+    @discardableResult
+    public static func extract(
+        archiveURL: URL,
+        options: ExtractOptions,
+        progress: ((OperationProgress) -> Void)? = nil
+    ) throws -> URL {
+        let listing = try inspect(archiveURL: archiveURL, encoding: options.encoding)
+        let targetRoot = resolveExtractDestination(listing: listing, options: options)
+        let fm = FileManager.default
+        try fm.createDirectory(at: targetRoot, withIntermediateDirectories: true)
+
+        // Filter entries according to mode & Mac junk filter
+        let entriesToExtract = listing.entries.filter { entry in
+            if options.stripMacJunk && MacJunkFilter.isJunk(path: entry.path) {
+                return false
+            }
+            switch options.mode {
+            case .smart, .here, .subfolder:
+                return true
+            case .selected(let chosen):
+                let cleanEntry = entry.path.hasSuffix("/") ? String(entry.path.dropLast()) : entry.path
+                return chosen.contains { sel in
+                    let cleanSel = sel.hasSuffix("/") ? String(sel.dropLast()) : sel
+                    return cleanEntry == cleanSel || cleanEntry.hasPrefix(cleanSel + "/")
+                }
+            }
+        }
+
+        if listing.format == .sevenZip || listing.format == .iso || listing.format == .cab || listing.format == .xar {
+            let selectedSet: Set<String>?
+            if case .selected(let s) = options.mode {
+                selectedSet = s
+            } else {
+                selectedSet = nil
+            }
+            progress?(OperationProgress(fractionCompleted: 0.2, currentItem: archiveURL.lastPathComponent))
+            try ExtendedArchiveDriver.extract(at: archiveURL, to: targetRoot, selectedPaths: selectedSet)
+            progress?(OperationProgress(fractionCompleted: 1.0, currentItem: "解压完成"))
+            return targetRoot
+        }
+
+        let total = entriesToExtract.count
+        if listing.format == .zip {
+            let reader = ZipReader(url: archiveURL)
+            let parsed = try reader.parseArchive()
+            let accessor = try ZipVolumeAccessor(archiveURL: archiveURL)
+            try accessor.configureVolumes(totalDisks: parsed.totalDisks)
+            defer { accessor.closeAll() }
+
+            var recordByPath: [String: ZipRecord] = [:]
+            for rec in parsed.records {
+                let e = ZipReader.makeEntry(from: rec, encoding: options.encoding)
+                recordByPath[e.path] = rec
+            }
+
+            for (idx, entry) in entriesToExtract.enumerated() {
+                progress?(OperationProgress(
+                    fractionCompleted: total > 0 ? Double(idx) / Double(total) : 1.0,
+                    currentItem: entry.path
+                ))
+                let destURL = try safeDestinationURL(for: entry.path, under: targetRoot)
+                if entry.isDirectory {
+                    try fm.createDirectory(at: destURL, withIntermediateDirectories: true)
+                    continue
+                }
+                guard let rec = recordByPath[entry.path] else { continue }
+                let plain = try reader.decodePayload(
+                    record: rec,
+                    entryPath: entry.path,
+                    accessor: accessor,
+                    password: options.password
+                )
+                try writeExtractedFile(plain, to: destURL, entry: entry, policy: options.overwritePolicy)
+            }
+        } else {
+            for (idx, entry) in entriesToExtract.enumerated() {
+                progress?(OperationProgress(
+                    fractionCompleted: total > 0 ? Double(idx) / Double(total) : 1.0,
+                    currentItem: entry.path
+                ))
+                let destURL = try safeDestinationURL(for: entry.path, under: targetRoot)
+                if entry.isDirectory {
+                    try fm.createDirectory(at: destURL, withIntermediateDirectories: true)
+                    continue
+                }
+                let plain = try TarCodec.readEntryData(at: archiveURL, format: listing.format, path: entry.path)
+                try writeExtractedFile(plain, to: destURL, entry: entry, policy: options.overwritePolicy)
+            }
+        }
+
+        progress?(OperationProgress(fractionCompleted: 1.0, currentItem: "解压完成"))
+        return targetRoot
+    }
+
+    public static func testIntegrity(
+        archiveURL: URL,
+        password: String? = nil,
+        encoding: FilenameEncodingOption = .auto,
+        progress: ((OperationProgress) -> Void)? = nil
+    ) throws -> IntegrityReport {
+        guard let format = ArchiveFormat.detect(from: archiveURL) else {
+            throw BoltZipError.unsupportedFormat(archiveURL.pathExtension)
+        }
+        switch format {
+        case .zip:
+            return try ZipReader(url: archiveURL).testIntegrity(password: password, encoding: encoding, progress: progress)
+        case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
+            return try TarCodec.testIntegrity(at: archiveURL, format: format)
+        case .sevenZip, .iso, .cab, .xar:
+            let start = CFAbsoluteTimeGetCurrent()
+            let entries = try ExtendedArchiveDriver.listEntries(at: archiveURL, format: format)
+            let results = entries.map { IntegrityEntryResult(path: $0.path, status: .passed, detail: "归档索引可读") }
+            return IntegrityReport(
+                archiveName: archiveURL.lastPathComponent,
+                totalEntries: results.count,
+                passedCount: results.count,
+                failedCount: 0,
+                skippedEncryptedCount: 0,
+                elapsedSeconds: CFAbsoluteTimeGetCurrent() - start,
+                results: results
+            )
+        }
+    }
+
+    /// Bandizip/Windows-Zip style smart destination folder detection
+    public static func resolveExtractDestination(listing: ArchiveListing, options: ExtractOptions) -> URL {
+        switch options.mode {
+        case .here, .selected:
+            return options.destinationURL
+        case .subfolder:
+            return options.destinationURL.appendingPathComponent(archiveBaseStem(listing.archiveURL), isDirectory: true)
+        case .smart:
+            let cleanEntries = listing.entries.filter { !MacJunkFilter.isJunk(path: $0.path) }
+            let roots = Set(cleanEntries.compactMap { entry -> String? in
+                let parts = entry.path.split(separator: "/")
+                return parts.first.map(String.init)
+            })
+            if roots.count <= 1 {
+                return options.destinationURL
+            }
+            return options.destinationURL.appendingPathComponent(archiveBaseStem(listing.archiveURL), isDirectory: true)
+        }
+    }
+
+    public static func archiveBaseStem(_ url: URL) -> String {
+        let name = url.lastPathComponent
+        let lower = name.lowercased()
+        for compound in [".tar.gz", ".tar.zst", ".tar.xz", ".tar.bz2", ".tar.lz4"] where lower.hasSuffix(compound) {
+            return String(name.dropLast(compound.count))
+        }
+        return url.deletingPathExtension().lastPathComponent
+    }
+
+    private static func safeDestinationURL(for entryPath: String, under rootURL: URL) throws -> URL {
+        let components = entryPath.split(separator: "/").map(String.init)
+        if components.contains("..") || entryPath.hasPrefix("/") {
+            throw BoltZipError.pathTraversalDetected(entryPath)
+        }
+        let resolvedRoot = rootURL.standardizedFileURL
+        let candidate = resolvedRoot.appendingPathComponent(entryPath).standardizedFileURL
+        let rootPrefix = resolvedRoot.path.hasSuffix("/") ? resolvedRoot.path : (resolvedRoot.path + "/")
+        guard candidate.path == resolvedRoot.path || candidate.path.hasPrefix(rootPrefix) else {
+            throw BoltZipError.pathTraversalDetected(entryPath)
+        }
+        return candidate
+    }
+
+    private static func writeExtractedFile(
+        _ data: Data,
+        to initialURL: URL,
+        entry: ArchiveEntry,
+        policy: OverwritePolicy
+    ) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: initialURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        var targetURL = initialURL
+        if fm.fileExists(atPath: targetURL.path) {
+            switch policy {
+            case .skip:
+                return
+            case .overwrite:
+                try fm.removeItem(at: targetURL)
+            case .rename:
+                targetURL = uniqueNonCollidingURL(for: initialURL)
+            }
+        }
+
+        try data.write(to: targetURL, options: .atomic)
+        let attrs: [FileAttributeKey: Any] = [
+            .modificationDate: entry.modifiedDate,
+            .posixPermissions: NSNumber(value: entry.permissions)
+        ]
+        try? fm.setAttributes(attrs, ofItemAtPath: targetURL.path)
+    }
+
+    private static func uniqueNonCollidingURL(for url: URL) -> URL {
+        let fm = FileManager.default
+        let dir = url.deletingLastPathComponent()
+        let ext = url.pathExtension
+        let stem = url.deletingPathExtension().lastPathComponent
+        var n = 1
+        while true {
+            let candidateName = ext.isEmpty ? "\(stem) (\(n))" : "\(stem) (\(n)).\(ext)"
+            let candidate = dir.appendingPathComponent(candidateName)
+            if !fm.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+            n += 1
+        }
+    }
+}

@@ -1,0 +1,4 @@
+module CBoltCompression {
+    header "bolt_compression.h"
+    export *
+}
