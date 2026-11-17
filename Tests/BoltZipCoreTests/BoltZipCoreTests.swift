@@ -282,6 +282,37 @@ final class BoltZipCoreTests: XCTestCase {
         XCTAssertEqual(report.failedCount, 1)
     }
 
+    func testBsdtarOctalEscapeDecodingAndSevenZipChineseInspect() throws {
+        let escaped = "\\350\\213\\217\\345\\267\\236\\351\\241\\271\\347\\233\\256-\\346\\212\\245\\351\\224\\200\\346\\235\\220\\346\\226\\231/test.pdf"
+        XCTAssertEqual(ExtendedArchiveDriver.unescapeBsdtarPath(escaped), "苏州项目-报销材料/test.pdf")
+        XCTAssertEqual(ExtendedArchiveDriver.unescapeBsdtarPath("plain/report.pdf"), "plain/report.pdf")
+
+        let folder = tempDir.appendingPathComponent("苏州项目建设一处-黄旭阳", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let doc = folder.appendingPathComponent("软件设计师（中级）-证书.pdf")
+        let payload = Data("%PDF-1.4\n测试内容".utf8)
+        try payload.write(to: doc)
+        try Data([1, 2, 3]).write(to: folder.appendingPathComponent(".DS_Store"))
+
+        let sevenZipURL = tempDir.appendingPathComponent("苏州测试.7z")
+        try BoltArchiveEngine.createArchive(
+            from: [folder],
+            to: sevenZipURL,
+            options: CreateArchiveOptions(format: .sevenZip, algorithm: .xz, excludeMacJunk: true)
+        )
+
+        let listing = try BoltArchiveEngine.inspect(archiveURL: sevenZipURL)
+        let paths = Set(listing.entries.map(\.path))
+        XCTAssertTrue(paths.contains("苏州项目建设一处-黄旭阳/软件设计师（中级）-证书.pdf"))
+        XCTAssertFalse(paths.contains { $0.contains("350") || $0.contains(".DS_Store") })
+
+        let previewData = try BoltArchiveEngine.readEntryData(
+            archiveURL: sevenZipURL,
+            entryPath: "苏州项目建设一处-黄旭阳/软件设计师（中级）-证书.pdf"
+        )
+        XCTAssertEqual(previewData, payload)
+    }
+
     func testBenchmarkRunnerProducesValidMetrics() throws {
         let results = try BenchmarkRunner.run(on: BenchmarkRunner.generateMixedSampleData(sizeBytes: 256 * 1024))
         XCTAssertEqual(results.count, 5)

@@ -40,7 +40,7 @@ public enum BoltArchiveEngine {
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
             entries = try TarCodec.listEntries(at: archiveURL, format: format)
         case .sevenZip, .iso, .cab, .xar:
-            entries = try ExtendedArchiveDriver.listEntries(at: archiveURL, format: format)
+            entries = try ExtendedArchiveDriver.listEntries(at: archiveURL, format: format, encoding: encoding)
         }
 
         let totalUncomp = entries.reduce(UInt64(0)) { $0 + ($1.isDirectory ? 0 : $1.uncompressedSize) }
@@ -150,7 +150,12 @@ public enum BoltArchiveEngine {
                 selectedSet = nil
             }
             progress?(OperationProgress(fractionCompleted: 0.2, currentItem: archiveURL.lastPathComponent))
-            try ExtendedArchiveDriver.extract(at: archiveURL, to: targetRoot, selectedPaths: selectedSet)
+            try ExtendedArchiveDriver.extract(
+                at: archiveURL,
+                to: targetRoot,
+                selectedPaths: selectedSet,
+                stripMacJunk: options.stripMacJunk
+            )
             progress?(OperationProgress(fractionCompleted: 1.0, currentItem: "解压完成"))
             return targetRoot
         }
