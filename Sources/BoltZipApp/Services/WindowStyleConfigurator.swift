@@ -52,10 +52,14 @@ struct WindowStyleConfigurator: NSViewRepresentable {
 
         if isTranslucent {
             if window.isOpaque { window.isOpaque = false }
+            if !window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = true }
+            if window.titlebarSeparatorStyle != .none { window.titlebarSeparatorStyle = .none }
             let alpha = max(0.02, min(0.95, backgroundOpacity * 0.45))
             window.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(alpha)
         } else {
             if !window.isOpaque { window.isOpaque = true }
+            if window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = false }
+            if window.titlebarSeparatorStyle != .automatic { window.titlebarSeparatorStyle = .automatic }
             window.backgroundColor = NSColor.windowBackgroundColor
         }
     }

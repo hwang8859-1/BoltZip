@@ -40,6 +40,7 @@ struct MainWindowView: View {
             vm.isWindowTranslucent ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)),
             for: .window
         )
+        .toolbarBackgroundVisibility(vm.isWindowTranslucent ? .hidden : .automatic, for: .windowToolbar)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 if vm.listing != nil {
