@@ -1,5 +1,6 @@
 @testable import BoltZipCore
 import Foundation
+import os
 import XCTest
 
 final class BoltZipCoreTests: XCTestCase {
@@ -321,5 +322,96 @@ final class BoltZipCoreTests: XCTestCase {
             XCTAssertGreaterThan(r.decompressMBps, 0)
             XCTAssertGreaterThan(r.ratioPercent, 50)
         }
+    }
+
+    func testArchiveTaskControllerPauseResumeAndByteProgress() throws {
+        let payload = BenchmarkRunner.generateMixedSampleData(sizeBytes: 2 * 1024 * 1024)
+        let inputFile = tempDir.appendingPathComponent("payload.bin")
+        try payload.write(to: inputFile)
+
+        let zipURL = tempDir.appendingPathComponent("paused.zip")
+        let controller = ArchiveTaskController()
+        let recorded = OSAllocatedUnfairLock(initialState: (didPause: false, maxProcessed: UInt64(0), totalBytes: UInt64(0), lastFraction: 0.0))
+
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.12) {
+            controller.setPaused(false)
+        }
+
+        try BoltArchiveEngine.createArchive(
+            from: [inputFile],
+            to: zipURL,
+            options: CreateArchiveOptions(format: .zip, algorithm: .deflate),
+            controller: controller
+        ) { progress in
+            let shouldTriggerPause = recorded.withLock { state -> Bool in
+                state.maxProcessed = max(state.maxProcessed, progress.processedBytes)
+                state.totalBytes = max(state.totalBytes, progress.totalBytes)
+                state.lastFraction = max(state.lastFraction, progress.fractionCompleted)
+                if !state.didPause && progress.processedBytes >= 128 * 1024 {
+                    state.didPause = true
+                    return true
+                }
+                return false
+            }
+            if shouldTriggerPause {
+                controller.setPaused(true)
+            }
+        }
+
+        let summary = recorded.withLock { $0 }
+        XCTAssertTrue(summary.didPause)
+        XCTAssertGreaterThan(summary.totalBytes, 0)
+        XCTAssertEqual(summary.maxProcessed, summary.totalBytes)
+        XCTAssertEqual(summary.lastFraction, 1.0, accuracy: 0.001)
+
+        let outDir = tempDir.appendingPathComponent("extracted", isDirectory: true)
+        try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+        _ = try BoltArchiveEngine.extract(
+            archiveURL: zipURL,
+            options: ExtractOptions(destinationURL: outDir, mode: .here),
+            controller: ArchiveTaskController()
+        )
+        let extractedData = try Data(contentsOf: outDir.appendingPathComponent("payload.bin"))
+        XCTAssertEqual(extractedData, payload)
+    }
+
+    func testArchiveTaskControllerCancelCleansUpPartialOutputs() throws {
+        let payload = BenchmarkRunner.generateMixedSampleData(sizeBytes: 2 * 1024 * 1024)
+        let inputFile = tempDir.appendingPathComponent("cancel-input.bin")
+        try payload.write(to: inputFile)
+
+        let zipURL = tempDir.appendingPathComponent("cancelled.zip")
+        let controller = ArchiveTaskController()
+        let didCancel = OSAllocatedUnfairLock(initialState: false)
+
+        XCTAssertThrowsError(
+            try BoltArchiveEngine.createArchive(
+                from: [inputFile],
+                to: zipURL,
+                options: CreateArchiveOptions(format: .zip, algorithm: .deflate),
+                controller: controller
+            ) { progress in
+                if progress.processedBytes >= 128 * 1024 {
+                    let triggered = didCancel.withLock { flag -> Bool in
+                        if !flag {
+                            flag = true
+                            return true
+                        }
+                        return false
+                    }
+                    if triggered {
+                        controller.cancel()
+                    }
+                }
+            }
+        ) { error in
+            if case .cancelled = (error as? BoltZipError) {
+                // Expected cancellation error
+            } else {
+                XCTFail("Expected BoltZipError.cancelled, got \(error)")
+            }
+        }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: zipURL.path))
     }
 }

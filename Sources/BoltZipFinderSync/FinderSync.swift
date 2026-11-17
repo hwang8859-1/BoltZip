@@ -107,20 +107,20 @@ final class FinderSync: FIFinderSync {
 
     // MARK: - Actions
 
-    @objc private func smartExtractAction(_ sender: Any?) { dispatch(op: "smartExtract") }
-    @objc private func extractSubfolderAction(_ sender: Any?) { dispatch(op: "extractSubfolder") }
-    @objc private func openArchiveAction(_ sender: Any?) { dispatch(op: "open") }
-    @objc private func testIntegrityAction(_ sender: Any?) { dispatch(op: "testIntegrity") }
-    @objc private func compressZipAction(_ sender: Any?) { dispatch(op: "compressZip") }
-    @objc private func compressTarZstAction(_ sender: Any?) { dispatch(op: "compressTarZst") }
-    @objc private func compress7zAction(_ sender: Any?) { dispatch(op: "compress7z") }
-    @objc private func compressWizardAction(_ sender: Any?) { dispatch(op: "compressWizard") }
-    @objc private func openWorkspaceAction(_ sender: Any?) { dispatch(op: "openWorkspace", includeTargets: false) }
+    @objc private func smartExtractAction(_ sender: Any?) { dispatch(op: "smartExtract", host: "hud") }
+    @objc private func extractSubfolderAction(_ sender: Any?) { dispatch(op: "extractSubfolder", host: "hud") }
+    @objc private func openArchiveAction(_ sender: Any?) { dispatch(op: "open", host: "finder") }
+    @objc private func testIntegrityAction(_ sender: Any?) { dispatch(op: "testIntegrity", host: "finder") }
+    @objc private func compressZipAction(_ sender: Any?) { dispatch(op: "compressZip", host: "hud") }
+    @objc private func compressTarZstAction(_ sender: Any?) { dispatch(op: "compressTarZst", host: "hud") }
+    @objc private func compress7zAction(_ sender: Any?) { dispatch(op: "compress7z", host: "hud") }
+    @objc private func compressWizardAction(_ sender: Any?) { dispatch(op: "compressWizard", host: "finder") }
+    @objc private func openWorkspaceAction(_ sender: Any?) { dispatch(op: "openWorkspace", host: "finder", includeTargets: false) }
 
-    private func dispatch(op: String, includeTargets: Bool = true) {
+    private func dispatch(op: String, host: String, includeTargets: Bool = true) {
         var comps = URLComponents()
         comps.scheme = "boltzip"
-        comps.host = "finder"
+        comps.host = host
         var items: [URLQueryItem] = [URLQueryItem(name: "op", value: op)]
         if includeTargets {
             for url in currentTargetURLs() {

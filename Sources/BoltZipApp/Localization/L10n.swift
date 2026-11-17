@@ -313,4 +313,33 @@ struct L10n: Sendable {
     var copyrightLine: String { "MIT License · © 2026 BoltZip Contributors" }
 
     var alertTitle: String { t("BoltZip 提示", "BoltZip 提示", "BoltZip", "BoltZip") }
+
+    // MARK: - Quick Task Floating HUD
+    func hudCompressingTitle(_ fmt: String) -> String {
+        t("正在压缩为 \(fmt)", "正在壓縮為 \(fmt)", "Compressing to \(fmt)", "\(fmt) に圧縮中")
+    }
+    var hudSmartExtractingTitle: String { t("正在智能解压", "正在智慧解壓", "Smart Extracting", "スマート展開中") }
+    var hudExtractingSubfolderTitle: String { t("正在解压到同名文件夹", "正在解壓至同名資料夾", "Extracting to Folder", "フォルダへ展開中") }
+    var hudPausedTitle: String { t("已暂停", "已暫停", "Paused", "一時停止中") }
+    var hudCompletedTitle: String { t("处理完成", "處理完成", "Completed", "完了") }
+    var hudCancelledTitle: String { t("已停止", "已停止", "Stopped", "停止しました") }
+    var hudFailedTitle: String { t("操作失败", "操作失敗", "Failed", "エラー") }
+    var hudPreparing: String { t("正在扫描文件...", "正在掃描檔案...", "Preparing files...", "ファイルを準備中...") }
+    var hudCalculatingETA: String { t("正在计算剩余时间...", "正在計算剩餘時間...", "Calculating remaining time...", "残り時間を計算中...") }
+    var hudAlmostDone: String { t("即将完成", "即將完成", "Almost done", "まもなく完了") }
+    func hudRemaining(_ formatted: String) -> String {
+        t("剩余约 \(formatted)", "剩餘約 \(formatted)", "About \(formatted) left", "残り約 \(formatted)")
+    }
+    func hudElapsed(_ formatted: String) -> String {
+        t("耗时 \(formatted)", "耗時 \(formatted)", "Finished in \(formatted)", "所要時間 \(formatted)")
+    }
+    func hudQueuedBadge(_ count: Int) -> String {
+        t("+\(count) 排队中", "+\(count) 排隊中", "+\(count) queued", "+\(count) 待機中")
+    }
+    var hudPauseBtn: String { t("暂停", "暫停", "Pause", "一時停止") }
+    var hudResumeBtn: String { t("继续", "繼續", "Resume", "再開") }
+    var hudStopBtn: String { t("停止", "停止", "Stop", "停止") }
+    var hudRevealBtn: String { t("在访达中显示", "在 Finder 中顯示", "Show in Finder", "Finder で表示") }
+    var hudUnlockBtn: String { t("解锁继续", "解鎖繼續", "Unlock", "解除して続行") }
+    var hudNeedsPassword: String { t("压缩包已加密，请输入密码继续解压", "封存檔已加密，請輸入密碼繼續解壓", "Archive is encrypted. Enter password to continue.", "暗号化されています。パスワードを入力してください。") }
 }

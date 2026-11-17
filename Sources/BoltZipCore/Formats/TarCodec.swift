@@ -15,6 +15,35 @@ public enum TarCodec {
         }
     }
 
+    static func readAllEntries(
+        at url: URL,
+        format: ArchiveFormat,
+        controller: ArchiveTaskController? = nil,
+        progress: ((UInt64, UInt64) -> Void)? = nil
+    ) throws -> [String: Data] {
+        switch format {
+        case .gz, .zst, .xz, .bz2, .lz4:
+            let entries = try listSingleStream(at: url, format: format)
+            let raw = try Data(contentsOf: url, options: .mappedIfSafe)
+            let plain = try decompressStream(raw, format: format, controller: controller, progress: progress)
+            if let first = entries.first {
+                return [first.path: plain]
+            }
+            return [:]
+        case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4:
+            let tarData = try loadUncompressedTarData(at: url, format: format, controller: controller, progress: progress)
+            let items = try parseTarEntries(tarData, methodLabel: format.defaultAlgorithm.shortName)
+            var dict: [String: Data] = [:]
+            dict.reserveCapacity(items.count)
+            for item in items {
+                dict[item.entry.path] = item.payload
+            }
+            return dict
+        default:
+            throw BoltZipError.unsupportedFormat(format.displayName)
+        }
+    }
+
     public static func readEntryData(at url: URL, format: ArchiveFormat, path: String) throws -> Data {
         switch format {
         case .gz, .zst, .xz, .bz2, .lz4:
@@ -37,16 +66,24 @@ public enum TarCodec {
         from inputURLs: [URL],
         to outputURL: URL,
         options: CreateArchiveOptions,
+        controller: ArchiveTaskController? = nil,
         progress: ((OperationProgress) -> Void)? = nil
     ) throws {
+        try controller?.checkpoint()
         let items = try ZipWriter.collectInputItems(from: inputURLs, excludeMacJunk: options.excludeMacJunk)
         var tarData = Data()
-        let total = items.count
+        let totalBytes = items.reduce(UInt64(0)) { $0 + $1.fileSize }
+        var stagedBytes: UInt64 = 0
+        let isRawTar = (options.format == .tar)
 
-        for (idx, item) in items.enumerated() {
+        for item in items {
+            try controller?.checkpoint()
+            let stageFrac = totalBytes > 0 ? Double(stagedBytes) / Double(totalBytes) : 0
             progress?(OperationProgress(
-                fractionCompleted: total > 0 ? Double(idx) / Double(total) : 0,
-                currentItem: item.archivePath
+                fractionCompleted: isRawTar ? stageFrac * 0.95 : stageFrac * 0.15,
+                currentItem: item.archivePath,
+                processedBytes: isRawTar ? stagedBytes : UInt64(Double(totalBytes) * (stageFrac * 0.15)),
+                totalBytes: totalBytes
             ))
             let payload: Data
             if let fileURL = item.fileURL, !item.isDirectory {
@@ -62,30 +99,45 @@ public enum TarCodec {
                 modifiedDate: item.modifiedDate,
                 payload: payload
             )
+            stagedBytes += item.fileSize
         }
         // Two 512-byte zero blocks terminate TAR stream
         tarData.append(Data(count: blockSize * 2))
+        try controller?.checkpoint()
+
+        let reportCompressProgress: (UInt64, UInt64) -> Void = { bytesRead, tarTotal in
+            let ratio = tarTotal > 0 ? Double(bytesRead) / Double(tarTotal) : 1.0
+            let frac = min(0.99, 0.15 + 0.85 * ratio)
+            let estBytes = totalBytes > 0 ? UInt64(Double(totalBytes) * frac) : bytesRead
+            progress?(OperationProgress(
+                fractionCompleted: frac,
+                currentItem: outputURL.lastPathComponent,
+                processedBytes: estBytes,
+                totalBytes: totalBytes > 0 ? totalBytes : tarTotal
+            ))
+        }
 
         let finalBytes: Data
         switch options.format {
         case .tar:
             finalBytes = tarData
         case .tarGz:
-            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .deflate, gzipContainer: true, level: options.level)
+            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .deflate, gzipContainer: true, level: options.level, controller: controller, progress: reportCompressProgress)
         case .tarZst:
-            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .zstd, gzipContainer: false, level: options.level)
+            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .zstd, gzipContainer: false, level: options.level, controller: controller, progress: reportCompressProgress)
         case .tarXz:
-            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .xz, gzipContainer: false, level: options.level)
+            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .xz, gzipContainer: false, level: options.level, controller: controller, progress: reportCompressProgress)
         case .tarBz2:
-            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .bzip2, gzipContainer: false, level: options.level)
+            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .bzip2, gzipContainer: false, level: options.level, controller: controller, progress: reportCompressProgress)
         case .tarLz4:
-            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .lz4, gzipContainer: false, level: options.level)
+            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .lz4, gzipContainer: false, level: options.level, controller: controller, progress: reportCompressProgress)
         default:
             throw BoltZipError.unsupportedFormat(options.format.displayName)
         }
 
+        try controller?.checkpoint()
         try finalBytes.write(to: outputURL, options: .atomic)
-        progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outputURL.lastPathComponent))
+        progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outputURL.lastPathComponent, processedBytes: totalBytes, totalBytes: totalBytes))
     }
 
     public static func testIntegrity(at url: URL, format: ArchiveFormat) throws -> IntegrityReport {
@@ -107,28 +159,39 @@ public enum TarCodec {
 
     // MARK: - Internal TAR & Stream Codecs
 
-    private static func decompressStream(_ data: Data, format: ArchiveFormat) throws -> Data {
+    private static func decompressStream(
+        _ data: Data,
+        format: ArchiveFormat,
+        controller: ArchiveTaskController? = nil,
+        progress: ((UInt64, UInt64) -> Void)? = nil
+    ) throws -> Data {
         switch format {
         case .gz, .tarGz:
-            return try CompressionCodec.decompress(data: data, algorithm: .deflate, gzipContainer: true)
+            return try CompressionCodec.decompress(data: data, algorithm: .deflate, gzipContainer: true, controller: controller, progress: progress)
         case .zst, .tarZst:
-            return try CompressionCodec.decompress(data: data, algorithm: .zstd)
+            return try CompressionCodec.decompress(data: data, algorithm: .zstd, controller: controller, progress: progress)
         case .xz, .tarXz:
-            return try CompressionCodec.decompress(data: data, algorithm: .xz)
+            return try CompressionCodec.decompress(data: data, algorithm: .xz, controller: controller, progress: progress)
         case .bz2, .tarBz2:
-            return try CompressionCodec.decompress(data: data, algorithm: .bzip2)
+            return try CompressionCodec.decompress(data: data, algorithm: .bzip2, controller: controller, progress: progress)
         case .lz4, .tarLz4:
-            return try CompressionCodec.decompress(data: data, algorithm: .lz4)
+            return try CompressionCodec.decompress(data: data, algorithm: .lz4, controller: controller, progress: progress)
         case .tar:
+            progress?(UInt64(data.count), UInt64(data.count))
             return data
         default:
             throw BoltZipError.unsupportedFormat(format.displayName)
         }
     }
 
-    private static func loadUncompressedTarData(at url: URL, format: ArchiveFormat) throws -> Data {
+    private static func loadUncompressedTarData(
+        at url: URL,
+        format: ArchiveFormat,
+        controller: ArchiveTaskController? = nil,
+        progress: ((UInt64, UInt64) -> Void)? = nil
+    ) throws -> Data {
         let raw = try Data(contentsOf: url, options: .mappedIfSafe)
-        return try decompressStream(raw, format: format)
+        return try decompressStream(raw, format: format, controller: controller, progress: progress)
     }
 
     private static func listSingleStream(at url: URL, format: ArchiveFormat) throws -> [ArchiveEntry] {

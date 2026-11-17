@@ -22,8 +22,10 @@ typedef enum {
     BOLT_CONTAINER_GZIP = 1  /* Gzip wrapper (RFC 1952) for DEFLATE */
 } bolt_container_t;
 
+#define BOLT_STATUS_CANCELLED (-499)
+
 typedef struct {
-    int32_t code;       /* 0 on success, non-zero on error */
+    int32_t code;       /* 0 on success, BOLT_STATUS_CANCELLED on cancel, non-zero on error */
     char message[256];  /* Human-readable error message */
 } bolt_status_t;
 
@@ -36,6 +38,9 @@ void bolt_free_buffer(bolt_buffer_t *buf);
 
 uint32_t bolt_crc32(uint32_t initial, const uint8_t *data, size_t length);
 
+/* Progress & pause/cancel control callback (return 0 to continue, non-zero to cancel) */
+typedef int (*bolt_control_cb)(uint64_t bytes_read, uint64_t total_bytes, void *ctx);
+
 /* In-memory compression & decompression */
 bolt_status_t bolt_compress_buffer(
     bolt_algo_t algo,
@@ -46,6 +51,17 @@ bolt_status_t bolt_compress_buffer(
     bolt_buffer_t *output
 );
 
+bolt_status_t bolt_compress_buffer_ex(
+    bolt_algo_t algo,
+    bolt_container_t container,
+    int32_t level,
+    const uint8_t *input,
+    size_t input_len,
+    bolt_buffer_t *output,
+    bolt_control_cb control_cb,
+    void *ctx
+);
+
 bolt_status_t bolt_decompress_buffer(
     bolt_algo_t algo,
     bolt_container_t container,
@@ -53,6 +69,17 @@ bolt_status_t bolt_decompress_buffer(
     size_t input_len,
     size_t expected_output_len, /* 0 if unknown */
     bolt_buffer_t *output
+);
+
+bolt_status_t bolt_decompress_buffer_ex(
+    bolt_algo_t algo,
+    bolt_container_t container,
+    const uint8_t *input,
+    size_t input_len,
+    size_t expected_output_len, /* 0 if unknown */
+    bolt_buffer_t *output,
+    bolt_control_cb control_cb,
+    void *ctx
 );
 
 /* File-to-file streaming compression & decompression (low memory footprint) */

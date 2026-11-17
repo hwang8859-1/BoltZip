@@ -98,6 +98,45 @@ extension View {
         }
     }
 
+    /// Applies Liquid Glass when enabled and supported (macOS 26+), otherwise clean solid native chrome.
+    @ViewBuilder
+    func boltLayeredSurface<S: InsettableShape>(
+        glassEnabled: Bool,
+        tone: BoltSurfaceTone = .regular,
+        tint: Color? = nil,
+        interactive: Bool = false,
+        in shape: S
+    ) -> some View {
+        if glassEnabled {
+            self.boltGlassSurface(tone, tint: tint, interactive: interactive, in: shape)
+        } else {
+            switch tone {
+            case .clear:
+                self.background(tint ?? Color.clear, in: shape)
+            case .regular:
+                self
+                    .background(Color(nsColor: .controlBackgroundColor), in: shape)
+                    .overlay(
+                        shape.strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.75)
+                    )
+            }
+        }
+    }
+
+    @ViewBuilder
+    func boltSheetPresentationGlass(_ enabled: Bool) -> some View {
+        if enabled {
+            self.presentationBackground(.ultraThinMaterial)
+        } else {
+            self.presentationBackground(Color(nsColor: .windowBackgroundColor))
+        }
+    }
+
+    /// Applies the unified translucent sheet backdrop + presentation glass + preferred theme across modal sheets.
+    func boltGlassSheetStyle(enabled: Bool, colorScheme: ColorScheme?) -> some View {
+        self.modifier(BoltGlassSheetStyleModifier(enabled: enabled, preferredScheme: colorScheme))
+    }
+
     @ViewBuilder
     func boltGlassButton() -> some View {
         if #available(macOS 26.0, *) {
@@ -258,5 +297,136 @@ struct BoltAmbientBackdrop: View {
         }
         .allowsHitTesting(false)
         .ignoresSafeArea()
+    }
+}
+
+/// Reusable Layer-2 frosted glass section card for forms, settings, and wizards.
+struct BoltGlassSectionCard<Content: View>: View {
+    let title: String?
+    var icon: String? = nil
+    let glassEnabled: Bool
+    var tint: Color? = nil
+    @ViewBuilder let content: () -> Content
+
+    init(
+        _ title: String? = nil,
+        icon: String? = nil,
+        glassEnabled: Bool,
+        tint: Color? = nil,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.title = title
+        self.icon = icon
+        self.glassEnabled = glassEnabled
+        self.tint = tint
+        self.content = content
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let title, !title.isEmpty {
+                HStack(spacing: 5) {
+                    if let icon {
+                        Image(systemName: icon)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.cyan)
+                    }
+                    Text(title)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 4)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                content()
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .boltLayeredSurface(
+                glassEnabled: glassEnabled,
+                tone: .regular,
+                tint: tint,
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            )
+        }
+    }
+}
+
+private struct BoltGlassSheetStyleModifier: ViewModifier {
+    let enabled: Bool
+    let preferredScheme: ColorScheme?
+    @Environment(\.colorScheme) private var envColorScheme
+
+    func body(content: Content) -> some View {
+        let isDark = envColorScheme == .dark
+        content
+            .preferredColorScheme(preferredScheme)
+            .background {
+                if enabled {
+                    ZStack {
+                        BoltAmbientBackdrop()
+                        Color(nsColor: .windowBackgroundColor)
+                            .opacity(isDark ? 0.24 : 0.14)
+                    }
+                    .ignoresSafeArea()
+                } else {
+                    Color(nsColor: .windowBackgroundColor)
+                        .ignoresSafeArea()
+                }
+            }
+            .boltSheetPresentationGlass(enabled)
+    }
+}
+
+/// Bridges translucency and clear NSWindow backing to auxiliary standalone windows (Settings / About).
+struct BoltAuxiliaryWindowStyleBridge: NSViewRepresentable {
+    let isTranslucent: Bool
+    let backgroundOpacity: Double
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            apply(to: view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            apply(to: nsView.window)
+        }
+    }
+
+    private func apply(to window: NSWindow?) {
+        guard let window else { return }
+        if !window.styleMask.contains(.closable) {
+            window.styleMask.insert(.closable)
+        }
+        window.titleVisibility = .visible
+        if let closeBtn = window.standardWindowButton(.closeButton) {
+            closeBtn.isHidden = false
+            closeBtn.isEnabled = true
+            if let titlebarContainer = closeBtn.superview?.superview {
+                titlebarContainer.isHidden = false
+                titlebarContainer.alphaValue = 1.0
+                if let themeFrame = titlebarContainer.superview, themeFrame.subviews.last !== titlebarContainer {
+                    themeFrame.addSubview(titlebarContainer, positioned: .above, relativeTo: nil)
+                }
+            }
+        }
+
+        if isTranslucent {
+            if window.isOpaque { window.isOpaque = false }
+            if !window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = true }
+            if window.titlebarSeparatorStyle != .none { window.titlebarSeparatorStyle = .none }
+            let alpha = max(0.02, min(0.95, backgroundOpacity * 0.45))
+            window.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(alpha)
+        } else {
+            if !window.isOpaque { window.isOpaque = true }
+            if window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = false }
+            if window.titlebarSeparatorStyle != .automatic { window.titlebarSeparatorStyle = .automatic }
+            window.backgroundColor = NSColor.windowBackgroundColor
+        }
     }
 }

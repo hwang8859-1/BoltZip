@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BoltZip v0.9.0 — 为 macOS 14.0+ 打造的开源通用极速压缩工作台</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="favicon.png" />
+  <link rel="apple-touch-icon" sizes="256x256" href="app-icon.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -17,21 +19,12 @@
   <header class="top-nav glass-surface">
     <div class="nav-inner">
       <a href="#hero" class="brand">
-        <svg class="brand-icon" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-          <defs>
-            <linearGradient id="boltGrad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#38BDF8"/>
-              <stop offset="55%" stop-color="#6366F1"/>
-              <stop offset="100%" stop-color="#FACC15"/>
-            </linearGradient>
-          </defs>
-          <rect x="2" y="2" width="36" height="36" rx="10" fill="url(#boltGrad)" fill-opacity="0.18" stroke="url(#boltGrad)" stroke-width="1.6"/>
-          <path d="M12 10H31L20 19.5H26.5L16.5 27.5H29L27 32H8L19 22.5H12.5L22 14.5H10.2L12 10Z" transform="rotate(6 20 20)" fill="url(#boltGrad)"/>
-        </svg>
+        <img src="app-icon.png" alt="BoltZip" class="brand-icon" />
         <span class="brand-name">BoltZip</span>
         <span class="badge-mini">v0.9.0 · macOS 14+ Universal</span>
       </a>
       <nav class="nav-links">
+        <a href="#downloads" data-i18n="navDownload">下载安装包</a>
         <a href="#simulator" data-i18n="navSim">交互演示</a>
         <a href="#features" data-i18n="navFeat">核心特性</a>
         <a href="#algorithms" data-i18n="navAlgo">开源算法</a>
@@ -66,7 +59,8 @@
             告别双击就一股脑解压一地的传统体验。BoltZip 基于纯正开源压缩底座（zlib · Zstandard · LZMA2 · bzip2 · LZ4），原生还原「包内浏览、直接增删改、自动删除 .DS_Store、GBK 乱码自愈、访达一级 Bolt 菜单与 macOS 26+ 液态玻璃（旧版自动禁用）」。
           </p>
           <div class="hero-cta">
-            <a href="#simulator" class="btn btn-primary" data-i18n="heroCta1">▶ 体验界面交互模拟器</a>
+            <a href="#downloads" class="btn btn-primary" data-i18n="heroCtaDownload">⬇ 下载 v0.9.0 Universal</a>
+            <a href="#simulator" class="btn btn-glass" data-i18n="heroCta1">▶ 体验界面交互模拟器</a>
             <a href="#quickstart" class="btn btn-glass" data-i18n="heroCta2">克隆源码并构建</a>
           </div>
           <div class="hero-stats">
@@ -80,7 +74,7 @@
             </div>
             <div class="stat-item">
               <div class="stat-val" data-i18n="stat3Val">4 语种随系统切换</div>
-              <div class="stat-lbl">简中 · 繁中 · English · 日本語</div>
+              <div class="stat-lbl" data-i18n="stat3Lbl">简中 · 繁中 · English · 日本語</div>
             </div>
           </div>
         </div>
@@ -90,7 +84,7 @@
             <div class="card-glow"></div>
             <div class="showcase-header">
               <div class="traffic-lights"><span></span><span></span><span></span></div>
-              <span class="showcase-title">BoltZip Engine · Architecture</span>
+              <span class="showcase-title" data-i18n="archTitle">BoltZip Engine · Architecture</span>
               <span class="status-pill">macOS 14+ Universal</span>
             </div>
             <div class="arch-layers">
@@ -98,7 +92,7 @@
                 <div class="layer-tag">UI &amp; Finder</div>
                 <div class="layer-body">
                   <strong>BoltZipApp + BoltZipFinderSync.appex</strong>
-                  <span data-i18n="archLayer1">液态玻璃可调透明度 · 访达一级 Bolt › 菜单 · Quick Look 预览</span>
+                  <span data-i18n="archLayer1">macOS 26+ 液态玻璃 / 旧版原生界面 · 访达一级 Bolt › 悬浮进度窗 · Quick Look</span>
                 </div>
               </div>
               <div class="arch-connector">▼</div>
@@ -106,7 +100,7 @@
                 <div class="layer-tag">Archive Core</div>
                 <div class="layer-body">
                   <strong>BoltZipCore (Pure Swift 6)</strong>
-                  <span>ZIP64 / 分卷 .z01 / 原地增删改 / WinZip AE-2 / GB18030 自动识别</span>
+                  <span data-i18n="archLayer2">ZIP64 / 分卷 .z01 / 原地增删改 / WinZip AE-2 / GB18030 自动识别</span>
                 </div>
               </div>
               <div class="arch-connector">▼</div>
@@ -131,21 +125,21 @@
         <div class="section-head">
           <span class="eyebrow">INTERACTIVE WORKBENCH</span>
           <h2 data-i18n="simTitle">Windows Zip 经典交互 · 实时界面模拟器</h2>
-          <p data-i18n="simSub">点击工具栏体验「包内直览、GBK 中文乱码一键自愈、AE-2 加密与 CRC32 校验」</p>
+          <p data-i18n="simSub">点击工具栏体验「包内直览、自动剔除 .DS_Store、GBK 乱码一键自愈与 CRC32 校验」</p>
         </div>
 
         <div class="app-window glass-surface">
           <div class="app-titlebar">
             <div class="window-controls">
               <div class="traffic-lights"><span></span><span></span><span></span></div>
-              <span class="app-doc-title" id="simDocTitle">2026_交付包_v2.zip</span>
+              <span class="app-doc-title" id="simDocTitle" data-i18n="simDocTitle">2026_交付包_v2.zip</span>
               <span class="app-format-pill" id="simFormatPill">ZIP · DEFLATE + AES-256</span>
             </div>
             <div class="app-toolbar">
-              <button class="tool-btn" id="btnExtractSmart"><span class="ico">📂</span> 智能解压</button>
-              <button class="tool-btn" id="btnAddSimFile"><span class="ico">➕</span> 包内添加</button>
-              <button class="tool-btn" id="btnDeleteSimFile"><span class="ico">🗑</span> 删除</button>
-              <button class="tool-btn accent-btn" id="btnTestIntegrity"><span class="ico">🛡</span> 完整性校验</button>
+              <button class="tool-btn" id="btnExtractSmart"><span class="ico">📂</span> <span data-i18n="simBtnExtract">智能解压</span></button>
+              <button class="tool-btn" id="btnAddSimFile"><span class="ico">➕</span> <span data-i18n="simBtnAdd">包内添加</span></button>
+              <button class="tool-btn" id="btnDeleteSimFile"><span class="ico">🗑</span> <span data-i18n="simBtnDelete">删除</span></button>
+              <button class="tool-btn accent-btn" id="btnTestIntegrity"><span class="ico">🛡</span> <span data-i18n="simBtnVerify">完整性校验</span></button>
               <button class="tool-btn warn-btn" id="btnToggleGBK"><span class="ico">文</span> <span id="gbkBtnText">模拟 Windows GBK 乱码</span></button>
             </div>
           </div>
@@ -156,24 +150,24 @@
             </div>
             <div class="subbar-right">
               <label class="encoding-pill">
-                编码:
+                <span data-i18n="simEncodingLbl">编码:</span>
                 <select id="simEncodingSelect">
-                  <option value="auto" selected>智能自动 (GB18030/UTF-8)</option>
-                  <option value="cp437">原始 CP437 (未纠偏)</option>
-                  <option value="utf8">强制 UTF-8</option>
+                  <option value="auto" selected data-i18n="simEncAuto">智能自动 (GB18030/UTF-8)</option>
+                  <option value="cp437" data-i18n="simEncCp437">原始 CP437 (未纠偏)</option>
+                  <option value="utf8" data-i18n="simEncUtf8">强制 UTF-8</option>
                 </select>
               </label>
-              <input type="search" id="simSearch" placeholder="过滤包内文件..." />
+              <input type="search" id="simSearch" data-i18n-placeholder="simSearchPh" placeholder="过滤包内文件..." />
             </div>
           </div>
 
           <div class="app-body">
             <aside class="app-sidebar">
-              <div class="sidebar-title">归档目录树</div>
+              <div class="sidebar-title" data-i18n="simTreeTitle">归档目录树</div>
               <ul class="tree-list" id="simTree"></ul>
               <div class="sidebar-card">
-                <div class="sc-label">干净打包保护</div>
-                <div class="sc-val">已过滤 <code>.DS_Store / __MACOSX</code></div>
+                <div class="sc-label" data-i18n="simCleanTitle">干净打包保护</div>
+                <div class="sc-val" data-i18n-html="simCleanVal">已过滤 <code>.DS_Store / __MACOSX</code></div>
               </div>
             </aside>
 
@@ -181,12 +175,12 @@
               <table class="app-table">
                 <thead>
                   <tr>
-                    <th>名称</th>
-                    <th>原始大小</th>
-                    <th>压缩后</th>
-                    <th>压缩率</th>
-                    <th>开源算法</th>
-                    <th>校验 / 加密</th>
+                    <th data-i18n="colName">名称</th>
+                    <th data-i18n="colOrigSize">原始大小</th>
+                    <th data-i18n="colPackedSize">压缩后</th>
+                    <th data-i18n="colRatio">压缩率</th>
+                    <th data-i18n="colAlgo">开源算法</th>
+                    <th data-i18n="colStatus">校验 / 加密</th>
                   </tr>
                 </thead>
                 <tbody id="simTableBody"></tbody>
@@ -196,7 +190,7 @@
 
           <div class="app-statusbar">
             <span id="simStatusLeft">就绪 · 双击文件夹进入，单击文件查看详情</span>
-            <span id="simStatusRight">macOS 14+ Universal · 26+ Liquid Glass</span>
+            <span id="simStatusRight" data-i18n="statusRight">macOS 14+ Universal · 26+ Liquid Glass</span>
           </div>
 
           <div class="sim-toast hidden" id="simToast"></div>
@@ -216,50 +210,50 @@
         <div class="bento-grid">
           <article class="bento-card glass-surface span-2">
             <div class="bento-icon">🗂️</div>
-            <h3>像资源管理器一样「包内直览与原地增删改」</h3>
-            <p>无需全量解压即可浏览目录树、空格键调用 Quick Look 预览、直接拖入新文件进 ZIP、重命名、删除或单独导出选中项——未改动文件零重压缩。</p>
+            <h3 data-i18n="f1Title">像资源管理器一样「包内直览与原地增删改」</h3>
+            <p data-i18n="f1Desc">无需全量解压即可浏览目录树、空格键调用 Quick Look 预览、直接拖入新文件进 ZIP、重命名、删除或单独导出选中项——未改动文件零重压缩。</p>
           </article>
 
           <article class="bento-card glass-surface">
             <div class="bento-icon">🧹</div>
-            <h3>自动删除 .DS_Store 等垃圾文件</h3>
-            <p>打包、包内追加与解压时默认自动剔除 <code>.DS_Store</code>、<code>__MACOSX</code> 与 <code>._*</code>，发给 Windows/Linux 同事干干净净。</p>
+            <h3 data-i18n="f2Title">自动删除 .DS_Store 等垃圾文件</h3>
+            <p data-i18n-html="f2Desc">打包、包内追加与解压时默认自动剔除 <code>.DS_Store</code>、<code>__MACOSX</code> 与 <code>._*</code>，发给 Windows/Linux 同事干干净净。</p>
           </article>
 
           <article class="bento-card glass-surface">
             <div class="bento-icon">🧠</div>
-            <h3>Smart 智能解压</h3>
-            <p>自动判断包内结构：单一根目录直接释放不套娃；多文件散装包自动建立同名子目录。</p>
+            <h3 data-i18n="f3Title">Smart 智能解压</h3>
+            <p data-i18n="f3Desc">自动判断包内结构：单一根目录直接释放不套娃；多文件散装包自动建立同名子目录。</p>
           </article>
 
           <article class="bento-card glass-surface">
             <div class="bento-icon">🀄</div>
-            <h3>GBK / Shift-JIS 乱码自愈</h3>
-            <p>自动识别 Windows 工具打包的无 UTF-8 标记文件名（GB18030 / Big5 / Shift-JIS / EUC-KR）。</p>
+            <h3 data-i18n="f4Title">GBK / Shift-JIS 乱码自愈</h3>
+            <p data-i18n="f4Desc">自动识别 Windows 工具打包的无 UTF-8 标记文件名（GB18030 / Big5 / Shift-JIS / EUC-KR）。</p>
           </article>
 
           <article class="bento-card glass-surface">
             <div class="bento-icon">🔐</div>
-            <h3>WinZip AE-2 AES-256</h3>
-            <p>PBKDF2-HMAC-SHA1 + AES-256-CTR + 10B HMAC-SHA1，与 Windows 7-Zip / WinZip 密码互通。</p>
+            <h3 data-i18n="f5Title">WinZip AE-2 AES-256</h3>
+            <p data-i18n="f5Desc">PBKDF2-HMAC-SHA1 + AES-256-CTR + 10B HMAC-SHA1，与 Windows 7-Zip / WinZip 密码互通。</p>
           </article>
 
           <article class="bento-card glass-surface span-2">
             <div class="bento-icon">⚡</div>
-            <h3>访达右键一级目录「Bolt ›」 &amp; Swift 6 CLI</h3>
-            <p>通过原生 <code>FinderSync</code> 扩展把「智能解压 / 压缩 ZIP / TAR.ZST / 7z / 加密打包」放到右键第一层；并附带 <code>boltzip</code> 命令行工具与 <code>AGENTS.md</code> 开发者指引。</p>
+            <h3 data-i18n="f6Title">访达右键「Bolt ›」独立悬浮进度窗 &amp; Swift 6 CLI</h3>
+            <p data-i18n-html="f6Desc">原生 <code>FinderSync</code> 扩展提供「智能解压 / 压缩 ZIP / TAR.ZST / 7z」快捷动作：点击后仅在屏幕角落弹出轻量化悬浮进度卡片（含实时 ETA、暂停/继续、停止与内联密码解锁），不强行唤起主界面，任务结束自动优雅退出；同步附带 <code>boltzip</code> 命令行工具。</p>
           </article>
 
           <article class="bento-card glass-surface span-2">
             <div class="bento-icon">💻</div>
-            <h3>macOS 14.0+ Universal 通用版（Apple Silicon &amp; Intel）</h3>
-            <p>零 Homebrew 运行时依赖，同时原生支持 M 系列芯片（<code>arm64</code>）与 Intel Mac（<code>x86_64</code>）。</p>
+            <h3 data-i18n="f7Title">macOS 14.0+ Universal 通用版（Apple Silicon &amp; Intel）</h3>
+            <p data-i18n-html="f7Desc">零 Homebrew 运行时依赖，同时原生支持 M 系列芯片（<code>arm64</code>）与 Intel Mac（<code>x86_64</code>）。</p>
           </article>
 
           <article class="bento-card glass-surface span-2">
             <div class="bento-icon">🪟</div>
-            <h3>液态玻璃与旧版系统自适应</h3>
-            <p>macOS 26+ 支持窗口半透明调节；macOS 14–15 自动禁用玻璃效果并提供干净原生界面，欢迎页卡片与状态栏支持独立隐藏。</p>
+            <h3 data-i18n="f8Title">液态玻璃与旧版系统自适应</h3>
+            <p data-i18n="f8Desc">macOS 26+ 全面呈现三层液态玻璃（含设置与压缩向导），支持半透明调节；macOS 14–15 自动禁用玻璃效果并提供干净原生界面。</p>
           </article>
         </div>
       </div>
@@ -270,17 +264,17 @@
       <div class="container">
         <div class="section-head">
           <span class="eyebrow">OPEN-SOURCE CODEC CORE</span>
-          <h2>全栈开源压缩算法引擎 · 场景对比</h2>
-          <p>核心算法均静态编译自成熟开源 C 实现，可审计、无第三方动态库依赖</p>
+          <h2 data-i18n="algoTitle">全栈开源压缩算法引擎 · 场景对比</h2>
+          <p data-i18n="algoSub">核心算法均静态编译自成熟开源 C 实现，可审计、无第三方动态库依赖</p>
         </div>
 
         <div class="algo-lab glass-surface">
           <div class="lab-controls">
-            <span>选择负载场景（参考模型对比，客户端内支持对当前 Mac 实时跑分）：</span>
+            <span data-i18n="algoControlLbl">选择负载场景（参考模型对比，客户端内支持对当前 Mac 实时跑分）：</span>
             <div class="workload-tabs" id="workloadTabs">
-              <button class="w-tab active" data-workload="code">源码 &amp; JSON</button>
-              <button class="w-tab" data-workload="docs">文档 &amp; 日志</button>
-              <button class="w-tab" data-workload="binary">程序 &amp; 资源包</button>
+              <button class="w-tab active" data-workload="code" data-i18n="tabCode">源码 &amp; JSON</button>
+              <button class="w-tab" data-workload="docs" data-i18n="tabDocs">文档 &amp; 日志</button>
+              <button class="w-tab" data-workload="binary" data-i18n="tabBinary">程序 &amp; 资源包</button>
             </div>
           </div>
 
@@ -298,6 +292,53 @@
       </div>
     </section>
 
+    <!-- Direct Downloads -->
+    <section id="downloads" class="section">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">RELEASE ARTIFACTS · V0.9.0</span>
+          <h2 data-i18n="dlTitle">下载 BoltZip v0.9.0 安装包与源代码</h2>
+          <p data-i18n="dlSub">Universal 通用二进制（原生支持 Apple Silicon M 系列与 Intel x86_64），静态链接全部开源压缩库</p>
+        </div>
+
+        <div class="download-grid">
+          <article class="download-card glass-surface featured-dl">
+            <div class="dl-card-head">
+              <div class="dl-tag" data-i18n="dlAppTag">macOS App · 推荐下载</div>
+              <img src="app-icon.png" alt="BoltZip App Icon" class="dl-app-icon" />
+            </div>
+            <h3>BoltZip v0.9.0 Universal</h3>
+            <p class="dl-meta">macOS 14.0+ (arm64 + x86_64) · macOS 26+ Liquid Glass</p>
+            <p class="dl-desc" data-i18n="dlAppDesc">包含 BoltZip.app、内置 boltzip CLI 与 FinderSync 右键菜单扩展，开箱即用零外部依赖。</p>
+            <div class="dl-actions">
+              <a href="./downloads/BoltZip-0.9.0-macOS-universal.zip" download="BoltZip-0.9.0-macOS-universal.zip" class="btn btn-primary" data-i18n="dlAppBtn">⬇ 下载 App 压缩包 (.zip)</a>
+            </div>
+          </article>
+
+          <article class="download-card glass-surface">
+            <div class="dl-tag" data-i18n="dlSrcTag">MIT 完整源码归档</div>
+            <h3 data-i18n="dlSrcTitle">Source Code v0.9.0</h3>
+            <p class="dl-meta">Swift 6.0 · CBridge · FinderSync · Tests</p>
+            <p class="dl-desc" data-i18n="dlSrcDesc">包含完整 SwiftPM 工程源码、C 编解码桥接与 Universal 构建脚本。</p>
+            <div class="dl-actions dl-actions-row">
+              <a href="./downloads/BoltZip-0.9.0-source.zip" download="BoltZip-0.9.0-source.zip" class="btn btn-glass btn-sm">Source (.zip)</a>
+              <a href="./downloads/BoltZip-0.9.0-source.tar.gz" download="BoltZip-0.9.0-source.tar.gz" class="btn btn-glass btn-sm">Source (.tar.gz)</a>
+            </div>
+          </article>
+
+          <article class="download-card glass-surface">
+            <div class="dl-tag" data-i18n="dlVerifyTag">完整性校验</div>
+            <h3 data-i18n="dlVerifyTitle">SHA-256 校验清单</h3>
+            <p class="dl-meta">BoltZip-0.9.0-SHA256SUMS.txt</p>
+            <p class="dl-desc" data-i18n="dlVerifyDesc">下载后可执行 shasum -a 256 -c BoltZip-0.9.0-SHA256SUMS.txt 验证包完整性。</p>
+            <div class="dl-actions">
+              <a href="./downloads/BoltZip-0.9.0-SHA256SUMS.txt" download="BoltZip-0.9.0-SHA256SUMS.txt" class="btn btn-glass btn-sm" data-i18n="dlVerifyBtn">查看 / 下载 SHA256SUMS.txt</a>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
     <!-- Quickstart (No hardcoded local paths) -->
     <section id="quickstart" class="section">
       <div class="container">
@@ -310,8 +351,8 @@
         <div class="quickstart-grid">
           <div class="code-card glass-surface">
             <div class="code-head">
-              <span>1. 克隆并打包 BoltZip.app</span>
-              <button class="copy-btn" data-copy="git clone https://github.com/hwang8859-1/BoltZip.git && cd BoltZip && ./Scripts/build_app.sh">复制</button>
+              <span data-i18n="qsStep1">1. 克隆并打包 BoltZip.app</span>
+              <button class="copy-btn" data-copy="git clone https://github.com/hwang8859-1/BoltZip.git && cd BoltZip && ./Scripts/build_app.sh" data-i18n="copyBtn">复制</button>
             </div>
             <pre><code>git clone https://github.com/hwang8859-1/BoltZip.git
 cd BoltZip
@@ -321,16 +362,16 @@ open dist/BoltZip.app</code></pre>
 
           <div class="code-card glass-surface">
             <div class="code-head">
-              <span>2. 运行全套单元测试</span>
-              <button class="copy-btn" data-copy="swift test">复制</button>
+              <span data-i18n="qsStep2">2. 运行全套单元测试</span>
+              <button class="copy-btn" data-copy="swift test" data-i18n="copyBtn">复制</button>
             </div>
             <pre><code>swift test</code></pre>
           </div>
 
           <div class="code-card glass-surface">
             <div class="code-head">
-              <span>3. 使用 boltzip CLI</span>
-              <button class="copy-btn" data-copy="swift run -c release boltzip a release.zip ./src --algo zstd --aes256 --password Secret">复制</button>
+              <span data-i18n="qsStep3">3. 使用 boltzip CLI</span>
+              <button class="copy-btn" data-copy="swift run -c release boltzip a release.zip ./src --algo zstd --aes256 --password Secret" data-i18n="copyBtn">复制</button>
             </div>
             <pre><code>swift run -c release boltzip a release.zip ./src --algo zstd --aes256 --password Secret
 swift run -c release boltzip t release.zip --password Secret
@@ -343,7 +384,7 @@ swift run -c release boltzip bench</code></pre>
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <div><strong>BoltZip v0.9.0</strong> · Open-Source Universal Archive Studio for macOS 14.0+</div>
+      <div data-i18n-html="footerDesc"><strong>BoltZip v0.9.0</strong> · Open-Source Universal Archive Studio for macOS 14.0+</div>
       <div class="footer-note">MIT License · Swift 6 · zlib · Zstandard · XZ · bzip2 · LZ4</div>
     </div>
   </footer>

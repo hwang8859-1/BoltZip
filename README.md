@@ -61,7 +61,7 @@ swift run -c release boltzip x release.zip ./out --mode smart
 
 ## 🧩 展示页面与开发者指引
 
-- **交互式产品展示页**：直接用浏览器打开 [showcase/index.html](showcase/index.html)，即可体验浏览器端交互模拟器、多语言切换与算法对比面板。
+- **在线产品展示与下载页**：访问公网展示站 [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/)，即可在线体验交互式界面模拟器、多语言切换、算法对比面板，并直接下载 `BoltZip v0.9.0 Universal` 安装包、源代码归档与 SHA-256 校验清单（仓库源码位于 [showcase/](showcase/)）。
 - **AI Agent 与二次开发指引**：请参阅 [AGENTS.md](AGENTS.md)，了解模块划分、加密/分卷协议不变量及代码贡献规范。
 - **版本更新记录**：请参阅 [CHANGELOG.md](CHANGELOG.md)。
 

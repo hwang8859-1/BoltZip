@@ -83,17 +83,25 @@ public enum BoltArchiveEngine {
         from inputURLs: [URL],
         to outputURL: URL,
         options: CreateArchiveOptions,
-        progress: ((OperationProgress) -> Void)? = nil
+        controller: ArchiveTaskController? = nil,
+        progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws -> [URL] {
+        try controller?.checkpoint()
         switch options.format {
         case .zip:
-            return try ZipWriter.create(from: inputURLs, to: outputURL, options: options, progress: progress)
+            return try ZipWriter.create(from: inputURLs, to: outputURL, options: options, controller: controller, progress: progress)
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4:
-            try TarCodec.create(from: inputURLs, to: outputURL, options: options, progress: progress)
+            try TarCodec.create(from: inputURLs, to: outputURL, options: options, controller: controller, progress: progress)
             return [outputURL]
         case .sevenZip:
-            progress?(OperationProgress(fractionCompleted: 0.1, currentItem: "正在使用 libarchive 打包 7z..."))
-            try ExtendedArchiveDriver.create7z(from: inputURLs, to: outputURL, excludeMacJunk: options.excludeMacJunk)
+            progress?(OperationProgress(fractionCompleted: 0.05, currentItem: outputURL.lastPathComponent))
+            try ExtendedArchiveDriver.create7z(
+                from: inputURLs,
+                to: outputURL,
+                excludeMacJunk: options.excludeMacJunk,
+                controller: controller,
+                progress: progress
+            )
             progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outputURL.lastPathComponent))
             return [outputURL]
         default:
@@ -118,9 +126,12 @@ public enum BoltArchiveEngine {
     public static func extract(
         archiveURL: URL,
         options: ExtractOptions,
-        progress: ((OperationProgress) -> Void)? = nil
+        controller: ArchiveTaskController? = nil,
+        progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws -> URL {
+        try controller?.checkpoint()
         let listing = try inspect(archiveURL: archiveURL, encoding: options.encoding)
+        try controller?.checkpoint()
         let targetRoot = resolveExtractDestination(listing: listing, options: options)
         let fm = FileManager.default
         try fm.createDirectory(at: targetRoot, withIntermediateDirectories: true)
@@ -149,18 +160,25 @@ public enum BoltArchiveEngine {
             } else {
                 selectedSet = nil
             }
-            progress?(OperationProgress(fractionCompleted: 0.2, currentItem: archiveURL.lastPathComponent))
+            let estBytes = listing.totalUncompressedBytes > 0 ? listing.totalUncompressedBytes : listing.archiveFileSize
+            progress?(OperationProgress(fractionCompleted: 0.05, currentItem: archiveURL.lastPathComponent, processedBytes: 0, totalBytes: estBytes))
             try ExtendedArchiveDriver.extract(
                 at: archiveURL,
                 to: targetRoot,
                 selectedPaths: selectedSet,
-                stripMacJunk: options.stripMacJunk
+                stripMacJunk: options.stripMacJunk,
+                expectedTotalBytes: estBytes,
+                controller: controller,
+                progress: progress
             )
-            progress?(OperationProgress(fractionCompleted: 1.0, currentItem: "解压完成"))
+            progress?(OperationProgress(fractionCompleted: 1.0, currentItem: archiveURL.lastPathComponent, processedBytes: estBytes, totalBytes: estBytes))
             return targetRoot
         }
 
+        let totalBytes = entriesToExtract.reduce(UInt64(0)) { $0 + ($1.isDirectory ? 0 : $1.uncompressedSize) }
+        var processedBytes: UInt64 = 0
         let total = entriesToExtract.count
+
         if listing.format == .zip {
             let reader = ZipReader(url: archiveURL)
             let parsed = try reader.parseArchive()
@@ -175,9 +193,15 @@ public enum BoltArchiveEngine {
             }
 
             for (idx, entry) in entriesToExtract.enumerated() {
+                try controller?.checkpoint()
+                let frac = totalBytes > 0
+                    ? Double(processedBytes) / Double(totalBytes)
+                    : (total > 0 ? Double(idx) / Double(total) : 1.0)
                 progress?(OperationProgress(
-                    fractionCompleted: total > 0 ? Double(idx) / Double(total) : 1.0,
-                    currentItem: entry.path
+                    fractionCompleted: frac,
+                    currentItem: entry.path,
+                    processedBytes: processedBytes,
+                    totalBytes: totalBytes
                 ))
                 let destURL = try safeDestinationURL(for: entry.path, under: targetRoot)
                 if entry.isDirectory {
@@ -189,27 +213,63 @@ public enum BoltArchiveEngine {
                     record: rec,
                     entryPath: entry.path,
                     accessor: accessor,
-                    password: options.password
-                )
+                    password: options.password,
+                    controller: controller
+                ) { itemRead, _ in
+                    let cur = min(totalBytes, processedBytes + itemRead)
+                    let curFrac = totalBytes > 0 ? Double(cur) / Double(totalBytes) : frac
+                    progress?(OperationProgress(
+                        fractionCompleted: curFrac,
+                        currentItem: entry.path,
+                        processedBytes: cur,
+                        totalBytes: totalBytes
+                    ))
+                }
                 try writeExtractedFile(plain, to: destURL, entry: entry, policy: options.overwritePolicy)
+                processedBytes += entry.uncompressedSize
             }
         } else {
-            for (idx, entry) in entriesToExtract.enumerated() {
+            let payloadMap = try TarCodec.readAllEntries(at: archiveURL, format: listing.format, controller: controller) { readBytes, totalCompressed in
+                let curBytes = totalBytes > 0 && totalCompressed > 0
+                    ? UInt64(Double(totalBytes) * 0.4 * (Double(readBytes) / Double(totalCompressed)))
+                    : readBytes
+                let frac = totalCompressed > 0 ? 0.4 * (Double(readBytes) / Double(totalCompressed)) : 0.2
                 progress?(OperationProgress(
-                    fractionCompleted: total > 0 ? Double(idx) / Double(total) : 1.0,
-                    currentItem: entry.path
+                    fractionCompleted: frac,
+                    currentItem: archiveURL.lastPathComponent,
+                    processedBytes: curBytes,
+                    totalBytes: totalBytes > 0 ? totalBytes : totalCompressed
+                ))
+            }
+            for (idx, entry) in entriesToExtract.enumerated() {
+                try controller?.checkpoint()
+                let entryFrac = totalBytes > 0
+                    ? 0.4 + 0.6 * (Double(processedBytes) / Double(totalBytes))
+                    : (total > 0 ? 0.4 + 0.6 * (Double(idx) / Double(total)) : 1.0)
+                let reportedBytes = totalBytes > 0 ? UInt64(Double(totalBytes) * entryFrac) : processedBytes
+                progress?(OperationProgress(
+                    fractionCompleted: entryFrac,
+                    currentItem: entry.path,
+                    processedBytes: reportedBytes,
+                    totalBytes: totalBytes
                 ))
                 let destURL = try safeDestinationURL(for: entry.path, under: targetRoot)
                 if entry.isDirectory {
                     try fm.createDirectory(at: destURL, withIntermediateDirectories: true)
                     continue
                 }
-                let plain = try TarCodec.readEntryData(at: archiveURL, format: listing.format, path: entry.path)
+                guard let plain = payloadMap[entry.path] else { continue }
                 try writeExtractedFile(plain, to: destURL, entry: entry, policy: options.overwritePolicy)
+                processedBytes += entry.uncompressedSize
             }
         }
 
-        progress?(OperationProgress(fractionCompleted: 1.0, currentItem: "解压完成"))
+        progress?(OperationProgress(
+            fractionCompleted: 1.0,
+            currentItem: archiveURL.lastPathComponent,
+            processedBytes: totalBytes,
+            totalBytes: totalBytes
+        ))
         return targetRoot
     }
 

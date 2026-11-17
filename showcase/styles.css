@@ -130,8 +130,10 @@ code, pre {
 }
 
 .brand-icon {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  display: block;
 }
 
 .brand-name {
@@ -903,6 +905,87 @@ code, pre {
   color: var(--text-muted);
 }
 
+/* Downloads */
+.download-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.download-card {
+  display: flex;
+  flex-direction: column;
+  padding: 22px;
+  border-radius: 18px;
+}
+
+.download-card.featured-dl {
+  border-color: rgba(56, 189, 248, 0.42);
+  background: linear-gradient(155deg, rgba(56, 189, 248, 0.14), rgba(99, 102, 241, 0.08));
+}
+
+.dl-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.dl-card-head .dl-tag {
+  margin-bottom: 0;
+}
+
+.dl-app-icon {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.dl-tag {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 3px 10px;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--cyan);
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+}
+
+.download-card h3 {
+  font-size: 1.12rem;
+  margin-bottom: 6px;
+}
+
+.dl-meta {
+  font-size: 0.78rem;
+  color: #bae6fd;
+  margin-bottom: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dl-desc {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin-bottom: 18px;
+  flex: 1;
+}
+
+.dl-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dl-actions-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
 /* Quickstart */
 .quickstart-grid {
   display: grid;
@@ -961,6 +1044,7 @@ code, pre {
 @media (max-width: 960px) {
   .hero-grid,
   .bento-grid,
+  .download-grid,
   .quickstart-grid,
   .app-body,
   .algo-row {

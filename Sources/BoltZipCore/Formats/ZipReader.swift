@@ -365,8 +365,11 @@ public final class ZipReader {
         record: ZipRecord,
         entryPath: String,
         accessor: ZipVolumeAccessor,
-        password: String?
+        password: String?,
+        controller: ArchiveTaskController? = nil,
+        progress: ((UInt64, UInt64) -> Void)? = nil
     ) throws -> Data {
+        try controller?.checkpoint()
         let rawPayload = try readRawPayload(for: record, accessor: accessor)
         let isEncrypted = (record.flags & 0x0001) != 0
 
@@ -411,7 +414,9 @@ public final class ZipReader {
             data: compressedBytes,
             algorithm: algo,
             gzipContainer: false,
-            expectedSize: Int(record.uncompressedSize)
+            expectedSize: Int(record.uncompressedSize),
+            controller: controller,
+            progress: progress
         )
 
         if !skipCRC32 {

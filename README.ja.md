@@ -61,7 +61,7 @@ swift run -c release boltzip x release.zip ./out --mode smart
 
 ## 🧩 紹介ページ ＆ 開発者向けドキュメント
 
-- **インタラクティブ紹介ページ**：[showcase/index.html](showcase/index.html) をブラウザで開くと、UI シミュレーターや各圧縮アルゴリズムの比較を体験できます。
+- **オンライン紹介・ダウンロードページ**：公開サイト [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/) にて UI シミュレーター、圧縮エンジン比較、および `BoltZip v0.9.0 Universal` とソースコードアーカイブのダウンロードをご確認いただけます（ソースは [showcase/](showcase/) に同梱）。
 - **AI Agent / コントリビューターガイド**：[AGENTS.md](AGENTS.md) をご覧ください。
 - **変更履歴**：[CHANGELOG.md](CHANGELOG.md) をご覧ください。
 

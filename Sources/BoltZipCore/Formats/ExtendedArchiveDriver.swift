@@ -60,8 +60,12 @@ public enum ExtendedArchiveDriver {
         at url: URL,
         to destinationURL: URL,
         selectedPaths: Set<String>? = nil,
-        stripMacJunk: Bool = true
+        stripMacJunk: Bool = true,
+        expectedTotalBytes: UInt64 = 0,
+        controller: ArchiveTaskController? = nil,
+        progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
+        try controller?.checkpoint()
         try FileManager.default.createDirectory(at: destinationURL, withIntermediateDirectories: true)
         var args: [String] = []
         if stripMacJunk {
@@ -73,24 +77,56 @@ public enum ExtendedArchiveDriver {
         if let selectedPaths, !selectedPaths.isEmpty {
             args.append(contentsOf: selectedPaths.sorted())
         }
-        _ = try runTar(arguments: args)
+        let archiveName = url.lastPathComponent
+        let startTime = CFAbsoluteTimeGetCurrent()
+        _ = try runTar(arguments: args, controller: controller) {
+            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+            let approxFrac = min(0.92, 1.0 - exp(-elapsed * 0.65))
+            let approxBytes = expectedTotalBytes > 0 ? UInt64(Double(expectedTotalBytes) * approxFrac) : 0
+            progress?(OperationProgress(
+                fractionCompleted: approxFrac,
+                currentItem: archiveName,
+                processedBytes: approxBytes,
+                totalBytes: expectedTotalBytes
+            ))
+        }
+        progress?(OperationProgress(
+            fractionCompleted: 1.0,
+            currentItem: archiveName,
+            processedBytes: expectedTotalBytes,
+            totalBytes: expectedTotalBytes
+        ))
     }
 
     public static func create7z(
         from inputURLs: [URL],
         to outputURL: URL,
-        excludeMacJunk: Bool
+        excludeMacJunk: Bool,
+        controller: ArchiveTaskController? = nil,
+        progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
+        try controller?.checkpoint()
         let fm = FileManager.default
         let staging = fm.temporaryDirectory.appendingPathComponent("BoltZipStage-\(UUID().uuidString)")
         try fm.createDirectory(at: staging, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: staging) }
 
         let items = try ZipWriter.collectInputItems(from: inputURLs, excludeMacJunk: excludeMacJunk)
+        let totalBytes = items.reduce(UInt64(0)) { $0 + $1.fileSize }
+        var stagedBytes: UInt64 = 0
         var topLevelNames: [String] = []
         var seenTop: Set<String> = []
 
         for item in items {
+            try controller?.checkpoint()
+            let stageFrac = totalBytes > 0 ? Double(stagedBytes) / Double(totalBytes) : 0
+            progress?(OperationProgress(
+                fractionCompleted: stageFrac * 0.2,
+                currentItem: item.archivePath,
+                processedBytes: UInt64(Double(totalBytes) * stageFrac * 0.2),
+                totalBytes: totalBytes
+            ))
+
             let clean = item.archivePath.hasSuffix("/") ? String(item.archivePath.dropLast()) : item.archivePath
             let dest = staging.appendingPathComponent(clean)
             if item.isDirectory {
@@ -99,19 +135,42 @@ public enum ExtendedArchiveDriver {
                 try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try fm.copyItem(at: src, to: dest)
             }
+            stagedBytes += item.fileSize
             if let first = clean.split(separator: "/").first.map(String.init), !seenTop.contains(first) {
                 seenTop.insert(first)
                 topLevelNames.append(first)
             }
         }
 
+        try controller?.checkpoint()
         if fm.fileExists(atPath: outputURL.path) {
             try fm.removeItem(at: outputURL)
         }
 
         var args = ["--format=7zip", "-cf", outputURL.path, "-C", staging.path]
         args.append(contentsOf: topLevelNames.isEmpty ? ["."] : topLevelNames)
-        _ = try runTar(arguments: args)
+        let outName = outputURL.lastPathComponent
+        let compressStart = CFAbsoluteTimeGetCurrent()
+        do {
+            _ = try runTar(arguments: args, controller: controller) {
+                let writtenBytes = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? NSNumber)?.uint64Value ?? 0
+                let elapsed = CFAbsoluteTimeGetCurrent() - compressStart
+                let sizeFrac = totalBytes > 0 ? min(0.95, 0.2 + 0.75 * min(1.0, Double(writtenBytes) / Double(max(1, totalBytes / 2)))) : 0.0
+                let timeFrac = 0.2 + 0.72 * (1.0 - exp(-elapsed * 0.45))
+                let frac = min(0.95, max(sizeFrac, timeFrac))
+                let estProcessed = totalBytes > 0 ? UInt64(Double(totalBytes) * frac) : writtenBytes
+                progress?(OperationProgress(
+                    fractionCompleted: frac,
+                    currentItem: outName,
+                    processedBytes: estProcessed,
+                    totalBytes: totalBytes
+                ))
+            }
+        } catch {
+            try? fm.removeItem(at: outputURL)
+            throw error
+        }
+        progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outName, processedBytes: totalBytes, totalBytes: totalBytes))
     }
 
     /// Decodes `bsdtar` `safe_fprintf` octal escapes (`\350\213\217`) back into UTF-8/CJK paths.
@@ -183,12 +242,22 @@ public enum ExtendedArchiveDriver {
         return FilenameEncoding.decode(Data(decoded), hasUTF8Flag: false, preferred: encoding)
     }
 
-    private static func runTar(arguments: [String]) throws -> String {
-        let data = try runTarData(arguments: arguments)
+    private static func runTar(
+        arguments: [String],
+        controller: ArchiveTaskController? = nil,
+        onTick: (@Sendable () -> Void)? = nil
+    ) throws -> String {
+        let data = try runTarData(arguments: arguments, controller: controller, onTick: onTick)
         return String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
     }
 
-    private static func runTarData(arguments: [String]) throws -> Data {
+    private static func runTarData(
+        arguments: [String],
+        controller: ArchiveTaskController? = nil,
+        onTick: (@Sendable () -> Void)? = nil
+    ) throws -> Data {
+        try controller?.checkpoint()
+
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
         proc.arguments = arguments
@@ -205,9 +274,44 @@ public enum ExtendedArchiveDriver {
         proc.standardError = errPipe
 
         try proc.run()
+        let pid = proc.processIdentifier
+        controller?.setHooks(
+            onPause: { paused in
+                if pid > 0 {
+                    _ = Darwin.kill(pid, paused ? SIGSTOP : SIGCONT)
+                }
+            },
+            onCancel: {
+                if pid > 0 {
+                    _ = Darwin.kill(pid, SIGCONT)
+                }
+                proc.terminate()
+            }
+        )
+        defer { controller?.clearHooks() }
+
+        let ticker: DispatchSourceTimer?
+        if let onTick {
+            let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+            timer.schedule(deadline: .now() + .milliseconds(200), repeating: .milliseconds(200))
+            timer.setEventHandler { [weak controller] in
+                if controller?.isPaused == true || controller?.isCancelled == true { return }
+                onTick()
+            }
+            timer.resume()
+            ticker = timer
+        } else {
+            ticker = nil
+        }
+        defer { ticker?.cancel() }
+
         let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
         let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
         proc.waitUntilExit()
+
+        if controller?.isCancelled == true {
+            throw BoltZipError.cancelled
+        }
 
         if proc.terminationStatus != 0 {
             let errMsg = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "tar failed"

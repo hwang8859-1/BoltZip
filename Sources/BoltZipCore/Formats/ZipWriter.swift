@@ -143,8 +143,10 @@ public enum ZipWriter {
         from inputURLs: [URL],
         to outputURL: URL,
         options: CreateArchiveOptions,
+        controller: ArchiveTaskController? = nil,
         progress: ((OperationProgress) -> Void)? = nil
     ) throws -> [URL] {
+        try controller?.checkpoint()
         let items = try collectInputItems(from: inputURLs, excludeMacJunk: options.excludeMacJunk)
         let sink = try SplitVolumeSink(outputURL: outputURL, splitLimit: options.splitVolumeSizeBytes)
         do {
@@ -154,6 +156,7 @@ public enum ZipWriter {
             cdEntries.reserveCapacity(items.count)
 
             for item in items {
+                try controller?.checkpoint()
                 progress?(OperationProgress(
                     fractionCompleted: totalBytes > 0 ? Double(processedBytes) / Double(totalBytes) : 0,
                     currentItem: item.archivePath,
@@ -161,11 +164,25 @@ public enum ZipWriter {
                     totalBytes: totalBytes
                 ))
 
-                let entry = try writeNewItem(item, options: options, sink: sink)
+                let entry = try writeNewItem(
+                    item,
+                    options: options,
+                    sink: sink,
+                    controller: controller
+                ) { itemRead, _ in
+                    let currentTotal = min(totalBytes, processedBytes + itemRead)
+                    progress?(OperationProgress(
+                        fractionCompleted: totalBytes > 0 ? Double(currentTotal) / Double(totalBytes) : 0,
+                        currentItem: item.archivePath,
+                        processedBytes: currentTotal,
+                        totalBytes: totalBytes
+                    ))
+                }
                 cdEntries.append(entry)
                 processedBytes += item.fileSize
             }
 
+            try controller?.checkpoint()
             try finishCentralDirectory(entries: cdEntries, comment: options.archiveComment, sink: sink)
             let created = try sink.finalizeAll()
             progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outputURL.lastPathComponent, processedBytes: totalBytes, totalBytes: totalBytes))
@@ -420,7 +437,9 @@ public enum ZipWriter {
     private static func writeNewItem(
         _ item: InputItem,
         options: CreateArchiveOptions,
-        sink: SplitVolumeSink
+        sink: SplitVolumeSink,
+        controller: ArchiveTaskController? = nil,
+        progress: ((UInt64, UInt64) -> Void)? = nil
     ) throws -> CentralDirEntry {
         let pathEnc = FilenameEncoding.encode(item.archivePath, option: options.encoding)
         let (dosTime, dosDate) = ZipBinary.dosDateTime(from: item.modifiedDate)
@@ -460,7 +479,9 @@ public enum ZipWriter {
             data: plainData,
             algorithm: options.algorithm,
             gzipContainer: false,
-            level: options.level
+            level: options.level,
+            controller: controller,
+            progress: progress
         )
         // Store fallback if DEFLATE/Bzip2/Zstd expanded a tiny/incompressible file (only when unencrypted or desired)
         if options.algorithm != .store && compressed.count >= plainData.count && plainData.count < 64 {

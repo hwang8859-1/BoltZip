@@ -8,6 +8,30 @@ public struct CodecEngineInfo: Identifiable, Sendable {
     public let license: String
 }
 
+private final class CCodecControlContext: @unchecked Sendable {
+    let controller: ArchiveTaskController?
+    let onProgress: ((UInt64, UInt64) -> Void)?
+
+    init(controller: ArchiveTaskController?, onProgress: ((UInt64, UInt64) -> Void)?) {
+        self.controller = controller
+        self.onProgress = onProgress
+    }
+}
+
+private let boltCodecControlBridge: bolt_control_cb = { bytesRead, totalBytes, rawCtx in
+    guard let rawCtx else { return 0 }
+    let ctx = Unmanaged<CCodecControlContext>.fromOpaque(rawCtx).takeUnretainedValue()
+    if let controller = ctx.controller {
+        do {
+            try controller.checkpoint()
+        } catch {
+            return 1
+        }
+    }
+    ctx.onProgress?(bytesRead, totalBytes)
+    return 0
+}
+
 public enum CompressionCodec {
     private static func mapAlgo(_ algo: CompressionAlgorithm) -> bolt_algo_t {
         switch algo {
@@ -31,9 +55,13 @@ public enum CompressionCodec {
         data: Data,
         algorithm: CompressionAlgorithm,
         gzipContainer: Bool = false,
-        level: Int? = nil
+        level: Int? = nil,
+        controller: ArchiveTaskController? = nil,
+        progress: ((UInt64, UInt64) -> Void)? = nil
     ) throws -> Data {
+        try controller?.checkpoint()
         if algorithm == .store {
+            progress?(UInt64(data.count), UInt64(data.count))
             return data
         }
         let lvl = Int32(level ?? algorithm.defaultLevel)
@@ -41,9 +69,18 @@ public enum CompressionCodec {
         var outBuf = bolt_buffer_t(data: nil, size: 0)
         defer { bolt_free_buffer(&outBuf) }
 
-        let status = data.withUnsafeBytes { rawBuf -> bolt_status_t in
-            let ptr = rawBuf.bindMemory(to: UInt8.self).baseAddress
-            return bolt_compress_buffer(mapAlgo(algorithm), container, lvl, ptr, data.count, &outBuf)
+        let needsBridge = (controller != nil || progress != nil)
+        let controlCtx = needsBridge ? CCodecControlContext(controller: controller, onProgress: progress) : nil
+        let status = withExtendedLifetime(controlCtx) {
+            let rawCtx = controlCtx.map { Unmanaged.passUnretained($0).toOpaque() }
+            let cb: bolt_control_cb? = needsBridge ? boltCodecControlBridge : nil
+            return data.withUnsafeBytes { rawBuf -> bolt_status_t in
+                let ptr = rawBuf.bindMemory(to: UInt8.self).baseAddress
+                return bolt_compress_buffer_ex(mapAlgo(algorithm), container, lvl, ptr, data.count, &outBuf, cb, rawCtx)
+            }
+        }
+        if status.code == BOLT_STATUS_CANCELLED {
+            throw BoltZipError.cancelled
         }
         guard status.code == 0 else {
             let msg = withUnsafePointer(to: status.message) {
@@ -59,18 +96,31 @@ public enum CompressionCodec {
         data: Data,
         algorithm: CompressionAlgorithm,
         gzipContainer: Bool = false,
-        expectedSize: Int = 0
+        expectedSize: Int = 0,
+        controller: ArchiveTaskController? = nil,
+        progress: ((UInt64, UInt64) -> Void)? = nil
     ) throws -> Data {
+        try controller?.checkpoint()
         if algorithm == .store {
+            progress?(UInt64(data.count), UInt64(data.count))
             return data
         }
         let container = gzipContainer ? BOLT_CONTAINER_GZIP : BOLT_CONTAINER_RAW
         var outBuf = bolt_buffer_t(data: nil, size: 0)
         defer { bolt_free_buffer(&outBuf) }
 
-        let status = data.withUnsafeBytes { rawBuf -> bolt_status_t in
-            let ptr = rawBuf.bindMemory(to: UInt8.self).baseAddress
-            return bolt_decompress_buffer(mapAlgo(algorithm), container, ptr, data.count, max(0, expectedSize), &outBuf)
+        let needsBridge = (controller != nil || progress != nil)
+        let controlCtx = needsBridge ? CCodecControlContext(controller: controller, onProgress: progress) : nil
+        let status = withExtendedLifetime(controlCtx) {
+            let rawCtx = controlCtx.map { Unmanaged.passUnretained($0).toOpaque() }
+            let cb: bolt_control_cb? = needsBridge ? boltCodecControlBridge : nil
+            return data.withUnsafeBytes { rawBuf -> bolt_status_t in
+                let ptr = rawBuf.bindMemory(to: UInt8.self).baseAddress
+                return bolt_decompress_buffer_ex(mapAlgo(algorithm), container, ptr, data.count, max(0, expectedSize), &outBuf, cb, rawCtx)
+            }
+        }
+        if status.code == BOLT_STATUS_CANCELLED {
+            throw BoltZipError.cancelled
         }
         guard status.code == 0 else {
             let msg = withUnsafePointer(to: status.message) {

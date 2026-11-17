@@ -61,7 +61,7 @@ swift run -c release boltzip x release.zip ./out --mode smart
 
 ## 🧩 Interactive Showcase & Developer Docs
 
-- **Interactive Showcase Page**: Open [showcase/index.html](showcase/index.html) in any browser to explore the interactive Windows-Zip UI simulator, multi-language switcher, and codec comparisons.
+- **Live Showcase & Download Page**: Visit [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/) to explore the live interactive Windows-Zip UI simulator, multi-language switcher, codec benchmarks, and direct downloads for `BoltZip v0.9.0 Universal` & source archives (sources in [showcase/](showcase/)).
 - **Contributor & AI Agent Guide**: See [AGENTS.md](AGENTS.md) for architecture boundaries, static-linking details, and engineering invariants.
 - **Release History**: See [CHANGELOG.md](CHANGELOG.md).
 

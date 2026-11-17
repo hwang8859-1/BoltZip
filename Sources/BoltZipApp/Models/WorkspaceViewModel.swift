@@ -413,15 +413,48 @@ final class WorkspaceViewModel {
 
     // MARK: - Archive Lifecycle & Actions
 
+    let hudModel = QuickTaskHUDModel()
+    private let hudWindowController = QuickTaskHUDWindowController()
+    private var isHUDConfigured = false
+    var onRequestShowMainWindow: (() -> Void)?
+    var onHUDDidHide: (() -> Void)?
+
+    var isHUDWindowVisible: Bool {
+        hudWindowController.isVisible
+    }
+
+    func configureHUD() {
+        guard !isHUDConfigured else { return }
+        isHUDConfigured = true
+        hudWindowController.bind(viewModel: self, hudModel: hudModel)
+        hudWindowController.onDidHide = { [weak self] in
+            self?.onHUDDidHide?()
+        }
+    }
+
+    static func isHUDOnlyURL(_ url: URL) -> Bool {
+        guard url.scheme == "boltzip" else { return false }
+        if url.host == "hud" { return true }
+        guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let op = comps.queryItems?.first(where: { $0.name == "op" })?.value else {
+            return false
+        }
+        return ["smartExtract", "extractSubfolder", "compressZip", "compressTarZst", "compress7z"].contains(op)
+    }
+
     func handleIncomingURLs(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
-        if urls.count == 1, let first = urls.first, first.scheme == "boltzip" {
-            handleFinderSchemeURL(first)
-        } else {
-            let fileURLs = urls.filter { $0.isFileURL }
-            if !fileURLs.isEmpty {
-                handleDroppedOrOpenedURLs(fileURLs)
+        let schemeURLs = urls.filter { $0.scheme == "boltzip" }
+        if !schemeURLs.isEmpty {
+            for schemeURL in schemeURLs {
+                handleFinderSchemeURL(schemeURL)
             }
+            return
+        }
+        let fileURLs = urls.filter { $0.isFileURL }
+        if !fileURLs.isEmpty {
+            onRequestShowMainWindow?()
+            handleDroppedOrOpenedURLs(fileURLs)
         }
     }
 
@@ -433,26 +466,63 @@ final class WorkspaceViewModel {
 
         switch op {
         case "openWorkspace":
+            onRequestShowMainWindow?()
             NSApp.activate(ignoringOtherApps: true)
         case "open":
+            onRequestShowMainWindow?()
+            NSApp.activate(ignoringOtherApps: true)
             if let first = paths.first { openArchive(url: first) }
         case "testIntegrity":
+            onRequestShowMainWindow?()
+            NSApp.activate(ignoringOtherApps: true)
             if let first = paths.first { testIntegrity(archiveURL: first) }
         case "smartExtract":
-            if let first = paths.first { quickExtract(mode: .smart, archiveURL: first) }
+            if let first = paths.first { quickExtractInHUD(mode: .smart, archiveURL: first) }
         case "extractSubfolder":
-            if let first = paths.first { quickExtract(mode: .subfolder, archiveURL: first) }
+            if let first = paths.first { quickExtractInHUD(mode: .subfolder, archiveURL: first) }
         case "compressZip":
-            if !paths.isEmpty { compressImmediate(inputs: paths, format: .zip, algorithm: .deflate) }
+            if !paths.isEmpty { quickCompressInHUD(inputs: paths, format: .zip, algorithm: .deflate) }
         case "compressTarZst":
-            if !paths.isEmpty { compressImmediate(inputs: paths, format: .tarZst, algorithm: .zstd) }
+            if !paths.isEmpty { quickCompressInHUD(inputs: paths, format: .tarZst, algorithm: .zstd) }
         case "compress7z":
-            if !paths.isEmpty { compressImmediate(inputs: paths, format: .sevenZip, algorithm: .xz) }
+            if !paths.isEmpty { quickCompressInHUD(inputs: paths, format: .sevenZip, algorithm: .xz) }
         case "compressWizard":
+            onRequestShowMainWindow?()
+            NSApp.activate(ignoringOtherApps: true)
             if !paths.isEmpty { activeSheet = .createArchive(paths) }
         default:
             break
         }
+    }
+
+    func quickCompressInHUD(inputs: [URL], format: ArchiveFormat, algorithm: CompressionAlgorithm) {
+        guard !inputs.isEmpty else { return }
+        configureHUD()
+        let outputURL = QuickTaskHUDModel.computeQuickCompressDestination(inputs: inputs, format: format)
+        let options = CreateArchiveOptions(
+            format: format,
+            algorithm: algorithm,
+            level: nil,
+            encryption: .none,
+            password: nil,
+            splitVolumeSizeBytes: nil,
+            excludeMacJunk: defaultStripMacJunk
+        )
+        hudModel.enqueue(.compress(inputs: inputs, outputURL: outputURL, options: options))
+    }
+
+    func quickExtractInHUD(mode: ExtractMode, archiveURL: URL) {
+        configureHUD()
+        let destDir = archiveURL.deletingLastPathComponent()
+        let options = ExtractOptions(
+            destinationURL: destDir,
+            mode: mode,
+            overwritePolicy: .overwrite,
+            password: nil,
+            encoding: encodingOption,
+            stripMacJunk: defaultStripMacJunk
+        )
+        hudModel.enqueue(.extract(archiveURL: archiveURL, options: options))
     }
 
     func compressImmediate(inputs: [URL], format: ArchiveFormat, algorithm: CompressionAlgorithm) {
@@ -872,6 +942,11 @@ final class WorkspaceViewModel {
     }
 
     func openShowcaseWebsite() {
+        if let publicURL = URL(string: "https://122.51.112.183/boltzip/") {
+            NSWorkspace.shared.open(publicURL)
+            return
+        }
+
         if let bundled = Bundle.main.resourceURL?.appendingPathComponent("showcase/index.html"),
            FileManager.default.fileExists(atPath: bundled.path) {
             NSWorkspace.shared.open(bundled)

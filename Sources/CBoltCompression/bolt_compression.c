@@ -122,9 +122,14 @@ typedef struct {
     uint64_t bytes_read;
     bolt_progress_cb progress_cb;
     void *progress_ctx;
+    bolt_control_cb control_cb;
+    void *control_ctx;
 } bolt_source_t;
 
 static int source_read(bolt_source_t *src, uint8_t *dst, size_t max_len, size_t *out_len) {
+    if (src->control_cb && src->control_cb(src->bytes_read, src->total_bytes, src->control_ctx) != 0) {
+        return -2;
+    }
     if (src->is_file) {
         size_t n = fread(dst, 1, max_len, src->fp);
         if (ferror(src->fp)) return -1;
@@ -143,7 +148,21 @@ static int source_read(bolt_source_t *src, uint8_t *dst, size_t max_len, size_t 
     if (src->progress_cb) {
         src->progress_cb(src->bytes_read, src->total_bytes, src->progress_ctx);
     }
+    if (src->control_cb && src->control_cb(src->bytes_read, src->total_bytes, src->control_ctx) != 0) {
+        return -2;
+    }
     return 0;
+}
+
+static int source_read_checked(bolt_source_t *src, uint8_t *dst, size_t max_len, size_t *out_len, bolt_status_t *err_out) {
+    int sr = source_read(src, dst, max_len, out_len);
+    if (sr == 0) return 0;
+    if (sr == -2) {
+        *err_out = status_err(BOLT_STATUS_CANCELLED, "Operation cancelled", NULL);
+    } else {
+        *err_out = status_err(EIO, "Failed reading input", src->is_file ? strerror(errno) : NULL);
+    }
+    return sr;
 }
 
 /* ============================================================================
@@ -157,8 +176,7 @@ static bolt_status_t run_compress_store(bolt_source_t *src, bolt_sink_t *sink) {
     bolt_status_t res = status_ok();
     for (;;) {
         size_t n = 0;
-        if (source_read(src, in_buf, BOLT_CHUNK_SIZE, &n) != 0) {
-            res = status_err(EIO, "Failed reading input", strerror(errno));
+        if (source_read_checked(src, in_buf, BOLT_CHUNK_SIZE, &n, &res) != 0) {
             break;
         }
         if (n == 0) break;
@@ -200,8 +218,7 @@ static bolt_status_t run_compress_deflate(
     int flush = Z_NO_FLUSH;
     do {
         size_t n = 0;
-        if (source_read(src, in_buf, BOLT_CHUNK_SIZE, &n) != 0) {
-            res = status_err(EIO, "Failed reading input", strerror(errno));
+        if (source_read_checked(src, in_buf, BOLT_CHUNK_SIZE, &n, &res) != 0) {
             break;
         }
         flush = (n == 0) ? Z_FINISH : Z_NO_FLUSH;
@@ -257,8 +274,7 @@ static bolt_status_t run_decompress_deflate(
     bolt_status_t res = status_ok();
     for (;;) {
         size_t n = 0;
-        if (source_read(src, in_buf, BOLT_CHUNK_SIZE, &n) != 0) {
-            res = status_err(EIO, "Failed reading deflate input", strerror(errno));
+        if (source_read_checked(src, in_buf, BOLT_CHUNK_SIZE, &n, &res) != 0) {
             break;
         }
         if (n == 0) {
@@ -320,8 +336,7 @@ static bolt_status_t run_compress_bzip2(bolt_source_t *src, bolt_sink_t *sink, i
     int action = BZ_RUN;
     for (;;) {
         size_t n = 0;
-        if (source_read(src, in_buf, BOLT_CHUNK_SIZE, &n) != 0) {
-            res = status_err(EIO, "Failed reading input", strerror(errno));
+        if (source_read_checked(src, in_buf, BOLT_CHUNK_SIZE, &n, &res) != 0) {
             break;
         }
         action = (n == 0) ? BZ_FINISH : BZ_RUN;
@@ -373,8 +388,7 @@ static bolt_status_t run_decompress_bzip2(bolt_source_t *src, bolt_sink_t *sink)
     bolt_status_t res = status_ok();
     for (;;) {
         size_t n = 0;
-        if (source_read(src, in_buf, BOLT_CHUNK_SIZE, &n) != 0) {
-            res = status_err(EIO, "Failed reading bzip2 input", strerror(errno));
+        if (source_read_checked(src, in_buf, BOLT_CHUNK_SIZE, &n, &res) != 0) {
             break;
         }
         if (n == 0) {
@@ -439,8 +453,7 @@ static bolt_status_t run_compress_zstd(bolt_source_t *src, bolt_sink_t *sink, in
     bolt_status_t res = status_ok();
     for (;;) {
         size_t n = 0;
-        if (source_read(src, in_buf, in_cap, &n) != 0) {
-            res = status_err(EIO, "Failed reading input", strerror(errno));
+        if (source_read_checked(src, in_buf, in_cap, &n, &res) != 0) {
             break;
         }
         int last_chunk = (n == 0);
@@ -492,8 +505,7 @@ static bolt_status_t run_decompress_zstd(bolt_source_t *src, bolt_sink_t *sink) 
     size_t total_in = 0;
     for (;;) {
         size_t n = 0;
-        if (source_read(src, in_buf, in_cap, &n) != 0) {
-            res = status_err(EIO, "Failed reading zstd input", strerror(errno));
+        if (source_read_checked(src, in_buf, in_cap, &n, &res) != 0) {
             break;
         }
         if (n == 0) {
@@ -566,8 +578,7 @@ static bolt_status_t run_compress_xz(bolt_source_t *src, bolt_sink_t *sink, int3
     for (;;) {
         if (strm.avail_in == 0 && action == LZMA_RUN) {
             size_t n = 0;
-            if (source_read(src, in_buf, BOLT_CHUNK_SIZE, &n) != 0) {
-                res = status_err(EIO, "Failed reading input", strerror(errno));
+            if (source_read_checked(src, in_buf, BOLT_CHUNK_SIZE, &n, &res) != 0) {
                 break;
             }
             strm.next_in = in_buf;
@@ -618,8 +629,7 @@ static bolt_status_t run_decompress_xz(bolt_source_t *src, bolt_sink_t *sink) {
     for (;;) {
         if (strm.avail_in == 0 && action == LZMA_RUN) {
             size_t n = 0;
-            if (source_read(src, in_buf, BOLT_CHUNK_SIZE, &n) != 0) {
-                res = status_err(EIO, "Failed reading xz input", strerror(errno));
+            if (source_read_checked(src, in_buf, BOLT_CHUNK_SIZE, &n, &res) != 0) {
                 break;
             }
             strm.next_in = in_buf;
@@ -688,8 +698,7 @@ static bolt_status_t run_compress_lz4(bolt_source_t *src, bolt_sink_t *sink, int
 
     for (;;) {
         size_t n = 0;
-        if (source_read(src, in_buf, BOLT_CHUNK_SIZE, &n) != 0) {
-            res = status_err(EIO, "Failed reading input", strerror(errno));
+        if (source_read_checked(src, in_buf, BOLT_CHUNK_SIZE, &n, &res) != 0) {
             break;
         }
         if (n == 0) break;
@@ -742,8 +751,7 @@ static bolt_status_t run_decompress_lz4(bolt_source_t *src, bolt_sink_t *sink) {
     size_t total_in = 0;
     for (;;) {
         size_t n = 0;
-        if (source_read(src, in_buf, BOLT_CHUNK_SIZE, &n) != 0) {
-            res = status_err(EIO, "Failed reading LZ4 input", strerror(errno));
+        if (source_read_checked(src, in_buf, BOLT_CHUNK_SIZE, &n, &res) != 0) {
             break;
         }
         if (n == 0) {
@@ -840,6 +848,19 @@ bolt_status_t bolt_compress_buffer(
     size_t input_len,
     bolt_buffer_t *output
 ) {
+    return bolt_compress_buffer_ex(algo, container, level, input, input_len, output, NULL, NULL);
+}
+
+bolt_status_t bolt_compress_buffer_ex(
+    bolt_algo_t algo,
+    bolt_container_t container,
+    int32_t level,
+    const uint8_t *input,
+    size_t input_len,
+    bolt_buffer_t *output,
+    bolt_control_cb control_cb,
+    void *ctx
+) {
     if (!output) return status_err(EINVAL, "Output pointer is NULL", NULL);
     output->data = NULL;
     output->size = 0;
@@ -857,7 +878,9 @@ bolt_status_t bolt_compress_buffer(
         .total_bytes = input_len,
         .bytes_read = 0,
         .progress_cb = NULL,
-        .progress_ctx = NULL
+        .progress_ctx = NULL,
+        .control_cb = control_cb,
+        .control_ctx = ctx
     };
 
     bolt_sink_t sink;
@@ -887,6 +910,19 @@ bolt_status_t bolt_decompress_buffer(
     size_t expected_output_len,
     bolt_buffer_t *output
 ) {
+    return bolt_decompress_buffer_ex(algo, container, input, input_len, expected_output_len, output, NULL, NULL);
+}
+
+bolt_status_t bolt_decompress_buffer_ex(
+    bolt_algo_t algo,
+    bolt_container_t container,
+    const uint8_t *input,
+    size_t input_len,
+    size_t expected_output_len,
+    bolt_buffer_t *output,
+    bolt_control_cb control_cb,
+    void *ctx
+) {
     if (!output) return status_err(EINVAL, "Output pointer is NULL", NULL);
     output->data = NULL;
     output->size = 0;
@@ -909,7 +945,9 @@ bolt_status_t bolt_decompress_buffer(
         .total_bytes = input_len,
         .bytes_read = 0,
         .progress_cb = NULL,
-        .progress_ctx = NULL
+        .progress_ctx = NULL,
+        .control_cb = control_cb,
+        .control_ctx = ctx
     };
 
     bolt_sink_t sink;
