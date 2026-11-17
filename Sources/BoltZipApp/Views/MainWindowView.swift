@@ -50,83 +50,65 @@ struct MainWindowView: View {
                     Button {
                         vm.closeArchive()
                     } label: {
-                        Label(l.backHome, systemImage: "house")
-                            .font(.system(size: 12.5))
-                            .imageScale(.small)
+                        toolbarIconLabel(l.backHome, systemImage: "house")
                     }
 
                     Button {
                         vm.navigateUp()
                     } label: {
-                        Label(l.goUp, systemImage: "chevron.up")
-                            .font(.system(size: 12.5))
-                            .imageScale(.small)
+                        toolbarIconLabel(l.goUp, systemImage: "chevron.up")
                     }
                     .disabled(!vm.canNavigateUp)
                     .keyboardShortcut(.upArrow, modifiers: .command)
                 }
             }
 
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    vm.startNewArchivePanel()
-                } label: {
-                    Label(l.newCompress, systemImage: "plus.rectangle.on.folder")
-                            .font(.system(size: 12.5))
-                            .imageScale(.small)
-                }
+            if let listing = vm.listing {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        vm.startNewArchivePanel()
+                    } label: {
+                        toolbarIconLabel(l.newCompress, systemImage: "plus.rectangle.on.folder")
+                    }
 
-                Button {
-                    vm.openArchivePanel()
-                } label: {
-                    Label(l.open, systemImage: "folder")
-                            .font(.system(size: 12.5))
-                            .imageScale(.small)
-                }
+                    Button {
+                        vm.openArchivePanel()
+                    } label: {
+                        toolbarIconLabel(l.open, systemImage: "folder")
+                    }
 
-                if let listing = vm.listing {
                     Divider()
 
                     Button {
                         vm.triggerSmartExtractNow()
                     } label: {
-                        Label(l.smartExtract, systemImage: "arrow.down.doc.fill")
-                            .font(.system(size: 12.5))
-                            .imageScale(.small)
+                        toolbarIconLabel(l.smartExtract, systemImage: "arrow.down.doc.fill")
                     }
 
                     Button {
                         let mode: ExtractMode = vm.selectedEntryIDs.isEmpty ? .smart : .selected(vm.selectedEntryIDs)
                         vm.activeSheet = .extractOptions(mode)
                     } label: {
-                        Label(l.extractTo, systemImage: "square.and.arrow.down.on.square")
-                            .font(.system(size: 12.5))
-                            .imageScale(.small)
+                        toolbarIconLabel(l.extractTo, systemImage: "square.and.arrow.down.on.square")
                     }
 
                     if listing.format.supportsInPlaceEditing {
                         Button {
                             vm.addItemsToCurrentZipPanel()
                         } label: {
-                            Label(l.addInside, systemImage: "doc.badge.plus")
-                            .font(.system(size: 12.5))
-                            .imageScale(.small)
+                            toolbarIconLabel(l.addInside, systemImage: "doc.badge.plus")
                         }
 
                         Button {
                             vm.activeSheet = .createFolder(parentFolder: vm.currentFolder)
                         } label: {
-                            Label(l.newFolder, systemImage: "folder.badge.plus")
-                            .font(.system(size: 12.5))
-                            .imageScale(.small)
+                            toolbarIconLabel(l.newFolder, systemImage: "folder.badge.plus")
                         }
 
                         Button {
                             vm.deleteSelectedEntries()
                         } label: {
-                            Label(l.delete, systemImage: "trash")
-                            .font(.system(size: 12.5))
-                            .imageScale(.small)
+                            toolbarIconLabel(l.delete, systemImage: "trash")
                         }
                         .disabled(vm.selectedEntryIDs.isEmpty)
                     }
@@ -134,25 +116,56 @@ struct MainWindowView: View {
                     Button {
                         vm.testIntegrity()
                     } label: {
-                        Label(l.verify, systemImage: "checkmark.shield")
-                            .font(.system(size: 12.5))
-                            .imageScale(.small)
+                        toolbarIconLabel(l.verify, systemImage: "checkmark.shield")
                     }
 
                     Divider()
-                }
 
-                Button {
-                    showAppearancePopover.toggle()
-                } label: {
-                    Label(l.layoutMenuTitle, systemImage: "slider.horizontal.3")
-                            .font(.system(size: 12.5))
-                            .imageScale(.small)
+                    Button {
+                        showAppearancePopover.toggle()
+                    } label: {
+                        toolbarIconLabel(l.layoutMenuTitle, systemImage: "slider.horizontal.3")
+                    }
+                    .help(l.appearanceTitle)
+                    .popover(isPresented: $showAppearancePopover, arrowEdge: .bottom) {
+                        AppearancePopoverView(vm: vm)
+                    }
                 }
-                .help(l.appearanceTitle)
-                .popover(isPresented: $showAppearancePopover, arrowEdge: .bottom) {
-                    AppearancePopoverView(vm: vm)
+            } else {
+                ToolbarItem(placement: .primaryAction) {
+                    HStack(spacing: 1) {
+                        ToolbarPillIconButton(
+                            systemImage: "plus.rectangle.on.folder",
+                            label: l.newCompress,
+                            helpText: l.newArchive
+                        ) {
+                            vm.startNewArchivePanel()
+                        }
+
+                        ToolbarPillIconButton(
+                            systemImage: "folder",
+                            label: l.open,
+                            helpText: l.openArchive
+                        ) {
+                            vm.openArchivePanel()
+                        }
+
+                        ToolbarPillIconButton(
+                            systemImage: "slider.horizontal.3",
+                            label: l.layoutMenuTitle,
+                            helpText: l.appearanceTitle
+                        ) {
+                            showAppearancePopover.toggle()
+                        }
+                        .popover(isPresented: $showAppearancePopover, arrowEdge: .bottom) {
+                            AppearancePopoverView(vm: vm)
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                    .frame(height: 30)
+                    .glassEffect(.regular.interactive(), in: Capsule())
                 }
+                .sharedBackgroundVisibility(.hidden)
             }
         }
         .overlay {
@@ -619,6 +632,12 @@ struct MainWindowView: View {
         }
     }
 
+    private func toolbarIconLabel(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.system(size: 14.5))
+            .imageScale(.medium)
+    }
+
     private func iconForFile(_ name: String) -> String {
         let ext = (name as NSString).pathExtension.lowercased()
         switch ext {
@@ -693,6 +712,31 @@ private struct FolderTreeRow: View {
                     }
                 }
             }
+    }
+}
+
+private struct ToolbarPillIconButton: View {
+    let systemImage: String
+    let label: String
+    let helpText: String
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14.5, weight: .regular))
+                .frame(width: 33, height: 24)
+                .background(
+                    Capsule()
+                        .fill(Color.primary.opacity(isHovered ? 0.10 : 0.0))
+                )
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(helpText)
+        .accessibilityLabel(label)
     }
 }
 

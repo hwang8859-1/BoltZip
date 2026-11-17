@@ -28,8 +28,8 @@ struct WindowStyleConfigurator: NSViewRepresentable {
         if window.toolbarStyle != .unifiedCompact {
             window.toolbarStyle = .unifiedCompact
         }
-        if let tb = window.toolbar, tb.sizeMode != .small {
-            tb.sizeMode = .small
+        if let tb = window.toolbar, tb.sizeMode != .regular {
+            tb.sizeMode = .regular
         }
         let measuredTB = window.frame.height - window.contentLayoutRect.height
         if measuredTB > 20 && abs(measuredTB - titlebarHeight) > 0.5 {
