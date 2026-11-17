@@ -1,11 +1,42 @@
 // swift-tools-version: 6.0
+import Foundation
 import PackageDescription
+
+let packageDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
+let vendorInclude = "\(packageDir)/Vendor/Compression/include"
+let vendorLib = "\(packageDir)/Vendor/Compression/lib"
+let useVendorCompression = FileManager.default.fileExists(atPath: "\(vendorLib)/libzstd.a")
+
+let compressionIncludeFlags: [String]
+let compressionLinkFlags: [String]
+if useVendorCompression {
+    compressionIncludeFlags = ["-I\(vendorInclude)"]
+    compressionLinkFlags = [
+        "\(vendorLib)/libzstd.a",
+        "\(vendorLib)/liblzma.a",
+        "\(vendorLib)/liblz4.a"
+    ]
+} else {
+    let brewPrefix = FileManager.default.fileExists(atPath: "/opt/homebrew/opt/zstd/lib/libzstd.a")
+        ? "/opt/homebrew"
+        : "/usr/local"
+    compressionIncludeFlags = [
+        "-I\(brewPrefix)/opt/zstd/include",
+        "-I\(brewPrefix)/opt/xz/include",
+        "-I\(brewPrefix)/opt/lz4/include"
+    ]
+    compressionLinkFlags = [
+        "\(brewPrefix)/opt/zstd/lib/libzstd.a",
+        "\(brewPrefix)/opt/xz/lib/liblzma.a",
+        "\(brewPrefix)/opt/lz4/lib/liblz4.a"
+    ]
+}
 
 let package = Package(
     name: "BoltZip",
     defaultLocalization: "zh-Hans",
     platforms: [
-        .macOS("27.2")
+        .macOS(.v14)
     ],
     products: [
         .library(name: "BoltZipCore", targets: ["BoltZipCore"]),
@@ -17,20 +48,12 @@ let package = Package(
             name: "CBoltCompression",
             path: "Sources/CBoltCompression",
             cSettings: [
-                .unsafeFlags([
-                    "-I/opt/homebrew/opt/zstd/include",
-                    "-I/opt/homebrew/opt/xz/include",
-                    "-I/opt/homebrew/opt/lz4/include"
-                ])
+                .unsafeFlags(compressionIncludeFlags)
             ],
             linkerSettings: [
                 .linkedLibrary("z"),
                 .linkedLibrary("bz2"),
-                .unsafeFlags([
-                    "/opt/homebrew/opt/zstd/lib/libzstd.a",
-                    "/opt/homebrew/opt/xz/lib/liblzma.a",
-                    "/opt/homebrew/opt/lz4/lib/liblz4.a"
-                ])
+                .unsafeFlags(compressionLinkFlags)
             ]
         ),
         .target(

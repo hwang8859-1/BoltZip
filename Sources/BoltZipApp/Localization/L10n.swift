@@ -71,7 +71,22 @@ struct L10n: Sendable {
     // MARK: - General & Welcome
     var readyStatus: String { t("就绪 · 拖入压缩包浏览，或拖入文件立即打包", "就緒 · 拖入封存檔瀏覽，或拖入檔案立即打包", "Ready — Drop an archive to browse, or files to compress", "準備完了 — 書庫をドロップして閲覧、またはファイルを圧縮") }
     var dropZoneTitle: String { t("拖放压缩包直接浏览，或拖入文件立即打包", "拖放封存檔直接瀏覽，或拖入檔案立即打包", "Drop an archive to browse, or files to compress", "書庫を開いて閲覧、またはファイルをここにドロップ") }
-    var dropZoneSubtitle: String { t("macOS 27.3 液态玻璃原生体验 · 支持 ZIP / 7z / TAR.ZST / XZ / LZ4 · AE-2 加密与 GBK 自动纠偏", "macOS 27.3 液態玻璃原生體驗 · 支援 ZIP / 7z / TAR.ZST / XZ / LZ4 · AE-2 加密與編碼自動修正", "Native macOS 27.3 Liquid Glass · ZIP, 7z, TAR.ZST, XZ, LZ4 · AE-2 AES-256 & CJK auto-fix", "macOS 27.3 Liquid Glass 対応 · ZIP / 7z / TAR.ZST / XZ / LZ4 · AE-2暗号化・文字コード自動補正") }
+    var dropZoneSubtitle: String {
+        if BoltPlatformCapabilities.supportsLiquidGlass {
+            return t(
+                "macOS 液态玻璃原生体验 · ZIP / 7z / TAR.ZST / XZ / LZ4 · 自动清理 .DS_Store 与 GBK 乱码修复",
+                "macOS 液態玻璃原生體驗 · ZIP / 7z / TAR.ZST / XZ / LZ4 · 自動清除 .DS_Store 與編碼自動修正",
+                "Native macOS Liquid Glass · ZIP, 7z, TAR.ZST, XZ, LZ4 · Auto-remove .DS_Store & CJK fix",
+                "macOS Liquid Glass 対応 · ZIP / 7z / TAR.ZST / XZ / LZ4 · .DS_Store 自動除外＆文字コード補正"
+            )
+        }
+        return t(
+            "macOS 原生极速工作台 · ZIP / 7z / TAR.ZST / XZ / LZ4 · 自动清理 .DS_Store 与 GBK 乱码修复",
+            "macOS 原生極速工作台 · ZIP / 7z / TAR.ZST / XZ / LZ4 · 自動清除 .DS_Store 與編碼自動修正",
+            "Native macOS Archive Studio · ZIP, 7z, TAR.ZST, XZ, LZ4 · Auto-remove .DS_Store & CJK fix",
+            "macOS ネイティブ書庫スタジオ · ZIP / 7z / TAR.ZST / XZ / LZ4 · .DS_Store 自動除外＆文字コード補正"
+        )
+    }
 
     var newArchive: String { t("新建压缩包", "新增封存檔", "New Archive", "新規圧縮") }
     var openArchive: String { t("打开压缩包", "開啟封存檔", "Open Archive", "書庫を開く") }
@@ -93,6 +108,8 @@ struct L10n: Sendable {
     var featBrowseDesc: String { t("双击/空格预览，右键直接解压、单独导出 ZIP、重命名与删改", "雙擊或空白鍵預覽，右鍵快速解壓、匯出新 ZIP、重新命名與編輯", "Double-click or press Space to Quick Look; add, rename, or delete inside ZIPs", "スペースキーでプレビュー、右クリックで直接編集や個別ZIP書き出し") }
     var featSmartTitle: String { t("智能解压 (Smart Extract)", "智慧解壓縮 (Smart Extract)", "Smart Extract", "スマート展開（二重フォルダ防止）") }
     var featSmartDesc: String { t("单目录不套娃，多文件自动归入同名子目录", "單一資料夾直接釋放，多項目自動建立同名資料夾", "Avoids nested duplicate folders automatically", "単一フォルダはそのまま、複数項目は同名フォルダを作成して展開") }
+    var featMacJunkTitle: String { t("自动删除 .DS_Store 等垃圾文件", "自動清除 .DS_Store 等隱藏檔", "Auto-Remove .DS_Store & Metadata", ".DS_Store などの不要ファイルを自動除去") }
+    var featMacJunkDesc: String { t("打包、包内追加与解压时自动剔除 .DS_Store、__MACOSX 与 ._*，跨平台干干净净", "壓縮、加入與解壓時自動剔除 .DS_Store、__MACOSX 與 ._*，跨平台分享更乾淨", "Automatically strips .DS_Store, __MACOSX, and ._* when packing, adding, or extracting", "圧縮・追加・展開時に .DS_Store / __MACOSX / ._* を自動除外してクリーンに共有") }
     var featEncodingTitle: String { t("Windows 中文编码自愈", "Windows 編碼亂碼自動修正", "Auto-Fix CJK Filenames", "文字化け自動補正 (GBK / Shift-JIS)") }
     var featEncodingDesc: String { t("自动识别 GB18030 / Big5 / Shift-JIS，彻底告别乱码", "自動辨識 GB18030 / Big5 / Shift-JIS，徹底告別亂碼", "Detects GB18030, Big5 & Shift-JIS archives created on Windows", "Windows 製アーカイブの日本語・中国語ファイル名を自動判別") }
     var featCryptoTitle: String { t("AE-2 AES-256 & 分卷压缩", "AE-2 AES-256 與分卷壓縮", "WinZip AE-2 & Split Volumes", "AES-256 暗号化 ＆ 分割圧縮") }
@@ -282,7 +299,7 @@ struct L10n: Sendable {
         )
     }
     var aboutMenuTitle: String { t("关于 BoltZip", "關於 BoltZip", "About BoltZip", "BoltZip について") }
-    var aboutVersionLabel: String { "v0.1.0 (macOS 27.3 · arm64)" }
+    var aboutVersionLabel: String { BoltPlatformCapabilities.runtimeVersionSummary(appVersion: "0.9.0") }
     var aboutDesc: String {
         t(
             "开源压缩/解压缩工作台，原生融合 Windows Zip 效率交互、访达一级 Bolt 菜单与液态玻璃设计。",

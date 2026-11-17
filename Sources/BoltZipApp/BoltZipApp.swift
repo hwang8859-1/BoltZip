@@ -78,8 +78,10 @@ struct BoltZipApp: App {
                         Text(theme.title(l)).tag(theme)
                     }
                 }
-                Divider()
-                Toggle(l.enableTranslucency, isOn: $vm.isWindowTranslucent)
+                if vm.supportsLiquidGlass {
+                    Divider()
+                    Toggle(l.enableTranslucency, isOn: $vm.isWindowTranslucent)
+                }
                 Divider()
                 Toggle(l.toggleFinderBanner, isOn: $vm.showFinderBanner)
                 Toggle(l.toggleFeatureCard, isOn: $vm.showFeatureHighlights)

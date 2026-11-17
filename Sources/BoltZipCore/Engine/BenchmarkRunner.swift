@@ -9,7 +9,7 @@ public enum BenchmarkRunner {
             counter = counter &* 6364136223846793005 &+ 1442695040888963407
             let tag = String(format: "%08llX", counter & 0xFFFFFFFF)
             let line = """
-            {"id":"\(tag)","app":"BoltZip","os":"macOS 27.3","algo":"open-source","seq":\(buf.count),"note":"Windows Zip parity with AES-256 & GBK fix"}\n
+            {"id":"\(tag)","app":"BoltZip","os":"macOS","algo":"open-source","seq":\(buf.count),"note":"Windows Zip parity with AES-256 & GBK fix"}\n
             """
             buf.append(Data(line.utf8))
             // Mix deterministic non-repeating bytes every few records to mirror realistic files

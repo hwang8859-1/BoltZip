@@ -78,7 +78,7 @@ struct CreateArchiveSheet: View {
                         Button(vm.l10n.change) {
                             chooseDestinationDir()
                         }
-                        .buttonStyle(.glass)
+                        .boltGlassButton()
                     }
                     HStack {
                         Text("\(vm.l10n.inputItemsLabel) (\(inputs.count))")
@@ -88,7 +88,7 @@ struct CreateArchiveSheet: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                         Button(vm.l10n.add) { addMoreInputs() }
-                            .buttonStyle(.glass)
+                            .boltGlassButton()
                     }
                 }
 
@@ -196,10 +196,10 @@ struct CreateArchiveSheet: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button(vm.l10n.cancel) { dismiss() }
-                    .buttonStyle(.glass)
+                    .boltGlassButton()
                     .keyboardShortcut(.cancelAction)
                 Button(vm.l10n.startCompress) { startCompress() }
-                    .buttonStyle(.glassProminent)
+                    .boltGlassProminentButton()
                     .keyboardShortcut(.defaultAction)
                     .disabled(!isValidInput)
             }

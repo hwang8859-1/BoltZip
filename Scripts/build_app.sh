@@ -4,10 +4,20 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-echo "==> Building BoltZipApp and boltzip CLI (release, arm64)..."
-swift build -c release
+APP_VERSION="0.9.0"
+APP_BUILD="9"
+MIN_MACOS="14.0"
+VENDOR_LIB_DIR="$ROOT_DIR/Vendor/Compression/lib"
 
-BIN_DIR="$(swift build -c release --show-bin-path)"
+if [ ! -f "$VENDOR_LIB_DIR/libzstd.a" ] || [ ! -f "$VENDOR_LIB_DIR/liblzma.a" ] || [ ! -f "$VENDOR_LIB_DIR/liblz4.a" ]; then
+    echo "==> Building universal compression static libraries (arm64 + x86_64)..."
+    "$ROOT_DIR/Scripts/build_universal_deps.sh"
+fi
+
+echo "==> Building BoltZipApp and boltzip CLI (release, Universal arm64 + x86_64, minOS $MIN_MACOS)..."
+swift build -c release --arch arm64 --arch x86_64
+
+BIN_DIR="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)"
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/BoltZip.app"
 CONTENTS="$APP_DIR/Contents"
@@ -20,16 +30,31 @@ cp "$BIN_DIR/BoltZipApp" "$CONTENTS/MacOS/BoltZipApp"
 cp "$BIN_DIR/boltzip" "$CONTENTS/Helpers/boltzip"
 cp -R "$ROOT_DIR/showcase/." "$CONTENTS/Resources/showcase/"
 
-echo "==> Building BoltZipFinderSync.appex (Finder top-level 'Bolt >' menu)..."
+echo "==> Building BoltZipFinderSync.appex (Universal arm64 + x86_64, minOS $MIN_MACOS)..."
+SDK_PATH="$(xcrun --show-sdk-path)"
+TMP_APPEX_ARM64="$(mktemp "${TMPDIR:-/tmp}/BoltZipFinderSync-arm64.XXXXXX")"
+TMP_APPEX_X86_64="$(mktemp "${TMPDIR:-/tmp}/BoltZipFinderSync-x86_64.XXXXXX")"
+trap 'rm -f "$TMP_APPEX_ARM64" "$TMP_APPEX_X86_64"' EXIT
+
 swiftc -O -parse-as-library \
-    -target arm64-apple-macosx27.2 \
-    -sdk "$(xcrun --show-sdk-path)" \
+    -target "arm64-apple-macosx$MIN_MACOS" \
+    -sdk "$SDK_PATH" \
     -framework Foundation -framework AppKit -framework FinderSync \
     -Xlinker -e -Xlinker _NSExtensionMain \
     "$ROOT_DIR/Sources/BoltZipFinderSync/FinderSync.swift" \
-    -o "$APPEX_DIR/Contents/MacOS/BoltZipFinderSync"
+    -o "$TMP_APPEX_ARM64"
 
-cat <<'APPEX_PLIST' > "$APPEX_DIR/Contents/Info.plist"
+swiftc -O -parse-as-library \
+    -target "x86_64-apple-macosx$MIN_MACOS" \
+    -sdk "$SDK_PATH" \
+    -framework Foundation -framework AppKit -framework FinderSync \
+    -Xlinker -e -Xlinker _NSExtensionMain \
+    "$ROOT_DIR/Sources/BoltZipFinderSync/FinderSync.swift" \
+    -o "$TMP_APPEX_X86_64"
+
+lipo -create "$TMP_APPEX_ARM64" "$TMP_APPEX_X86_64" -output "$APPEX_DIR/Contents/MacOS/BoltZipFinderSync"
+
+cat <<APPEX_PLIST > "$APPEX_DIR/Contents/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -49,11 +74,11 @@ cat <<'APPEX_PLIST' > "$APPEX_DIR/Contents/Info.plist"
     <key>CFBundlePackageType</key>
     <string>XPC!</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>$APP_VERSION</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>$APP_BUILD</string>
     <key>LSMinimumSystemVersion</key>
-    <string>27.2</string>
+    <string>$MIN_MACOS</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSPrincipalClass</key>
@@ -78,7 +103,7 @@ swift "$ROOT_DIR/Scripts/generate_icon.swift" "$ICONSET_DIR"
 iconutil -c icns "$ICONSET_DIR" -o "$CONTENTS/Resources/AppIcon.icns"
 rm -rf "$ICONSET_DIR"
 
-cat <<'PLIST' > "$CONTENTS/Info.plist"
+cat <<PLIST > "$CONTENTS/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -100,11 +125,11 @@ cat <<'PLIST' > "$CONTENTS/Info.plist"
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>$APP_VERSION</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>$APP_BUILD</string>
     <key>LSMinimumSystemVersion</key>
-    <string>27.2</string>
+    <string>$MIN_MACOS</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>
@@ -197,7 +222,8 @@ cat <<'PLIST' > "$CONTENTS/Info.plist"
 </plist>
 PLIST
 
-echo "==> Ad-hoc code signing FinderSync.appex and BoltZip.app..."
+echo "==> Ad-hoc code signing helpers, FinderSync.appex, and BoltZip.app..."
+codesign --force --sign - "$CONTENTS/Helpers/boltzip"
 codesign --force --sign - --entitlements "$ROOT_DIR/Sources/BoltZipFinderSync/FinderSync.entitlements" "$APPEX_DIR"
 codesign --force --sign - "$APP_DIR"
 
@@ -212,9 +238,42 @@ if [ -d "$HOME/Library/Services" ]; then
     /System/Library/CoreServices/pbs -update || true
 fi
 
-RELEASE_ZIP="$DIST_DIR/BoltZip-0.1.0-macOS-arm64.zip"
-rm -f "$RELEASE_ZIP"
+RELEASE_ZIP="$DIST_DIR/BoltZip-${APP_VERSION}-macOS-universal.zip"
+SOURCE_TAR="$DIST_DIR/BoltZip-${APP_VERSION}-source.tar.gz"
+SOURCE_ZIP="$DIST_DIR/BoltZip-${APP_VERSION}-source.zip"
+SUMS_FILE="$DIST_DIR/BoltZip-${APP_VERSION}-SHA256SUMS.txt"
+
+rm -f "$RELEASE_ZIP" "$SOURCE_TAR" "$SOURCE_ZIP" "$SUMS_FILE"
 ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$RELEASE_ZIP"
 
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && [ -z "$(git status --porcelain)" ]; then
+    echo "==> Creating clean source archives from git HEAD ($APP_VERSION)..."
+    git archive --format=tar.gz --prefix="BoltZip-${APP_VERSION}/" -o "$SOURCE_TAR" HEAD
+    git archive --format=zip --prefix="BoltZip-${APP_VERSION}/" -o "$SOURCE_ZIP" HEAD
+else
+    echo "==> Creating clean source archives from workspace ($APP_VERSION)..."
+    STAGE_SRC="$(mktemp -d "${TMPDIR:-/tmp}/BoltZip-src.XXXXXX")"
+    trap 'rm -f "$TMP_APPEX_ARM64" "$TMP_APPEX_X86_64"; rm -rf "$STAGE_SRC"' EXIT
+    mkdir -p "$STAGE_SRC/BoltZip-${APP_VERSION}"
+    COPYFILE_DISABLE=1 rsync -a \
+        --exclude='.git' \
+        --exclude='.build' \
+        --exclude='.swiftpm' \
+        --exclude='DerivedData' \
+        --exclude='dist' \
+        --exclude='.DS_Store' \
+        --exclude='._*' \
+        "$ROOT_DIR/" "$STAGE_SRC/BoltZip-${APP_VERSION}/"
+    COPYFILE_DISABLE=1 tar -czf "$SOURCE_TAR" -C "$STAGE_SRC" "BoltZip-${APP_VERSION}"
+    ditto -c -k --sequesterRsrc --keepParent "$STAGE_SRC/BoltZip-${APP_VERSION}" "$SOURCE_ZIP"
+fi
+
+(
+    cd "$DIST_DIR"
+    shasum -a 256 "$(basename "$RELEASE_ZIP")" "$(basename "$SOURCE_TAR")" "$(basename "$SOURCE_ZIP")" > "$SUMS_FILE"
+)
+
 echo "==> Done! App bundle created at: $APP_DIR"
-echo "==> Release archive created at: $RELEASE_ZIP" 
+echo "==> App archive created at: $RELEASE_ZIP"
+echo "==> Source archives created at: $SOURCE_TAR , $SOURCE_ZIP"
+echo "==> Checksums written to: $SUMS_FILE" 

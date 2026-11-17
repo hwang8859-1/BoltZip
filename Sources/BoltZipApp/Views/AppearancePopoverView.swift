@@ -36,24 +36,26 @@ struct AppearancePopoverView: View {
                 .labelsHidden()
             }
 
-            Divider()
+            if vm.supportsLiquidGlass {
+                Divider()
 
-            // Translucency & Opacity Control
-            Toggle(l.enableTranslucency, isOn: $vm.isWindowTranslucent)
-                .font(.callout)
+                // Translucency & Opacity Control
+                Toggle(l.enableTranslucency, isOn: $vm.isWindowTranslucent)
+                    .font(.callout)
 
-            if vm.isWindowTranslucent {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack {
-                        Text(l.opacityLabel)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text("\(Int((vm.windowBackgroundOpacity * 100).rounded()))%")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
+                if vm.isWindowTranslucent {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            Text(l.opacityLabel)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(Int((vm.windowBackgroundOpacity * 100).rounded()))%")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: $vm.windowBackgroundOpacity, in: 0.25...1.0, step: 0.05)
                     }
-                    Slider(value: $vm.windowBackgroundOpacity, in: 0.25...1.0, step: 0.05)
                 }
             }
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BoltZip — 为 macOS 27.3 打造的开源极速压缩工作台</title>
+  <title>BoltZip v0.9.0 — 为 macOS 14.0+ 打造的开源通用极速压缩工作台</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -29,7 +29,7 @@
           <path d="M12 10H31L20 19.5H26.5L16.5 27.5H29L27 32H8L19 22.5H12.5L22 14.5H10.2L12 10Z" transform="rotate(6 20 20)" fill="url(#boltGrad)"/>
         </svg>
         <span class="brand-name">BoltZip</span>
-        <span class="badge-mini">v0.1.0 · macOS 27.3</span>
+        <span class="badge-mini">v0.9.0 · macOS 14+ Universal</span>
       </a>
       <nav class="nav-links">
         <a href="#simulator" data-i18n="navSim">交互演示</a>
@@ -56,14 +56,14 @@
         <div class="hero-copy">
           <div class="pill-badge">
             <span class="dot"></span>
-            <span data-i18n="heroBadge">专为 macOS 27.3 · Liquid Glass 液态玻璃 · MIT 开源</span>
+            <span data-i18n="heroBadge">macOS 14+ Universal (Apple Silicon &amp; Intel) · 26+ Liquid Glass · MIT 开源</span>
           </div>
           <h1 data-i18n-html="heroTitle">
             把 <span class="gradient-text">Windows Zip</span> 的顺手，<br />
             带进 macOS 的通透质感。
           </h1>
           <p class="hero-desc" data-i18n="heroDesc">
-            告别双击就一股脑解压一地的传统体验。BoltZip 基于纯正开源压缩底座（zlib · Zstandard · LZMA2 · bzip2 · LZ4），原生还原「包内浏览、直接增删改、GBK 乱码自愈、访达一级 Bolt 菜单与液态玻璃可调透明度」。
+            告别双击就一股脑解压一地的传统体验。BoltZip 基于纯正开源压缩底座（zlib · Zstandard · LZMA2 · bzip2 · LZ4），原生还原「包内浏览、直接增删改、自动删除 .DS_Store、GBK 乱码自愈、访达一级 Bolt 菜单与 macOS 26+ 液态玻璃（旧版自动禁用）」。
           </p>
           <div class="hero-cta">
             <a href="#simulator" class="btn btn-primary" data-i18n="heroCta1">▶ 体验界面交互模拟器</a>
@@ -91,7 +91,7 @@
             <div class="showcase-header">
               <div class="traffic-lights"><span></span><span></span><span></span></div>
               <span class="showcase-title">BoltZip Engine · Architecture</span>
-              <span class="status-pill">macOS 27.3 Ready</span>
+              <span class="status-pill">macOS 14+ Universal</span>
             </div>
             <div class="arch-layers">
               <div class="arch-layer">
@@ -196,7 +196,7 @@
 
           <div class="app-statusbar">
             <span id="simStatusLeft">就绪 · 双击文件夹进入，单击文件查看详情</span>
-            <span id="simStatusRight">macOS 27.3 Liquid Glass UI</span>
+            <span id="simStatusRight">macOS 14+ Universal · 26+ Liquid Glass</span>
           </div>
 
           <div class="sim-toast hidden" id="simToast"></div>
@@ -221,6 +221,12 @@
           </article>
 
           <article class="bento-card glass-surface">
+            <div class="bento-icon">🧹</div>
+            <h3>自动删除 .DS_Store 等垃圾文件</h3>
+            <p>打包、包内追加与解压时默认自动剔除 <code>.DS_Store</code>、<code>__MACOSX</code> 与 <code>._*</code>，发给 Windows/Linux 同事干干净净。</p>
+          </article>
+
+          <article class="bento-card glass-surface">
             <div class="bento-icon">🧠</div>
             <h3>Smart 智能解压</h3>
             <p>自动判断包内结构：单一根目录直接释放不套娃；多文件散装包自动建立同名子目录。</p>
@@ -238,16 +244,22 @@
             <p>PBKDF2-HMAC-SHA1 + AES-256-CTR + 10B HMAC-SHA1，与 Windows 7-Zip / WinZip 密码互通。</p>
           </article>
 
-          <article class="bento-card glass-surface">
-            <div class="bento-icon">🪟</div>
-            <h3>液态玻璃与模块化定制</h3>
-            <p>支持窗口背景半透明开关与透明度微调，欢迎页各卡片、访达提示条、状态栏均支持独立隐藏。</p>
-          </article>
-
           <article class="bento-card glass-surface span-2">
             <div class="bento-icon">⚡</div>
             <h3>访达右键一级目录「Bolt ›」 &amp; Swift 6 CLI</h3>
             <p>通过原生 <code>FinderSync</code> 扩展把「智能解压 / 压缩 ZIP / TAR.ZST / 7z / 加密打包」放到右键第一层；并附带 <code>boltzip</code> 命令行工具与 <code>AGENTS.md</code> 开发者指引。</p>
+          </article>
+
+          <article class="bento-card glass-surface span-2">
+            <div class="bento-icon">💻</div>
+            <h3>macOS 14.0+ Universal 通用版（Apple Silicon &amp; Intel）</h3>
+            <p>零 Homebrew 运行时依赖，同时原生支持 M 系列芯片（<code>arm64</code>）与 Intel Mac（<code>x86_64</code>）。</p>
+          </article>
+
+          <article class="bento-card glass-surface span-2">
+            <div class="bento-icon">🪟</div>
+            <h3>液态玻璃与旧版系统自适应</h3>
+            <p>macOS 26+ 支持窗口半透明调节；macOS 14–15 自动禁用玻璃效果并提供干净原生界面，欢迎页卡片与状态栏支持独立隐藏。</p>
           </article>
         </div>
       </div>
@@ -331,7 +343,7 @@ swift run -c release boltzip bench</code></pre>
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <div><strong>BoltZip</strong> · Open-Source Archive Studio for macOS 27.3</div>
+      <div><strong>BoltZip v0.9.0</strong> · Open-Source Universal Archive Studio for macOS 14.0+</div>
       <div class="footer-note">MIT License · Swift 6 · zlib · Zstandard · XZ · bzip2 · LZ4</div>
     </div>
   </footer>

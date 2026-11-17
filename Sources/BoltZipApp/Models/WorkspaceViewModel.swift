@@ -157,6 +157,8 @@ final class WorkspaceViewModel {
         }
     }
 
+    var supportsLiquidGlass: Bool { BoltPlatformCapabilities.supportsLiquidGlass }
+    var effectiveWindowTranslucency: Bool { supportsLiquidGlass && isWindowTranslucent }
     var l10n: L10n { L10n(language: appLanguage) }
 
     private enum Keys {

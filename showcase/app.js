@@ -81,95 +81,7 @@
       btn.onclick = () => {
         currentFolder = f.path;
         selectedId = null;
-      
-  const siteI18n = {
-    "zh-Hans": {
-      navSim: "交互演示", navFeat: "核心特性", navAlgo: "开源算法", navBuild: "构建指南", navGitHub: "GitHub 开源仓库",
-      heroBadge: "专为 macOS 27.3 · Liquid Glass 液态玻璃 · MIT 开源",
-      heroTitle: "<span class=\"gradient-text\">快如闪电，通透如玻</span><br />让 macOS 压缩像桌面一样顺手。",
-      heroDesc: "告别双击就一股脑解压一地的传统体验。BoltZip 基于纯正开源压缩底座（zlib · Zstandard · LZMA2 · bzip2 · LZ4），原生还原「包内浏览、直接增删改、GBK 乱码自愈、访达一级 Bolt 菜单与液态玻璃可调透明度」。",
-      heroCta1: "▶ 体验界面交互模拟器", heroCta2: "克隆源码并构建",
-      stat1Val: "6 大开源内核", stat2Val: "一级右键 Bolt ›", stat2Lbl: "原生 Finder Sync 扩展直达", stat3Val: "4 语种随系统切换",
-      archLayer1: "液态玻璃可调透明度 · 访达一级 Bolt › 菜单 · Quick Look 预览",
-      simTitle: "Windows Zip 经典交互 · 实时界面模拟器",
-      simSub: "点击工具栏体验「包内直览、GBK 中文乱码一键自愈、AE-2 加密与 CRC32 校验」",
-      featHead: "为什么 macOS 也需要一款「Windows 级」压缩软件？",
-      featSub: "针对 macOS 原生归档工具高频痛点逐一工程级重塑",
-      qsTitle: "从 GitHub 克隆并构建 BoltZip",
-      qsSub: "仓库提供完整的 SwiftPM 工程、打包脚本以及面向开发者的 AGENTS.md"
-    },
-    "zh-Hant": {
-      navSim: "互動模擬", navFeat: "核心功能", navAlgo: "開源演算法", navBuild: "建置指南", navGitHub: "GitHub 專案",
-      heroBadge: "專為 macOS 27.3 打造 · Liquid Glass 液態玻璃 · MIT 開源",
-      heroTitle: "<span class=\"gradient-text\">快如閃電，通透如玻</span><br />讓 macOS 壓縮像桌面一樣順手。",
-      heroDesc: "告別雙擊就整包解壓一地的困擾。BoltZip 結合純淨開源演算法核心，完整提供「封存檔內建瀏覽、直接增刪修改、編碼亂碼自動修正、Finder 第一層 Bolt 選單與可調式透明度」。",
-      heroCta1: "▶ 體驗互動模擬器", heroCta2: "取得原始碼並建置",
-      stat1Val: "6 大開源核心", stat2Val: "第一層右鍵 Bolt ›", stat2Lbl: "原生 Finder Sync 延伸功能", stat3Val: "4 國語言自動切換",
-      archLayer1: "液態玻璃可調透明度 · Finder 第一層 Bolt › 選單 · Quick Look 預覽",
-      simTitle: "Windows Zip 經典操作 · 即時介面模擬器",
-      simSub: "點擊工具列體驗「封存檔內建瀏覽、Windows 中文亂碼修正、AE-2 加密與 CRC32 驗證」",
-      featHead: "為什麼 macOS 也需要「Windows 級」壓縮工具？",
-      featSub: "針對 macOS 內建封存工具的高頻痛點全面重塑",
-      qsTitle: "從 GitHub 取得並建置 BoltZip",
-      qsSub: "內含完整 SwiftPM 專案、打包腳本與開發者指引 AGENTS.md"
-    },
-    "en": {
-      navSim: "Simulator", navFeat: "Features", navAlgo: "Codecs", navBuild: "Build", navGitHub: "GitHub Repo",
-      heroBadge: "Built for macOS 27.3 · Liquid Glass UI · MIT Open Source",
-      heroTitle: "<span class=\"gradient-text\">Lightning-fast archives.</span><br />Liquid-clear macOS craft.",
-      heroDesc: "Stop extracting entire archives just to peek inside. BoltZip combines transparent open-source codecs (zlib, Zstandard, LZMA2, bzip2, LZ4) with in-archive browsing, live ZIP editing, CJK encoding auto-fix, adjustable translucency, and a top-level Finder “Bolt ›” menu.",
-      heroCta1: "▶ Try Interactive Simulator", heroCta2: "Clone & Build",
-      stat1Val: "6 Open Codecs", stat2Val: "Top-Level Bolt ›", stat2Lbl: "Native Finder Sync Extension", stat3Val: "4 Languages",
-      archLayer1: "Adjustable Liquid Glass · Top-level Finder Bolt › · Quick Look",
-      simTitle: "Windows-Zip Workflow · Live UI Simulator",
-      simSub: "Test in-archive editing, Windows GBK filename auto-fix, AE-2 AES-256 & CRC32 verification",
-      featHead: "Why macOS Deserves a Full-Featured Archive Workbench",
-      featSub: "Engineered to solve every daily friction of the built-in macOS Archive Utility",
-      qsTitle: "Clone & Build BoltZip from GitHub",
-      qsSub: "Includes full SwiftPM sources, app bundler scripts, and AGENTS.md for contributors"
-    },
-    "ja": {
-      navSim: "シミュレーター", navFeat: "主な機能", navAlgo: "圧縮エンジン", navBuild: "ビルド手順", navGitHub: "GitHub",
-      heroBadge: "macOS 27.3 対応 · Liquid Glass UI · MIT オープンソース",
-      heroTitle: "<span class=\"gradient-text\">稲妻の速さ、ガラスの透明感</span><br />macOS のための書庫スタジオ。",
-      heroDesc: "中身を見るたびに丸ごと展開する必要はありません。BoltZip はオープンソース圧縮基盤に加え、展開不要の閲覧・編集、文字化け自動補正、透過度調整、Finder 第一階層「Bolt ›」メニューを提供します。",
-      heroCta1: "▶ インタラクティブ体験", heroCta2: "ソースを取得してビルド",
-      stat1Val: "6 つの圧縮方式", stat2Val: "第一階層 Bolt ›", stat2Lbl: "ネイティブ Finder Sync 拡張", stat3Val: "4 言語対応",
-      archLayer1: "透過度調整可能な Liquid Glass · Finder 第一階層 Bolt › · Quick Look",
-      simTitle: "Windows Zip 級ワークフロー · インタラクティブ体験",
-      simSub: "書庫内での直接追加・削除、文字化け補正、AE-2 暗号化と整合性検証をブラウザで体験",
-      featHead: "macOS にも高機能な書庫ワークベンチを",
-      featSub: "標準アーカイブユーティリティの不便さをエンジニアリングで解消",
-      qsTitle: "GitHub からクローンしてビルド",
-      qsSub: "SwiftPM 構成、アプリ化スクリプト、開発者向け AGENTS.md を同梱"
-    }
-  };
-
-  function applySiteLang(lang) {
-    const dict = siteI18n[lang] || siteI18n["zh-Hans"];
-    document.querySelectorAll("[data-i18n]").forEach(el => {
-      const k = el.dataset.i18n;
-      if (dict[k]) el.textContent = dict[k];
-    });
-    document.querySelectorAll("[data-i18n-html]").forEach(el => {
-      const k = el.dataset.i18nHtml;
-      if (dict[k]) el.innerHTML = dict[k];
-    });
-  }
-
-  const siteLangSelect = document.getElementById("siteLangSelect");
-  if (siteLangSelect) {
-    siteLangSelect.onchange = (e) => applySiteLang(e.target.value);
-    const navLang = (navigator.language || "zh-CN").toLowerCase();
-    let initial = "zh-Hans";
-    if (navLang.startsWith("ja")) initial = "ja";
-    else if (navLang.startsWith("zh-tw") || navLang.startsWith("zh-hk") || navLang.startsWith("zh-hant")) initial = "zh-Hant";
-    else if (!navLang.startsWith("zh")) initial = "en";
-    siteLangSelect.value = initial;
-    applySiteLang(initial);
-  }
-
-  renderAll();
+        renderAll();
       };
       li.appendChild(btn);
       treeEl.appendChild(li);
@@ -236,95 +148,7 @@
         if (e.isDir) {
           currentFolder = e.id;
           selectedId = null;
-        
-  const siteI18n = {
-    "zh-Hans": {
-      navSim: "交互演示", navFeat: "核心特性", navAlgo: "开源算法", navBuild: "构建指南", navGitHub: "GitHub 开源仓库",
-      heroBadge: "专为 macOS 27.3 · Liquid Glass 液态玻璃 · MIT 开源",
-      heroTitle: "<span class=\"gradient-text\">快如闪电，通透如玻</span><br />让 macOS 压缩像桌面一样顺手。",
-      heroDesc: "告别双击就一股脑解压一地的传统体验。BoltZip 基于纯正开源压缩底座（zlib · Zstandard · LZMA2 · bzip2 · LZ4），原生还原「包内浏览、直接增删改、GBK 乱码自愈、访达一级 Bolt 菜单与液态玻璃可调透明度」。",
-      heroCta1: "▶ 体验界面交互模拟器", heroCta2: "克隆源码并构建",
-      stat1Val: "6 大开源内核", stat2Val: "一级右键 Bolt ›", stat2Lbl: "原生 Finder Sync 扩展直达", stat3Val: "4 语种随系统切换",
-      archLayer1: "液态玻璃可调透明度 · 访达一级 Bolt › 菜单 · Quick Look 预览",
-      simTitle: "Windows Zip 经典交互 · 实时界面模拟器",
-      simSub: "点击工具栏体验「包内直览、GBK 中文乱码一键自愈、AE-2 加密与 CRC32 校验」",
-      featHead: "为什么 macOS 也需要一款「Windows 级」压缩软件？",
-      featSub: "针对 macOS 原生归档工具高频痛点逐一工程级重塑",
-      qsTitle: "从 GitHub 克隆并构建 BoltZip",
-      qsSub: "仓库提供完整的 SwiftPM 工程、打包脚本以及面向开发者的 AGENTS.md"
-    },
-    "zh-Hant": {
-      navSim: "互動模擬", navFeat: "核心功能", navAlgo: "開源演算法", navBuild: "建置指南", navGitHub: "GitHub 專案",
-      heroBadge: "專為 macOS 27.3 打造 · Liquid Glass 液態玻璃 · MIT 開源",
-      heroTitle: "<span class=\"gradient-text\">快如閃電，通透如玻</span><br />讓 macOS 壓縮像桌面一樣順手。",
-      heroDesc: "告別雙擊就整包解壓一地的困擾。BoltZip 結合純淨開源演算法核心，完整提供「封存檔內建瀏覽、直接增刪修改、編碼亂碼自動修正、Finder 第一層 Bolt 選單與可調式透明度」。",
-      heroCta1: "▶ 體驗互動模擬器", heroCta2: "取得原始碼並建置",
-      stat1Val: "6 大開源核心", stat2Val: "第一層右鍵 Bolt ›", stat2Lbl: "原生 Finder Sync 延伸功能", stat3Val: "4 國語言自動切換",
-      archLayer1: "液態玻璃可調透明度 · Finder 第一層 Bolt › 選單 · Quick Look 預覽",
-      simTitle: "Windows Zip 經典操作 · 即時介面模擬器",
-      simSub: "點擊工具列體驗「封存檔內建瀏覽、Windows 中文亂碼修正、AE-2 加密與 CRC32 驗證」",
-      featHead: "為什麼 macOS 也需要「Windows 級」壓縮工具？",
-      featSub: "針對 macOS 內建封存工具的高頻痛點全面重塑",
-      qsTitle: "從 GitHub 取得並建置 BoltZip",
-      qsSub: "內含完整 SwiftPM 專案、打包腳本與開發者指引 AGENTS.md"
-    },
-    "en": {
-      navSim: "Simulator", navFeat: "Features", navAlgo: "Codecs", navBuild: "Build", navGitHub: "GitHub Repo",
-      heroBadge: "Built for macOS 27.3 · Liquid Glass UI · MIT Open Source",
-      heroTitle: "<span class=\"gradient-text\">Lightning-fast archives.</span><br />Liquid-clear macOS craft.",
-      heroDesc: "Stop extracting entire archives just to peek inside. BoltZip combines transparent open-source codecs (zlib, Zstandard, LZMA2, bzip2, LZ4) with in-archive browsing, live ZIP editing, CJK encoding auto-fix, adjustable translucency, and a top-level Finder “Bolt ›” menu.",
-      heroCta1: "▶ Try Interactive Simulator", heroCta2: "Clone & Build",
-      stat1Val: "6 Open Codecs", stat2Val: "Top-Level Bolt ›", stat2Lbl: "Native Finder Sync Extension", stat3Val: "4 Languages",
-      archLayer1: "Adjustable Liquid Glass · Top-level Finder Bolt › · Quick Look",
-      simTitle: "Windows-Zip Workflow · Live UI Simulator",
-      simSub: "Test in-archive editing, Windows GBK filename auto-fix, AE-2 AES-256 & CRC32 verification",
-      featHead: "Why macOS Deserves a Full-Featured Archive Workbench",
-      featSub: "Engineered to solve every daily friction of the built-in macOS Archive Utility",
-      qsTitle: "Clone & Build BoltZip from GitHub",
-      qsSub: "Includes full SwiftPM sources, app bundler scripts, and AGENTS.md for contributors"
-    },
-    "ja": {
-      navSim: "シミュレーター", navFeat: "主な機能", navAlgo: "圧縮エンジン", navBuild: "ビルド手順", navGitHub: "GitHub",
-      heroBadge: "macOS 27.3 対応 · Liquid Glass UI · MIT オープンソース",
-      heroTitle: "<span class=\"gradient-text\">稲妻の速さ、ガラスの透明感</span><br />macOS のための書庫スタジオ。",
-      heroDesc: "中身を見るたびに丸ごと展開する必要はありません。BoltZip はオープンソース圧縮基盤に加え、展開不要の閲覧・編集、文字化け自動補正、透過度調整、Finder 第一階層「Bolt ›」メニューを提供します。",
-      heroCta1: "▶ インタラクティブ体験", heroCta2: "ソースを取得してビルド",
-      stat1Val: "6 つの圧縮方式", stat2Val: "第一階層 Bolt ›", stat2Lbl: "ネイティブ Finder Sync 拡張", stat3Val: "4 言語対応",
-      archLayer1: "透過度調整可能な Liquid Glass · Finder 第一階層 Bolt › · Quick Look",
-      simTitle: "Windows Zip 級ワークフロー · インタラクティブ体験",
-      simSub: "書庫内での直接追加・削除、文字化け補正、AE-2 暗号化と整合性検証をブラウザで体験",
-      featHead: "macOS にも高機能な書庫ワークベンチを",
-      featSub: "標準アーカイブユーティリティの不便さをエンジニアリングで解消",
-      qsTitle: "GitHub からクローンしてビルド",
-      qsSub: "SwiftPM 構成、アプリ化スクリプト、開発者向け AGENTS.md を同梱"
-    }
-  };
-
-  function applySiteLang(lang) {
-    const dict = siteI18n[lang] || siteI18n["zh-Hans"];
-    document.querySelectorAll("[data-i18n]").forEach(el => {
-      const k = el.dataset.i18n;
-      if (dict[k]) el.textContent = dict[k];
-    });
-    document.querySelectorAll("[data-i18n-html]").forEach(el => {
-      const k = el.dataset.i18nHtml;
-      if (dict[k]) el.innerHTML = dict[k];
-    });
-  }
-
-  const siteLangSelect = document.getElementById("siteLangSelect");
-  if (siteLangSelect) {
-    siteLangSelect.onchange = (e) => applySiteLang(e.target.value);
-    const navLang = (navigator.language || "zh-CN").toLowerCase();
-    let initial = "zh-Hans";
-    if (navLang.startsWith("ja")) initial = "ja";
-    else if (navLang.startsWith("zh-tw") || navLang.startsWith("zh-hk") || navLang.startsWith("zh-hant")) initial = "zh-Hant";
-    else if (!navLang.startsWith("zh")) initial = "en";
-    siteLangSelect.value = initial;
-    applySiteLang(initial);
-  }
-
-  renderAll();
+          renderAll();
         } else {
           showToast(`👁 <strong>Quick Look 快速预览</strong>：已从内存解密/解码 <code>${displayName(e)}</code>（无需解压整个压缩包）。`);
         }
@@ -341,7 +165,7 @@
   }
 
   document.getElementById("btnExtractSmart").onclick = () => {
-    showToast(`📂 <strong>智能解压预览</strong>：检测到压缩包根目录含多个条目，将自动释放到 <code>~/Downloads/2026_华东交付包_v2/</code>，并剔除 Mac 隐藏文件。`);
+    showToast(`📂 <strong>智能解压预览</strong>：检测到压缩包根目录含多个条目，将自动释放到 <code>~/Downloads/2026_交付包_v2/</code>，并自动删除 <code>.DS_Store</code> 等 Mac 隐藏文件。`);
   };
 
   let addCounter = 1;
@@ -360,96 +184,8 @@
       crc: "0x7F1099AB"
     });
     selectedId = newId;
-  
-  const siteI18n = {
-    "zh-Hans": {
-      navSim: "交互演示", navFeat: "核心特性", navAlgo: "开源算法", navBuild: "构建指南", navGitHub: "GitHub 开源仓库",
-      heroBadge: "专为 macOS 27.3 · Liquid Glass 液态玻璃 · MIT 开源",
-      heroTitle: "<span class=\"gradient-text\">快如闪电，通透如玻</span><br />让 macOS 压缩像桌面一样顺手。",
-      heroDesc: "告别双击就一股脑解压一地的传统体验。BoltZip 基于纯正开源压缩底座（zlib · Zstandard · LZMA2 · bzip2 · LZ4），原生还原「包内浏览、直接增删改、GBK 乱码自愈、访达一级 Bolt 菜单与液态玻璃可调透明度」。",
-      heroCta1: "▶ 体验界面交互模拟器", heroCta2: "克隆源码并构建",
-      stat1Val: "6 大开源内核", stat2Val: "一级右键 Bolt ›", stat2Lbl: "原生 Finder Sync 扩展直达", stat3Val: "4 语种随系统切换",
-      archLayer1: "液态玻璃可调透明度 · 访达一级 Bolt › 菜单 · Quick Look 预览",
-      simTitle: "Windows Zip 经典交互 · 实时界面模拟器",
-      simSub: "点击工具栏体验「包内直览、GBK 中文乱码一键自愈、AE-2 加密与 CRC32 校验」",
-      featHead: "为什么 macOS 也需要一款「Windows 级」压缩软件？",
-      featSub: "针对 macOS 原生归档工具高频痛点逐一工程级重塑",
-      qsTitle: "从 GitHub 克隆并构建 BoltZip",
-      qsSub: "仓库提供完整的 SwiftPM 工程、打包脚本以及面向开发者的 AGENTS.md"
-    },
-    "zh-Hant": {
-      navSim: "互動模擬", navFeat: "核心功能", navAlgo: "開源演算法", navBuild: "建置指南", navGitHub: "GitHub 專案",
-      heroBadge: "專為 macOS 27.3 打造 · Liquid Glass 液態玻璃 · MIT 開源",
-      heroTitle: "<span class=\"gradient-text\">快如閃電，通透如玻</span><br />讓 macOS 壓縮像桌面一樣順手。",
-      heroDesc: "告別雙擊就整包解壓一地的困擾。BoltZip 結合純淨開源演算法核心，完整提供「封存檔內建瀏覽、直接增刪修改、編碼亂碼自動修正、Finder 第一層 Bolt 選單與可調式透明度」。",
-      heroCta1: "▶ 體驗互動模擬器", heroCta2: "取得原始碼並建置",
-      stat1Val: "6 大開源核心", stat2Val: "第一層右鍵 Bolt ›", stat2Lbl: "原生 Finder Sync 延伸功能", stat3Val: "4 國語言自動切換",
-      archLayer1: "液態玻璃可調透明度 · Finder 第一層 Bolt › 選單 · Quick Look 預覽",
-      simTitle: "Windows Zip 經典操作 · 即時介面模擬器",
-      simSub: "點擊工具列體驗「封存檔內建瀏覽、Windows 中文亂碼修正、AE-2 加密與 CRC32 驗證」",
-      featHead: "為什麼 macOS 也需要「Windows 級」壓縮工具？",
-      featSub: "針對 macOS 內建封存工具的高頻痛點全面重塑",
-      qsTitle: "從 GitHub 取得並建置 BoltZip",
-      qsSub: "內含完整 SwiftPM 專案、打包腳本與開發者指引 AGENTS.md"
-    },
-    "en": {
-      navSim: "Simulator", navFeat: "Features", navAlgo: "Codecs", navBuild: "Build", navGitHub: "GitHub Repo",
-      heroBadge: "Built for macOS 27.3 · Liquid Glass UI · MIT Open Source",
-      heroTitle: "<span class=\"gradient-text\">Lightning-fast archives.</span><br />Liquid-clear macOS craft.",
-      heroDesc: "Stop extracting entire archives just to peek inside. BoltZip combines transparent open-source codecs (zlib, Zstandard, LZMA2, bzip2, LZ4) with in-archive browsing, live ZIP editing, CJK encoding auto-fix, adjustable translucency, and a top-level Finder “Bolt ›” menu.",
-      heroCta1: "▶ Try Interactive Simulator", heroCta2: "Clone & Build",
-      stat1Val: "6 Open Codecs", stat2Val: "Top-Level Bolt ›", stat2Lbl: "Native Finder Sync Extension", stat3Val: "4 Languages",
-      archLayer1: "Adjustable Liquid Glass · Top-level Finder Bolt › · Quick Look",
-      simTitle: "Windows-Zip Workflow · Live UI Simulator",
-      simSub: "Test in-archive editing, Windows GBK filename auto-fix, AE-2 AES-256 & CRC32 verification",
-      featHead: "Why macOS Deserves a Full-Featured Archive Workbench",
-      featSub: "Engineered to solve every daily friction of the built-in macOS Archive Utility",
-      qsTitle: "Clone & Build BoltZip from GitHub",
-      qsSub: "Includes full SwiftPM sources, app bundler scripts, and AGENTS.md for contributors"
-    },
-    "ja": {
-      navSim: "シミュレーター", navFeat: "主な機能", navAlgo: "圧縮エンジン", navBuild: "ビルド手順", navGitHub: "GitHub",
-      heroBadge: "macOS 27.3 対応 · Liquid Glass UI · MIT オープンソース",
-      heroTitle: "<span class=\"gradient-text\">稲妻の速さ、ガラスの透明感</span><br />macOS のための書庫スタジオ。",
-      heroDesc: "中身を見るたびに丸ごと展開する必要はありません。BoltZip はオープンソース圧縮基盤に加え、展開不要の閲覧・編集、文字化け自動補正、透過度調整、Finder 第一階層「Bolt ›」メニューを提供します。",
-      heroCta1: "▶ インタラクティブ体験", heroCta2: "ソースを取得してビルド",
-      stat1Val: "6 つの圧縮方式", stat2Val: "第一階層 Bolt ›", stat2Lbl: "ネイティブ Finder Sync 拡張", stat3Val: "4 言語対応",
-      archLayer1: "透過度調整可能な Liquid Glass · Finder 第一階層 Bolt › · Quick Look",
-      simTitle: "Windows Zip 級ワークフロー · インタラクティブ体験",
-      simSub: "書庫内での直接追加・削除、文字化け補正、AE-2 暗号化と整合性検証をブラウザで体験",
-      featHead: "macOS にも高機能な書庫ワークベンチを",
-      featSub: "標準アーカイブユーティリティの不便さをエンジニアリングで解消",
-      qsTitle: "GitHub からクローンしてビルド",
-      qsSub: "SwiftPM 構成、アプリ化スクリプト、開発者向け AGENTS.md を同梱"
-    }
-  };
-
-  function applySiteLang(lang) {
-    const dict = siteI18n[lang] || siteI18n["zh-Hans"];
-    document.querySelectorAll("[data-i18n]").forEach(el => {
-      const k = el.dataset.i18n;
-      if (dict[k]) el.textContent = dict[k];
-    });
-    document.querySelectorAll("[data-i18n-html]").forEach(el => {
-      const k = el.dataset.i18nHtml;
-      if (dict[k]) el.innerHTML = dict[k];
-    });
-  }
-
-  const siteLangSelect = document.getElementById("siteLangSelect");
-  if (siteLangSelect) {
-    siteLangSelect.onchange = (e) => applySiteLang(e.target.value);
-    const navLang = (navigator.language || "zh-CN").toLowerCase();
-    let initial = "zh-Hans";
-    if (navLang.startsWith("ja")) initial = "ja";
-    else if (navLang.startsWith("zh-tw") || navLang.startsWith("zh-hk") || navLang.startsWith("zh-hant")) initial = "zh-Hant";
-    else if (!navLang.startsWith("zh")) initial = "en";
-    siteLangSelect.value = initial;
-    applySiteLang(initial);
-  }
-
-  renderAll();
-    showToast(`➕ <strong>包内原地添加成功</strong>：已将 <code>${newName}</code> 写入归档，原有文件未发生重压缩。`);
+    renderAll();
+    showToast(`➕ <strong>包内原地添加成功</strong>：已将 <code>${newName}</code> 写入归档并过滤 <code>.DS_Store</code>，原有文件未发生重压缩。`);
   };
 
   document.getElementById("btnDeleteSimFile").onclick = () => {
@@ -461,95 +197,7 @@
     if (!target) return;
     entries = entries.filter(e => e.id !== target.id && e.parent !== target.id);
     selectedId = null;
-  
-  const siteI18n = {
-    "zh-Hans": {
-      navSim: "交互演示", navFeat: "核心特性", navAlgo: "开源算法", navBuild: "构建指南", navGitHub: "GitHub 开源仓库",
-      heroBadge: "专为 macOS 27.3 · Liquid Glass 液态玻璃 · MIT 开源",
-      heroTitle: "<span class=\"gradient-text\">快如闪电，通透如玻</span><br />让 macOS 压缩像桌面一样顺手。",
-      heroDesc: "告别双击就一股脑解压一地的传统体验。BoltZip 基于纯正开源压缩底座（zlib · Zstandard · LZMA2 · bzip2 · LZ4），原生还原「包内浏览、直接增删改、GBK 乱码自愈、访达一级 Bolt 菜单与液态玻璃可调透明度」。",
-      heroCta1: "▶ 体验界面交互模拟器", heroCta2: "克隆源码并构建",
-      stat1Val: "6 大开源内核", stat2Val: "一级右键 Bolt ›", stat2Lbl: "原生 Finder Sync 扩展直达", stat3Val: "4 语种随系统切换",
-      archLayer1: "液态玻璃可调透明度 · 访达一级 Bolt › 菜单 · Quick Look 预览",
-      simTitle: "Windows Zip 经典交互 · 实时界面模拟器",
-      simSub: "点击工具栏体验「包内直览、GBK 中文乱码一键自愈、AE-2 加密与 CRC32 校验」",
-      featHead: "为什么 macOS 也需要一款「Windows 级」压缩软件？",
-      featSub: "针对 macOS 原生归档工具高频痛点逐一工程级重塑",
-      qsTitle: "从 GitHub 克隆并构建 BoltZip",
-      qsSub: "仓库提供完整的 SwiftPM 工程、打包脚本以及面向开发者的 AGENTS.md"
-    },
-    "zh-Hant": {
-      navSim: "互動模擬", navFeat: "核心功能", navAlgo: "開源演算法", navBuild: "建置指南", navGitHub: "GitHub 專案",
-      heroBadge: "專為 macOS 27.3 打造 · Liquid Glass 液態玻璃 · MIT 開源",
-      heroTitle: "<span class=\"gradient-text\">快如閃電，通透如玻</span><br />讓 macOS 壓縮像桌面一樣順手。",
-      heroDesc: "告別雙擊就整包解壓一地的困擾。BoltZip 結合純淨開源演算法核心，完整提供「封存檔內建瀏覽、直接增刪修改、編碼亂碼自動修正、Finder 第一層 Bolt 選單與可調式透明度」。",
-      heroCta1: "▶ 體驗互動模擬器", heroCta2: "取得原始碼並建置",
-      stat1Val: "6 大開源核心", stat2Val: "第一層右鍵 Bolt ›", stat2Lbl: "原生 Finder Sync 延伸功能", stat3Val: "4 國語言自動切換",
-      archLayer1: "液態玻璃可調透明度 · Finder 第一層 Bolt › 選單 · Quick Look 預覽",
-      simTitle: "Windows Zip 經典操作 · 即時介面模擬器",
-      simSub: "點擊工具列體驗「封存檔內建瀏覽、Windows 中文亂碼修正、AE-2 加密與 CRC32 驗證」",
-      featHead: "為什麼 macOS 也需要「Windows 級」壓縮工具？",
-      featSub: "針對 macOS 內建封存工具的高頻痛點全面重塑",
-      qsTitle: "從 GitHub 取得並建置 BoltZip",
-      qsSub: "內含完整 SwiftPM 專案、打包腳本與開發者指引 AGENTS.md"
-    },
-    "en": {
-      navSim: "Simulator", navFeat: "Features", navAlgo: "Codecs", navBuild: "Build", navGitHub: "GitHub Repo",
-      heroBadge: "Built for macOS 27.3 · Liquid Glass UI · MIT Open Source",
-      heroTitle: "<span class=\"gradient-text\">Lightning-fast archives.</span><br />Liquid-clear macOS craft.",
-      heroDesc: "Stop extracting entire archives just to peek inside. BoltZip combines transparent open-source codecs (zlib, Zstandard, LZMA2, bzip2, LZ4) with in-archive browsing, live ZIP editing, CJK encoding auto-fix, adjustable translucency, and a top-level Finder “Bolt ›” menu.",
-      heroCta1: "▶ Try Interactive Simulator", heroCta2: "Clone & Build",
-      stat1Val: "6 Open Codecs", stat2Val: "Top-Level Bolt ›", stat2Lbl: "Native Finder Sync Extension", stat3Val: "4 Languages",
-      archLayer1: "Adjustable Liquid Glass · Top-level Finder Bolt › · Quick Look",
-      simTitle: "Windows-Zip Workflow · Live UI Simulator",
-      simSub: "Test in-archive editing, Windows GBK filename auto-fix, AE-2 AES-256 & CRC32 verification",
-      featHead: "Why macOS Deserves a Full-Featured Archive Workbench",
-      featSub: "Engineered to solve every daily friction of the built-in macOS Archive Utility",
-      qsTitle: "Clone & Build BoltZip from GitHub",
-      qsSub: "Includes full SwiftPM sources, app bundler scripts, and AGENTS.md for contributors"
-    },
-    "ja": {
-      navSim: "シミュレーター", navFeat: "主な機能", navAlgo: "圧縮エンジン", navBuild: "ビルド手順", navGitHub: "GitHub",
-      heroBadge: "macOS 27.3 対応 · Liquid Glass UI · MIT オープンソース",
-      heroTitle: "<span class=\"gradient-text\">稲妻の速さ、ガラスの透明感</span><br />macOS のための書庫スタジオ。",
-      heroDesc: "中身を見るたびに丸ごと展開する必要はありません。BoltZip はオープンソース圧縮基盤に加え、展開不要の閲覧・編集、文字化け自動補正、透過度調整、Finder 第一階層「Bolt ›」メニューを提供します。",
-      heroCta1: "▶ インタラクティブ体験", heroCta2: "ソースを取得してビルド",
-      stat1Val: "6 つの圧縮方式", stat2Val: "第一階層 Bolt ›", stat2Lbl: "ネイティブ Finder Sync 拡張", stat3Val: "4 言語対応",
-      archLayer1: "透過度調整可能な Liquid Glass · Finder 第一階層 Bolt › · Quick Look",
-      simTitle: "Windows Zip 級ワークフロー · インタラクティブ体験",
-      simSub: "書庫内での直接追加・削除、文字化け補正、AE-2 暗号化と整合性検証をブラウザで体験",
-      featHead: "macOS にも高機能な書庫ワークベンチを",
-      featSub: "標準アーカイブユーティリティの不便さをエンジニアリングで解消",
-      qsTitle: "GitHub からクローンしてビルド",
-      qsSub: "SwiftPM 構成、アプリ化スクリプト、開発者向け AGENTS.md を同梱"
-    }
-  };
-
-  function applySiteLang(lang) {
-    const dict = siteI18n[lang] || siteI18n["zh-Hans"];
-    document.querySelectorAll("[data-i18n]").forEach(el => {
-      const k = el.dataset.i18n;
-      if (dict[k]) el.textContent = dict[k];
-    });
-    document.querySelectorAll("[data-i18n-html]").forEach(el => {
-      const k = el.dataset.i18nHtml;
-      if (dict[k]) el.innerHTML = dict[k];
-    });
-  }
-
-  const siteLangSelect = document.getElementById("siteLangSelect");
-  if (siteLangSelect) {
-    siteLangSelect.onchange = (e) => applySiteLang(e.target.value);
-    const navLang = (navigator.language || "zh-CN").toLowerCase();
-    let initial = "zh-Hans";
-    if (navLang.startsWith("ja")) initial = "ja";
-    else if (navLang.startsWith("zh-tw") || navLang.startsWith("zh-hk") || navLang.startsWith("zh-hant")) initial = "zh-Hant";
-    else if (!navLang.startsWith("zh")) initial = "en";
-    siteLangSelect.value = initial;
-    applySiteLang(initial);
-  }
-
-  renderAll();
+    renderAll();
     showToast(`🗑 已从归档移除 <code>${displayName(target)}</code> 并重建中央目录。`);
   };
 
@@ -562,95 +210,7 @@
     gbkGarbledMode = garbled;
     encodingSelect.value = garbled ? "cp437" : "auto";
     gbkBtnText.textContent = garbled ? "✨ 一键智能修复 GBK 乱码" : "模拟 Windows GBK 乱码";
-  
-  const siteI18n = {
-    "zh-Hans": {
-      navSim: "交互演示", navFeat: "核心特性", navAlgo: "开源算法", navBuild: "构建指南", navGitHub: "GitHub 开源仓库",
-      heroBadge: "专为 macOS 27.3 · Liquid Glass 液态玻璃 · MIT 开源",
-      heroTitle: "<span class=\"gradient-text\">快如闪电，通透如玻</span><br />让 macOS 压缩像桌面一样顺手。",
-      heroDesc: "告别双击就一股脑解压一地的传统体验。BoltZip 基于纯正开源压缩底座（zlib · Zstandard · LZMA2 · bzip2 · LZ4），原生还原「包内浏览、直接增删改、GBK 乱码自愈、访达一级 Bolt 菜单与液态玻璃可调透明度」。",
-      heroCta1: "▶ 体验界面交互模拟器", heroCta2: "克隆源码并构建",
-      stat1Val: "6 大开源内核", stat2Val: "一级右键 Bolt ›", stat2Lbl: "原生 Finder Sync 扩展直达", stat3Val: "4 语种随系统切换",
-      archLayer1: "液态玻璃可调透明度 · 访达一级 Bolt › 菜单 · Quick Look 预览",
-      simTitle: "Windows Zip 经典交互 · 实时界面模拟器",
-      simSub: "点击工具栏体验「包内直览、GBK 中文乱码一键自愈、AE-2 加密与 CRC32 校验」",
-      featHead: "为什么 macOS 也需要一款「Windows 级」压缩软件？",
-      featSub: "针对 macOS 原生归档工具高频痛点逐一工程级重塑",
-      qsTitle: "从 GitHub 克隆并构建 BoltZip",
-      qsSub: "仓库提供完整的 SwiftPM 工程、打包脚本以及面向开发者的 AGENTS.md"
-    },
-    "zh-Hant": {
-      navSim: "互動模擬", navFeat: "核心功能", navAlgo: "開源演算法", navBuild: "建置指南", navGitHub: "GitHub 專案",
-      heroBadge: "專為 macOS 27.3 打造 · Liquid Glass 液態玻璃 · MIT 開源",
-      heroTitle: "<span class=\"gradient-text\">快如閃電，通透如玻</span><br />讓 macOS 壓縮像桌面一樣順手。",
-      heroDesc: "告別雙擊就整包解壓一地的困擾。BoltZip 結合純淨開源演算法核心，完整提供「封存檔內建瀏覽、直接增刪修改、編碼亂碼自動修正、Finder 第一層 Bolt 選單與可調式透明度」。",
-      heroCta1: "▶ 體驗互動模擬器", heroCta2: "取得原始碼並建置",
-      stat1Val: "6 大開源核心", stat2Val: "第一層右鍵 Bolt ›", stat2Lbl: "原生 Finder Sync 延伸功能", stat3Val: "4 國語言自動切換",
-      archLayer1: "液態玻璃可調透明度 · Finder 第一層 Bolt › 選單 · Quick Look 預覽",
-      simTitle: "Windows Zip 經典操作 · 即時介面模擬器",
-      simSub: "點擊工具列體驗「封存檔內建瀏覽、Windows 中文亂碼修正、AE-2 加密與 CRC32 驗證」",
-      featHead: "為什麼 macOS 也需要「Windows 級」壓縮工具？",
-      featSub: "針對 macOS 內建封存工具的高頻痛點全面重塑",
-      qsTitle: "從 GitHub 取得並建置 BoltZip",
-      qsSub: "內含完整 SwiftPM 專案、打包腳本與開發者指引 AGENTS.md"
-    },
-    "en": {
-      navSim: "Simulator", navFeat: "Features", navAlgo: "Codecs", navBuild: "Build", navGitHub: "GitHub Repo",
-      heroBadge: "Built for macOS 27.3 · Liquid Glass UI · MIT Open Source",
-      heroTitle: "<span class=\"gradient-text\">Lightning-fast archives.</span><br />Liquid-clear macOS craft.",
-      heroDesc: "Stop extracting entire archives just to peek inside. BoltZip combines transparent open-source codecs (zlib, Zstandard, LZMA2, bzip2, LZ4) with in-archive browsing, live ZIP editing, CJK encoding auto-fix, adjustable translucency, and a top-level Finder “Bolt ›” menu.",
-      heroCta1: "▶ Try Interactive Simulator", heroCta2: "Clone & Build",
-      stat1Val: "6 Open Codecs", stat2Val: "Top-Level Bolt ›", stat2Lbl: "Native Finder Sync Extension", stat3Val: "4 Languages",
-      archLayer1: "Adjustable Liquid Glass · Top-level Finder Bolt › · Quick Look",
-      simTitle: "Windows-Zip Workflow · Live UI Simulator",
-      simSub: "Test in-archive editing, Windows GBK filename auto-fix, AE-2 AES-256 & CRC32 verification",
-      featHead: "Why macOS Deserves a Full-Featured Archive Workbench",
-      featSub: "Engineered to solve every daily friction of the built-in macOS Archive Utility",
-      qsTitle: "Clone & Build BoltZip from GitHub",
-      qsSub: "Includes full SwiftPM sources, app bundler scripts, and AGENTS.md for contributors"
-    },
-    "ja": {
-      navSim: "シミュレーター", navFeat: "主な機能", navAlgo: "圧縮エンジン", navBuild: "ビルド手順", navGitHub: "GitHub",
-      heroBadge: "macOS 27.3 対応 · Liquid Glass UI · MIT オープンソース",
-      heroTitle: "<span class=\"gradient-text\">稲妻の速さ、ガラスの透明感</span><br />macOS のための書庫スタジオ。",
-      heroDesc: "中身を見るたびに丸ごと展開する必要はありません。BoltZip はオープンソース圧縮基盤に加え、展開不要の閲覧・編集、文字化け自動補正、透過度調整、Finder 第一階層「Bolt ›」メニューを提供します。",
-      heroCta1: "▶ インタラクティブ体験", heroCta2: "ソースを取得してビルド",
-      stat1Val: "6 つの圧縮方式", stat2Val: "第一階層 Bolt ›", stat2Lbl: "ネイティブ Finder Sync 拡張", stat3Val: "4 言語対応",
-      archLayer1: "透過度調整可能な Liquid Glass · Finder 第一階層 Bolt › · Quick Look",
-      simTitle: "Windows Zip 級ワークフロー · インタラクティブ体験",
-      simSub: "書庫内での直接追加・削除、文字化け補正、AE-2 暗号化と整合性検証をブラウザで体験",
-      featHead: "macOS にも高機能な書庫ワークベンチを",
-      featSub: "標準アーカイブユーティリティの不便さをエンジニアリングで解消",
-      qsTitle: "GitHub からクローンしてビルド",
-      qsSub: "SwiftPM 構成、アプリ化スクリプト、開発者向け AGENTS.md を同梱"
-    }
-  };
-
-  function applySiteLang(lang) {
-    const dict = siteI18n[lang] || siteI18n["zh-Hans"];
-    document.querySelectorAll("[data-i18n]").forEach(el => {
-      const k = el.dataset.i18n;
-      if (dict[k]) el.textContent = dict[k];
-    });
-    document.querySelectorAll("[data-i18n-html]").forEach(el => {
-      const k = el.dataset.i18nHtml;
-      if (dict[k]) el.innerHTML = dict[k];
-    });
-  }
-
-  const siteLangSelect = document.getElementById("siteLangSelect");
-  if (siteLangSelect) {
-    siteLangSelect.onchange = (e) => applySiteLang(e.target.value);
-    const navLang = (navigator.language || "zh-CN").toLowerCase();
-    let initial = "zh-Hans";
-    if (navLang.startsWith("ja")) initial = "ja";
-    else if (navLang.startsWith("zh-tw") || navLang.startsWith("zh-hk") || navLang.startsWith("zh-hant")) initial = "zh-Hant";
-    else if (!navLang.startsWith("zh")) initial = "en";
-    siteLangSelect.value = initial;
-    applySiteLang(initial);
-  }
-
-  renderAll();
+    renderAll();
   }
 
   document.getElementById("btnToggleGBK").onclick = () => {
@@ -743,67 +303,66 @@
     };
   });
 
-
   const siteI18n = {
     "zh-Hans": {
       navSim: "交互演示", navFeat: "核心特性", navAlgo: "开源算法", navBuild: "构建指南", navGitHub: "GitHub 开源仓库",
-      heroBadge: "专为 macOS 27.3 · Liquid Glass 液态玻璃 · MIT 开源",
+      heroBadge: "macOS 14+ Universal (Apple Silicon & Intel) · 26+ Liquid Glass · MIT 开源",
       heroTitle: "<span class=\"gradient-text\">快如闪电，通透如玻</span><br />让 macOS 压缩像桌面一样顺手。",
-      heroDesc: "告别双击就一股脑解压一地的传统体验。BoltZip 基于纯正开源压缩底座（zlib · Zstandard · LZMA2 · bzip2 · LZ4），原生还原「包内浏览、直接增删改、GBK 乱码自愈、访达一级 Bolt 菜单与液态玻璃可调透明度」。",
+      heroDesc: "告别双击就一股脑解压一地的传统体验。BoltZip 基于纯正开源压缩底座（zlib · Zstandard · LZMA2 · bzip2 · LZ4），原生还原「包内浏览、直接增删改、自动删除 .DS_Store、GBK 乱码自愈、访达一级 Bolt 菜单与 macOS 26+ 液态玻璃（旧版自动禁用）」。",
       heroCta1: "▶ 体验界面交互模拟器", heroCta2: "克隆源码并构建",
       stat1Val: "6 大开源内核", stat2Val: "一级右键 Bolt ›", stat2Lbl: "原生 Finder Sync 扩展直达", stat3Val: "4 语种随系统切换",
-      archLayer1: "液态玻璃可调透明度 · 访达一级 Bolt › 菜单 · Quick Look 预览",
+      archLayer1: "macOS 26+ 液态玻璃 / 旧版原生界面 · 访达一级 Bolt › · Quick Look",
       simTitle: "Windows Zip 经典交互 · 实时界面模拟器",
-      simSub: "点击工具栏体验「包内直览、GBK 中文乱码一键自愈、AE-2 加密与 CRC32 校验」",
+      simSub: "点击工具栏体验「包内直览、自动剔除 .DS_Store、GBK 乱码一键自愈与 CRC32 校验」",
       featHead: "为什么 macOS 也需要一款「Windows 级」压缩软件？",
       featSub: "针对 macOS 原生归档工具高频痛点逐一工程级重塑",
       qsTitle: "从 GitHub 克隆并构建 BoltZip",
-      qsSub: "仓库提供完整的 SwiftPM 工程、打包脚本以及面向开发者的 AGENTS.md"
+      qsSub: "仓库提供完整的 SwiftPM 工程、Universal 打包脚本以及面向开发者的 AGENTS.md"
     },
     "zh-Hant": {
       navSim: "互動模擬", navFeat: "核心功能", navAlgo: "開源演算法", navBuild: "建置指南", navGitHub: "GitHub 專案",
-      heroBadge: "專為 macOS 27.3 打造 · Liquid Glass 液態玻璃 · MIT 開源",
+      heroBadge: "macOS 14+ Universal (Apple Silicon & Intel) · 26+ Liquid Glass · MIT 開源",
       heroTitle: "<span class=\"gradient-text\">快如閃電，通透如玻</span><br />讓 macOS 壓縮像桌面一樣順手。",
-      heroDesc: "告別雙擊就整包解壓一地的困擾。BoltZip 結合純淨開源演算法核心，完整提供「封存檔內建瀏覽、直接增刪修改、編碼亂碼自動修正、Finder 第一層 Bolt 選單與可調式透明度」。",
+      heroDesc: "告別雙擊就整包解壓一地的困擾。BoltZip 結合純淨開源演算法核心，完整提供「封存檔內建瀏覽、直接增刪修改、自動刪除 .DS_Store、編碼亂碼自動修正、Finder 第一層 Bolt 選單與舊版 macOS 自適應介面」。",
       heroCta1: "▶ 體驗互動模擬器", heroCta2: "取得原始碼並建置",
       stat1Val: "6 大開源核心", stat2Val: "第一層右鍵 Bolt ›", stat2Lbl: "原生 Finder Sync 延伸功能", stat3Val: "4 國語言自動切換",
-      archLayer1: "液態玻璃可調透明度 · Finder 第一層 Bolt › 選單 · Quick Look 預覽",
+      archLayer1: "macOS 26+ 液態玻璃 / 舊版原生介面 · Finder Bolt › · Quick Look",
       simTitle: "Windows Zip 經典操作 · 即時介面模擬器",
-      simSub: "點擊工具列體驗「封存檔內建瀏覽、Windows 中文亂碼修正、AE-2 加密與 CRC32 驗證」",
+      simSub: "點擊工具列體驗「封存檔內建瀏覽、自動清除 .DS_Store、Windows 中文亂碼修正與 CRC32 驗證」",
       featHead: "為什麼 macOS 也需要「Windows 級」壓縮工具？",
       featSub: "針對 macOS 內建封存工具的高頻痛點全面重塑",
       qsTitle: "從 GitHub 取得並建置 BoltZip",
-      qsSub: "內含完整 SwiftPM 專案、打包腳本與開發者指引 AGENTS.md"
+      qsSub: "內含完整 SwiftPM 專案、Universal 打包腳本與開發者指引 AGENTS.md"
     },
     "en": {
       navSim: "Simulator", navFeat: "Features", navAlgo: "Codecs", navBuild: "Build", navGitHub: "GitHub Repo",
-      heroBadge: "Built for macOS 27.3 · Liquid Glass UI · MIT Open Source",
+      heroBadge: "macOS 14+ Universal (Apple Silicon & Intel) · 26+ Liquid Glass · MIT",
       heroTitle: "<span class=\"gradient-text\">Lightning-fast archives.</span><br />Liquid-clear macOS craft.",
-      heroDesc: "Stop extracting entire archives just to peek inside. BoltZip combines transparent open-source codecs (zlib, Zstandard, LZMA2, bzip2, LZ4) with in-archive browsing, live ZIP editing, CJK encoding auto-fix, adjustable translucency, and a top-level Finder “Bolt ›” menu.",
+      heroDesc: "Stop extracting entire archives just to peek inside. BoltZip pairs open-source codecs (zlib, Zstandard, LZMA2, bzip2, LZ4) with in-archive browsing, live ZIP editing, automatic .DS_Store removal, CJK encoding auto-fix, and a top-level Finder “Bolt ›” menu.",
       heroCta1: "▶ Try Interactive Simulator", heroCta2: "Clone & Build",
       stat1Val: "6 Open Codecs", stat2Val: "Top-Level Bolt ›", stat2Lbl: "Native Finder Sync Extension", stat3Val: "4 Languages",
-      archLayer1: "Adjustable Liquid Glass · Top-level Finder Bolt › · Quick Look",
+      archLayer1: "macOS 26+ Liquid Glass / Legacy Fallback · Finder Bolt › · Quick Look",
       simTitle: "Windows-Zip Workflow · Live UI Simulator",
-      simSub: "Test in-archive editing, Windows GBK filename auto-fix, AE-2 AES-256 & CRC32 verification",
+      simSub: "Test in-archive editing, .DS_Store cleanup, Windows GBK filename auto-fix & CRC32 checks",
       featHead: "Why macOS Deserves a Full-Featured Archive Workbench",
       featSub: "Engineered to solve every daily friction of the built-in macOS Archive Utility",
       qsTitle: "Clone & Build BoltZip from GitHub",
-      qsSub: "Includes full SwiftPM sources, app bundler scripts, and AGENTS.md for contributors"
+      qsSub: "Includes full SwiftPM sources, Universal app bundler scripts, and AGENTS.md"
     },
     "ja": {
       navSim: "シミュレーター", navFeat: "主な機能", navAlgo: "圧縮エンジン", navBuild: "ビルド手順", navGitHub: "GitHub",
-      heroBadge: "macOS 27.3 対応 · Liquid Glass UI · MIT オープンソース",
+      heroBadge: "macOS 14+ Universal (Apple Silicon & Intel) · 26+ Liquid Glass · MIT",
       heroTitle: "<span class=\"gradient-text\">稲妻の速さ、ガラスの透明感</span><br />macOS のための書庫スタジオ。",
-      heroDesc: "中身を見るたびに丸ごと展開する必要はありません。BoltZip はオープンソース圧縮基盤に加え、展開不要の閲覧・編集、文字化け自動補正、透過度調整、Finder 第一階層「Bolt ›」メニューを提供します。",
+      heroDesc: "中身を見るたびに丸ごと展開する必要はありません。BoltZip はオープンソース圧縮基盤に加え、展開不要の閲覧・編集、.DS_Store 自動除去、文字化け補正、Finder 第一階層「Bolt ›」メニューを提供します。",
       heroCta1: "▶ インタラクティブ体験", heroCta2: "ソースを取得してビルド",
       stat1Val: "6 つの圧縮方式", stat2Val: "第一階層 Bolt ›", stat2Lbl: "ネイティブ Finder Sync 拡張", stat3Val: "4 言語対応",
-      archLayer1: "透過度調整可能な Liquid Glass · Finder 第一階層 Bolt › · Quick Look",
+      archLayer1: "macOS 26+ Liquid Glass / 旧版標準UI · Finder Bolt › · Quick Look",
       simTitle: "Windows Zip 級ワークフロー · インタラクティブ体験",
-      simSub: "書庫内での直接追加・削除、文字化け補正、AE-2 暗号化と整合性検証をブラウザで体験",
+      simSub: "書庫内編集、.DS_Store 自動除外、文字化け補正と整合性検証をブラウザで体験",
       featHead: "macOS にも高機能な書庫ワークベンチを",
       featSub: "標準アーカイブユーティリティの不便さをエンジニアリングで解消",
       qsTitle: "GitHub からクローンしてビルド",
-      qsSub: "SwiftPM 構成、アプリ化スクリプト、開発者向け AGENTS.md を同梱"
+      qsSub: "SwiftPM 構成、Universal アプリ化スクリプト、開発者向け AGENTS.md を同梱"
     }
   };
 

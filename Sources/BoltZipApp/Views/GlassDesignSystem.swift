@@ -1,4 +1,159 @@
+import AppKit
+import Foundation
 import SwiftUI
+
+/// Runtime platform capabilities and architecture descriptors for OS backward compatibility.
+enum BoltPlatformCapabilities {
+    /// Liquid Glass APIs (`glassEffect`, `GlassEffectContainer`, `.glass` buttons) require macOS 26.0+.
+    static var supportsLiquidGlass: Bool {
+        if #available(macOS 26.0, *) {
+            return true
+        }
+        return false
+    }
+
+    static var architectureLabel: String {
+        #if arch(arm64)
+        return "arm64"
+        #elseif arch(x86_64)
+        return "x86_64"
+        #else
+        return "unknown"
+        #endif
+    }
+
+    static var osShortVersion: String {
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        return v.patchVersion > 0
+            ? "\(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
+            : "\(v.majorVersion).\(v.minorVersion)"
+    }
+
+    static func runtimeVersionSummary(appVersion: String) -> String {
+        "v\(appVersion) · macOS \(osShortVersion) · \(architectureLabel)"
+    }
+}
+
+enum BoltSurfaceTone {
+    case regular
+    case clear
+}
+
+/// Wraps `GlassEffectContainer` on macOS 26+ and renders children directly when glass is disabled.
+struct BoltGlassContainer<Content: View>: View {
+    let spacing: CGFloat?
+    @ViewBuilder let content: () -> Content
+
+    init(spacing: CGFloat? = nil, @ViewBuilder content: @escaping () -> Content) {
+        self.spacing = spacing
+        self.content = content
+    }
+
+    var body: some View {
+        if #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: spacing) {
+                content()
+            }
+        } else {
+            content()
+        }
+    }
+}
+
+@available(macOS 26.0, *)
+private func makeBoltGlass(_ tone: BoltSurfaceTone, tint: Color?, interactive: Bool) -> Glass {
+    var glass: Glass = (tone == .regular ? .regular : .clear)
+    if let tint {
+        glass = glass.tint(tint)
+    }
+    if interactive {
+        glass = glass.interactive()
+    }
+    return glass
+}
+
+extension View {
+    /// Applies Liquid Glass surface styling on macOS 26+ and falls back to solid native surfaces on older macOS.
+    @ViewBuilder
+    func boltGlassSurface<S: InsettableShape>(
+        _ tone: BoltSurfaceTone = .regular,
+        tint: Color? = nil,
+        interactive: Bool = false,
+        in shape: S
+    ) -> some View {
+        if #available(macOS 26.0, *) {
+            self.glassEffect(makeBoltGlass(tone, tint: tint, interactive: interactive), in: shape)
+        } else {
+            switch tone {
+            case .clear:
+                self.background(tint ?? Color.clear, in: shape)
+            case .regular:
+                self
+                    .background(Color(nsColor: .controlBackgroundColor).opacity(0.95), in: shape)
+                    .background(tint ?? Color.clear, in: shape)
+                    .overlay(
+                        shape.strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.75)
+                    )
+            }
+        }
+    }
+
+    @ViewBuilder
+    func boltGlassButton() -> some View {
+        if #available(macOS 26.0, *) {
+            self.buttonStyle(.glass)
+        } else {
+            self.buttonStyle(.bordered)
+        }
+    }
+
+    @ViewBuilder
+    func boltGlassProminentButton() -> some View {
+        if #available(macOS 26.0, *) {
+            self.buttonStyle(.glassProminent)
+        } else {
+            self.buttonStyle(.borderedProminent)
+        }
+    }
+
+    @ViewBuilder
+    func boltSoftTopScrollEdgeEffect() -> some View {
+        if #available(macOS 26.0, *) {
+            self.scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func boltWindowToolbarBackgroundVisibility(_ visibility: Visibility) -> some View {
+        if #available(macOS 15.0, *) {
+            self.toolbarBackgroundVisibility(visibility, for: .windowToolbar)
+        } else {
+            self.toolbarBackground(visibility, for: .windowToolbar)
+        }
+    }
+
+    @ViewBuilder
+    func boltWindowContainerBackground(_ style: AnyShapeStyle) -> some View {
+        if #available(macOS 15.0, *) {
+            self.containerBackground(style, for: .window)
+        } else {
+            self
+        }
+    }
+}
+
+extension ToolbarContent {
+    @ToolbarContentBuilder
+    func boltHiddenSharedBackground() -> some ToolbarContent {
+        if #available(macOS 26.0, *) {
+            self.sharedBackgroundVisibility(.hidden)
+        } else {
+            self
+        }
+    }
+}
 
 struct BoltZMark: Shape {
     func path(in rect: CGRect) -> Path {
@@ -50,7 +205,7 @@ struct BoltLogoBadge: View {
             Circle()
                 .fill(Color.cyan.opacity(0.16))
                 .frame(width: size, height: size)
-                .glassEffect(.regular.tint(.cyan.opacity(0.18)), in: Circle())
+                .boltGlassSurface(.regular, tint: .cyan.opacity(0.18), in: Circle())
 
             BoltZMark()
                 .fill(

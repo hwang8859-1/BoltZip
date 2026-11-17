@@ -2,6 +2,21 @@
 
 All notable changes to **BoltZip** will be documented in this file.
 
+## [0.9.0] - 2026-11-17
+
+### Added & Improved
+- **macOS 14.0+ & Universal Binary (`arm64` + `x86_64`) Support**:
+  - Lowered minimum deployment target from `27.2` to **macOS 14.0 (Sonoma)** for `BoltZip.app`, `boltzip` CLI, and `BoltZipFinderSync.appex`.
+  - Added [`Scripts/build_universal_deps.sh`](Scripts/build_universal_deps.sh) to cross-compile Universal (`arm64` + `x86_64`, `minOS 14.0`) static archives (`libzstd.a`, `liblzma.a`, `liblz4.a`) into `Vendor/Compression/`, enabling zero-Homebrew Universal builds for both Apple Silicon and Intel Macs.
+  - Updated [`Scripts/build_app.sh`](Scripts/build_app.sh) to produce Universal `BoltZip.app`, Universal `BoltZip-0.9.0-macOS-universal.zip`, clean source archives (`BoltZip-0.9.0-source.tar.gz` / `.zip`), and `SHA256SUMS`.
+- **Automatic Liquid Glass Fallback on Older macOS**:
+  - Wrapped all `macOS 26.0+` Liquid Glass modifiers (`.glassEffect`, `GlassEffectContainer`, `.buttonStyle(.glass/.glassProminent)`, `.scrollEdgeEffectStyle`, `.sharedBackgroundVisibility`) and `macOS 15.0+` window modifiers inside `GlassDesignSystem.swift` compatibility helpers.
+  - On macOS 14 & 15, glass effects and window translucency are automatically disabled in favor of clean native solid surfaces and standard buttons, and Liquid Glass preference toggles are hidden.
+- **Highlighted `.DS_Store` & macOS Junk Auto-Removal**:
+  - Promoted automatic `.DS_Store` / `__MACOSX` / `._*` cleanup into the welcome screen feature card, 4-language READMEs, and showcase feature grid.
+- **Showcase Fix**:
+  - Fixed duplicated `siteI18n` blocks inside `showcase/app.js` and refreshed showcase metadata for `v0.9.0` and Universal `macOS 14.0+`.
+
 ## [0.1.0] - 2026-11-17
 
 ### Added

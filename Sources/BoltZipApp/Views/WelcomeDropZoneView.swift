@@ -39,7 +39,7 @@ struct WelcomeDropZoneView: View {
                         .padding(.bottom, 12)
                     }
                     .contentMargins(.top, topOffset, for: .scrollIndicators)
-                    .scrollEdgeEffectStyle(.soft, for: .top)
+                    .boltSoftTopScrollEdgeEffect()
                     .frame(width: w, height: h)
                 } else {
                     VStack(spacing: 10) {
@@ -69,11 +69,12 @@ struct WelcomeDropZoneView: View {
     private func titlebarGlassOverlay(width: CGFloat, height: CGFloat) -> some View {
         let isDark = colorScheme == .dark
         Group {
-            if vm.isWindowTranslucent {
+            if vm.effectiveWindowTranslucency {
                 Rectangle()
                     .fill(Color.clear)
-                    .glassEffect(
-                        .regular.tint(Color.white.opacity(isDark ? 0.04 : 0.10)),
+                    .boltGlassSurface(
+                        .regular,
+                        tint: Color.white.opacity(isDark ? 0.04 : 0.10),
                         in: Rectangle()
                     )
                     .overlay(alignment: .bottom) {
@@ -95,7 +96,7 @@ struct WelcomeDropZoneView: View {
 
     @ViewBuilder
     private func finderBanner(l: L10n, isNarrow: Bool) -> some View {
-        GlassEffectContainer(spacing: 8) {
+        BoltGlassContainer(spacing: 8) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Image(systemName: vm.quickActionsInstalled ? "checkmark.circle.fill" : "contextualmenu.and.cursorarrow")
@@ -142,8 +143,9 @@ struct WelcomeDropZoneView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .glassEffect(
-                .regular.tint((vm.quickActionsInstalled ? Color.green : Color.cyan).opacity(0.10)),
+            .boltGlassSurface(
+                .regular,
+                tint: (vm.quickActionsInstalled ? Color.green : Color.cyan).opacity(0.10),
                 in: RoundedRectangle(cornerRadius: 12, style: .continuous)
             )
         }
@@ -154,20 +156,20 @@ struct WelcomeDropZoneView: View {
         Button(l.extensionSettings) {
             vm.openFinderExtensionSettings()
         }
-        .buttonStyle(.glass)
+        .boltGlassButton()
         .controlSize(.small)
 
         if vm.quickActionsInstalled {
             Button(l.resync) {
                 finderActionToast = vm.installFinderQuickActions()
             }
-            .buttonStyle(.glass)
+            .boltGlassButton()
             .controlSize(.small)
         } else {
             Button(l.enableBoltMenu) {
                 finderActionToast = vm.installFinderQuickActions()
             }
-            .buttonStyle(.glassProminent)
+            .boltGlassProminentButton()
             .controlSize(.small)
         }
     }
@@ -199,7 +201,7 @@ struct WelcomeDropZoneView: View {
                         .padding(.horizontal, 14)
                 }
 
-                GlassEffectContainer(spacing: 7) {
+                BoltGlassContainer(spacing: 7) {
                     if isNarrow {
                         LazyVGrid(
                             columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)],
@@ -220,10 +222,10 @@ struct WelcomeDropZoneView: View {
             .padding(.horizontal, 12)
         }
         .frame(maxWidth: .infinity, minHeight: fillsSpace ? 155 : 165, maxHeight: fillsSpace ? .infinity : nil)
-        .glassEffect(
-            .regular
-                .tint((isDropTargeted ? Color.cyan : Color.indigo).opacity(isDropTargeted ? 0.22 : 0.08))
-                .interactive(),
+        .boltGlassSurface(
+            .regular,
+            tint: (isDropTargeted ? Color.cyan : Color.indigo).opacity(isDropTargeted ? 0.22 : 0.08),
+            interactive: true,
             in: RoundedRectangle(cornerRadius: 18, style: .continuous)
         )
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
@@ -243,7 +245,7 @@ struct WelcomeDropZoneView: View {
                 .lineLimit(1)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
         }
-        .buttonStyle(.glassProminent)
+        .boltGlassProminentButton()
         .controlSize(.regular)
 
         Button {
@@ -254,7 +256,7 @@ struct WelcomeDropZoneView: View {
                 .lineLimit(1)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
         }
-        .buttonStyle(.glass)
+        .boltGlassButton()
         .controlSize(.regular)
 
         Button {
@@ -265,7 +267,7 @@ struct WelcomeDropZoneView: View {
                 .lineLimit(1)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
         }
-        .buttonStyle(.glass)
+        .boltGlassButton()
         .controlSize(.regular)
 
         Button {
@@ -276,7 +278,7 @@ struct WelcomeDropZoneView: View {
                 .lineLimit(1)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
         }
-        .buttonStyle(.glass)
+        .boltGlassButton()
         .controlSize(.regular)
     }
 
@@ -318,12 +320,13 @@ struct WelcomeDropZoneView: View {
 
             FeatureRow(icon: "folder.fill.badge.plus", title: l.featBrowseTitle, detail: l.featBrowseDesc)
             FeatureRow(icon: "wand.and.stars", title: l.featSmartTitle, detail: l.featSmartDesc)
+            FeatureRow(icon: "trash.slash.fill", title: l.featMacJunkTitle, detail: l.featMacJunkDesc)
             FeatureRow(icon: "character.book.closed.fill", title: l.featEncodingTitle, detail: l.featEncodingDesc)
             FeatureRow(icon: "lock.shield.fill", title: l.featCryptoTitle, detail: l.featCryptoDesc)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .boltGlassSurface(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     @ViewBuilder
@@ -391,7 +394,7 @@ struct WelcomeDropZoneView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .boltGlassSurface(.clear, interactive: true, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .contextMenu {
                         Button(l.ctxOpenBrowse) { vm.openArchive(url: url) }
                         Divider()
@@ -407,7 +410,7 @@ struct WelcomeDropZoneView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .boltGlassSurface(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

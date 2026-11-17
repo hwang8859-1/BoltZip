@@ -68,7 +68,7 @@ struct ExtractOptionsSheet: View {
                             .truncationMode(.middle)
                         Spacer()
                         Button(l.browse) { chooseDest() }
-                            .buttonStyle(.glass)
+                            .boltGlassButton()
                     }
                 }
 
@@ -101,11 +101,11 @@ struct ExtractOptionsSheet: View {
 
             Divider()
 
-            GlassEffectContainer(spacing: 10) {
+            BoltGlassContainer(spacing: 10) {
                 HStack {
                     Spacer()
                     Button(l.cancel) { dismiss() }
-                        .buttonStyle(.glass)
+                        .boltGlassButton()
                         .keyboardShortcut(.cancelAction)
                     Button(l.startExtract) {
                         let mode: ExtractMode
@@ -126,7 +126,7 @@ struct ExtractOptionsSheet: View {
                         dismiss()
                         vm.runExtract(options: opts)
                     }
-                    .buttonStyle(.glassProminent)
+                    .boltGlassProminentButton()
                     .keyboardShortcut(.defaultAction)
                 }
             }
@@ -168,10 +168,10 @@ struct PasswordPromptSheet: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 260)
 
-            GlassEffectContainer(spacing: 10) {
+            BoltGlassContainer(spacing: 10) {
                 HStack {
                     Button(l.cancel) { dismiss() }
-                        .buttonStyle(.glass)
+                        .boltGlassButton()
                         .keyboardShortcut(.cancelAction)
                     Button(l.confirm) {
                         let pw = password
@@ -186,7 +186,7 @@ struct PasswordPromptSheet: View {
                             vm.testIntegrity(password: pw, archiveURL: archiveURL)
                         }
                     }
-                    .buttonStyle(.glassProminent)
+                    .boltGlassProminentButton()
                     .keyboardShortcut(.defaultAction)
                     .disabled(password.isEmpty)
                 }
@@ -240,7 +240,7 @@ struct EntryPropertiesSheet: View {
                 PropRow(title: l.colModified, value: Self.formatter.string(from: entry.modifiedDate))
             }
             .padding(14)
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .boltGlassSurface(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .padding(14)
 
             Spacer()
@@ -248,7 +248,7 @@ struct EntryPropertiesSheet: View {
             HStack {
                 Spacer()
                 Button(l.close) { dismiss() }
-                    .buttonStyle(.glassProminent)
+                    .boltGlassProminentButton()
                     .keyboardShortcut(.defaultAction)
             }
             .padding([.horizontal, .bottom], 14)
@@ -319,7 +319,7 @@ struct IntegrityReportSheet: View {
             HStack {
                 Spacer()
                 Button(l.close) { dismiss() }
-                    .buttonStyle(.glassProminent)
+                    .boltGlassProminentButton()
                     .keyboardShortcut(.defaultAction)
             }
             .padding(12)
@@ -353,7 +353,7 @@ struct BenchmarkSheet: View {
                 Button(isRunning ? "..." : l.rerunBench) {
                     runBench()
                 }
-                .buttonStyle(.glass)
+                .boltGlassButton()
                 .disabled(isRunning)
             }
             .padding(14)
@@ -393,7 +393,7 @@ struct BenchmarkSheet: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button(l.done) { dismiss() }
-                    .buttonStyle(.glassProminent)
+                    .boltGlassProminentButton()
                     .keyboardShortcut(.defaultAction)
             }
             .padding(12)
@@ -450,16 +450,16 @@ struct SimpleNamePromptSheet: View {
             TextField(placeholder, text: $text)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 260)
-            GlassEffectContainer(spacing: 10) {
+            BoltGlassContainer(spacing: 10) {
                 HStack {
                     Button(l.cancel) { dismiss() }
-                        .buttonStyle(.glass)
+                        .boltGlassButton()
                         .keyboardShortcut(.cancelAction)
                     Button(confirmLabel) {
                         onConfirm(text)
                         dismiss()
                     }
-                    .buttonStyle(.glassProminent)
+                    .boltGlassProminentButton()
                     .keyboardShortcut(.defaultAction)
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -505,19 +505,19 @@ struct SettingsView: View {
                         Button(l.extensionSettings) {
                             vm.openFinderExtensionSettings()
                         }
-                        .buttonStyle(.glass)
+                        .boltGlassButton()
 
                         Button(vm.quickActionsInstalled ? l.reinstallOrSync : l.installNow) {
                             feedbackMessage = vm.installFinderQuickActions()
                         }
-                        .buttonStyle(.glassProminent)
+                        .boltGlassProminentButton()
 
                         if vm.quickActionsInstalled {
                             Button(l.disableNow) {
                                 vm.uninstallFinderQuickActions()
                                 feedbackMessage = l.finderDisabledSummary
                             }
-                            .buttonStyle(.glass)
+                            .boltGlassButton()
                         }
                     }
                     if let feedbackMessage {
@@ -548,11 +548,13 @@ struct SettingsView: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                    Toggle(l.enableTranslucency, isOn: $vm.isWindowTranslucent)
-                    if vm.isWindowTranslucent {
-                        HStack {
-                            Text("\(l.opacityLabel): \(Int((vm.windowBackgroundOpacity * 100).rounded()))%")
-                            Slider(value: $vm.windowBackgroundOpacity, in: 0.25...1.0, step: 0.05)
+                    if vm.supportsLiquidGlass {
+                        Toggle(l.enableTranslucency, isOn: $vm.isWindowTranslucent)
+                        if vm.isWindowTranslucent {
+                            HStack {
+                                Text("\(l.opacityLabel): \(Int((vm.windowBackgroundOpacity * 100).rounded()))%")
+                                Slider(value: $vm.windowBackgroundOpacity, in: 0.25...1.0, step: 0.05)
+                            }
                         }
                     }
                 }
@@ -583,7 +585,7 @@ struct SettingsView: View {
                         .font(.callout.monospaced())
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .glassEffect(.regular.tint(.cyan.opacity(0.14)), in: Capsule())
+                        .boltGlassSurface(.regular, tint: .cyan.opacity(0.14), in: Capsule())
                 }
             }
             .tabItem {
@@ -603,14 +605,14 @@ struct AboutView: View {
 
     var body: some View {
         let l = vm.l10n
-        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.9.0"
         VStack(spacing: 14) {
             BoltLogoBadge(size: 72)
 
             VStack(spacing: 4) {
                 Text("BoltZip")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
-                Text("v\(appVersion) · macOS 27.3 · arm64")
+                Text(BoltPlatformCapabilities.runtimeVersionSummary(appVersion: appVersion))
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
@@ -621,7 +623,7 @@ struct AboutView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .glassEffect(.regular.tint(.cyan.opacity(0.12)), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .boltGlassSurface(.regular, tint: .cyan.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             Text(l.aboutDesc)
                 .font(.system(size: 12))
@@ -639,7 +641,7 @@ struct AboutView: View {
             }
             .padding(.top, 2)
 
-            GlassEffectContainer(spacing: 8) {
+            BoltGlassContainer(spacing: 8) {
                 HStack(spacing: 10) {
                     Button {
                         if let url = URL(string: "https://github.com/hwang8859-1/BoltZip") {
@@ -648,21 +650,29 @@ struct AboutView: View {
                     } label: {
                         Label(l.openGitHub, systemImage: "chevron.left.forwardslash.chevron.right")
                     }
-                    .buttonStyle(.glassProminent)
+                    .boltGlassProminentButton()
 
                     Button {
                         vm.openShowcaseWebsite()
                     } label: {
                         Label(l.showcasePage, systemImage: "safari")
                     }
-                    .buttonStyle(.glass)
+                    .boltGlassButton()
                 }
             }
         }
         .padding(24)
         .frame(width: 420)
-        .background(BoltAmbientBackdrop().opacity(0.5))
-        .containerBackground(.ultraThinMaterial, for: .window)
+        .background {
+            if vm.supportsLiquidGlass {
+                BoltAmbientBackdrop().opacity(0.5)
+            } else {
+                Color(nsColor: .windowBackgroundColor)
+            }
+        }
+        .boltWindowContainerBackground(
+            vm.supportsLiquidGlass ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
+        )
         .preferredColorScheme(vm.appTheme.colorScheme)
     }
 }

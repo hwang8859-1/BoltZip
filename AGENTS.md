@@ -4,11 +4,11 @@ Welcome! This file gives human contributors and AI coding agents an accurate map
 
 ## 1. Project Overview
 
-**BoltZip** is an open-source macOS archive manager (targeting **macOS 27.2+ / Apple Silicon `arm64`**) inspired by classic Windows archive tools (7-Zip / WinZip / Bandizip), built with **Swift 6**, **SwiftUI + AppKit** (Liquid Glass UI), a pure-Swift/C open-source core (`BoltZipCore` + `CBoltCompression`), a CLI (`boltzip`), and a sandboxed Finder Sync Extension (`BoltZipFinderSync`).
+**BoltZip** is an open-source macOS archive manager (targeting **macOS 14.0+ / Universal `arm64` + `x86_64`**, with native Liquid Glass on macOS 26+ and clean non-glass fallback on macOS 14–15) inspired by classic Windows archive tools (7-Zip / WinZip / Bandizip), built with **Swift 6**, **SwiftUI + AppKit**, a pure-Swift/C open-source core (`BoltZipCore` + `CBoltCompression`), a CLI (`boltzip`), and a sandboxed Finder Sync Extension (`BoltZipFinderSync`).
 
 - **Repository**: `https://github.com/hwang8859-1/BoltZip.git`
 - **License**: MIT ([LICENSE](LICENSE))
-- **Toolchain**: Swift 6.0+, Xcode / Command Line Tools with macOS 27.2+ SDK, Homebrew `zstd`, `xz` (`liblzma`), `lz4` (statically linked).
+- **Toolchain**: Swift 6.0+, Xcode / Command Line Tools with macOS 26+ / 27.2+ SDK, Universal static `zstd`, `xz` (`liblzma`), `lz4` in `Vendor/Compression/` (regenerable via `Scripts/build_universal_deps.sh`).
 
 ---
 
@@ -18,8 +18,10 @@ Welcome! This file gives human contributors and AI coding agents an accurate map
 BoltZip/
 ├── Package.swift                        # SwiftPM manifest (CBoltCompression, BoltZipCore, boltzip, BoltZipApp, tests)
 ├── Scripts/
-│   ├── build_app.sh                     # Release build -> dist/BoltZip.app + BoltZipFinderSync.appex + AppIcon.icns + codesign
+│   ├── build_app.sh                     # Release Universal (arm64 + x86_64) build -> dist/BoltZip.app + BoltZipFinderSync.appex + AppIcon.icns + codesign
+│   ├── build_universal_deps.sh          # Cross-compile Universal (arm64 + x86_64, minOS 14.0) static zstd/xz/lz4 into Vendor/Compression/
 │   └── generate_icon.swift              # CoreGraphics procedural 1024x1024 macOS iconset generator
+├── Vendor/Compression/                  # Prebuilt Universal (arm64 + x86_64, minOS 14.0) headers & static libs (zstd, xz, lz4)
 ├── Sources/
 │   ├── CBoltCompression/                # C wrapper statically linking zlib, libzstd, liblzma, libbz2, liblz4
 │   │   ├── include/bolt_compression.h
@@ -80,7 +82,7 @@ open dist/BoltZip.app
 ```
 
 ### Static Linking Note
-`Package.swift` links system `libz` and `libbz2` alongside Homebrew static archives (`/opt/homebrew/opt/{zstd,xz,lz4}/lib/lib*.a`) so `dist/BoltZip.app` and `boltzip` have **zero Homebrew runtime dylib dependencies**. If running on a machine with Homebrew in `/usr/local`, update the paths in `Package.swift` before building.
+`Package.swift` links system `libz` and `libbz2` alongside the Universal (`arm64` + `x86_64`, `minOS 14.0`) static archives in `Vendor/Compression/lib/lib{zstd,lzma,lz4}.a` (with automatic fallback to `/opt/homebrew` or `/usr/local` if `Vendor/Compression` is absent) so `dist/BoltZip.app` and `boltzip` have **zero Homebrew runtime dylib dependencies**. Run `./Scripts/build_universal_deps.sh` to regenerate `Vendor/Compression` from SHA256-verified upstream sources.
 
 ---
 

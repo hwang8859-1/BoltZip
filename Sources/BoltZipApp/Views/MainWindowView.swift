@@ -30,7 +30,7 @@ struct MainWindowView: View {
         .background(windowBackingLayer)
         .background(
             WindowStyleConfigurator(
-                isTranslucent: vm.isWindowTranslucent,
+                isTranslucent: vm.effectiveWindowTranslucency,
                 backgroundOpacity: vm.windowBackgroundOpacity,
                 minWidth: minW,
                 minHeight: minH,
@@ -39,11 +39,10 @@ struct MainWindowView: View {
         )
         .frame(minWidth: minW, minHeight: minH)
         .preferredColorScheme(vm.appTheme.colorScheme)
-        .containerBackground(
-            vm.isWindowTranslucent ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)),
-            for: .window
+        .boltWindowContainerBackground(
+            vm.effectiveWindowTranslucency ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
         )
-        .toolbarBackgroundVisibility(vm.isWindowTranslucent ? .hidden : .automatic, for: .windowToolbar)
+        .boltWindowToolbarBackgroundVisibility(vm.effectiveWindowTranslucency ? .hidden : .automatic)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 if vm.listing != nil {
@@ -163,9 +162,9 @@ struct MainWindowView: View {
                     }
                     .padding(.horizontal, 4)
                     .frame(height: 30)
-                    .glassEffect(.regular.interactive(), in: Capsule())
+                    .boltGlassSurface(.regular, interactive: true, in: Capsule())
                 }
-                .sharedBackgroundVisibility(.hidden)
+                .boltHiddenSharedBackground()
             }
         }
         .overlay {
@@ -181,7 +180,7 @@ struct MainWindowView: View {
                             .lineLimit(1)
                     }
                     .padding(18)
-                    .glassEffect(.regular.tint(.cyan.opacity(0.08)), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .boltGlassSurface(.regular, tint: .cyan.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .shadow(radius: 16)
                 }
             }
@@ -233,7 +232,7 @@ struct MainWindowView: View {
 
     @ViewBuilder
     private var windowBackingLayer: some View {
-        if vm.isWindowTranslucent {
+        if vm.effectiveWindowTranslucency {
             ZStack {
                 BoltAmbientBackdrop()
                     .opacity(max(0.15, 0.9 - vm.windowBackgroundOpacity * 0.45))
@@ -277,7 +276,7 @@ struct MainWindowView: View {
                                 .font(.caption2.weight(.bold))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 2)
-                                .glassEffect(.regular.tint(.cyan.opacity(0.18)), in: Capsule())
+                                .boltGlassSurface(.regular, tint: .cyan.opacity(0.18), in: Capsule())
                             Spacer()
                             if listing.hasEncryptedEntries {
                                 Label(l.encryptedBadge, systemImage: "lock.fill")
@@ -311,14 +310,14 @@ struct MainWindowView: View {
                         }
                     }
                     .padding(10)
-                    .glassEffect(.regular.tint(.cyan.opacity(0.06)), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .boltGlassSurface(.regular, tint: .cyan.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .padding([.horizontal, .bottom], 8)
                 }
             }
             .navigationSplitViewColumnWidth(min: 165, ideal: 210, max: 260)
         } detail: {
             VStack(spacing: 8) {
-                GlassEffectContainer(spacing: 8) {
+                BoltGlassContainer(spacing: 8) {
                     HStack(spacing: 8) {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 3) {
@@ -341,10 +340,10 @@ struct MainWindowView: View {
                                         .padding(.vertical, 3)
                                     }
                                     .buttonStyle(.plain)
-                                    .glassEffect(
-                                        crumb.path == vm.currentFolder
-                                            ? .regular.tint(.cyan.opacity(0.18)).interactive()
-                                            : .clear.interactive(),
+                                    .boltGlassSurface(
+                                        crumb.path == vm.currentFolder ? .regular : .clear,
+                                        tint: crumb.path == vm.currentFolder ? .cyan.opacity(0.18) : nil,
+                                        interactive: true,
                                         in: Capsule()
                                     )
                                 }
@@ -364,11 +363,11 @@ struct MainWindowView: View {
                         }
                         .padding(.horizontal, 9)
                         .padding(.vertical, 4)
-                        .glassEffect(.regular, in: Capsule())
+                        .boltGlassSurface(.regular, in: Capsule())
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .boltGlassSurface(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .padding(.horizontal, 10)
                 .padding(.top, 2)
@@ -470,7 +469,7 @@ struct MainWindowView: View {
                                     .font(.subheadline.weight(.semibold))
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 8)
-                                    .glassEffect(.regular.tint(.cyan.opacity(0.22)).interactive(), in: Capsule())
+                                    .boltGlassSurface(.regular, tint: .cyan.opacity(0.22), interactive: true, in: Capsule())
                             }
                             .padding(.horizontal, 10)
                     }
@@ -501,7 +500,7 @@ struct MainWindowView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .boltGlassSurface(.regular, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .padding([.horizontal, .bottom], 10)
                 }
             }
