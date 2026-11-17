@@ -34,79 +34,101 @@ func renderIcon(size: Int) -> Data? {
     let corner = rect.width * 0.225
     let squircle = CGPath(roundedRect: rect, cornerWidth: corner, cornerHeight: corner, transform: nil)
 
-    // Shadow
+    // Outer drop shadow
     ctx.saveGState()
-    ctx.setShadow(offset: CGSize(width: 0, height: -s * 0.025), blur: s * 0.05, color: NSColor.black.withAlphaComponent(0.35).cgColor)
+    ctx.setShadow(offset: CGSize(width: 0, height: -s * 0.025), blur: s * 0.05, color: NSColor.black.withAlphaComponent(0.38).cgColor)
     ctx.addPath(squircle)
-    ctx.setFillColor(NSColor(red: 0.06, green: 0.09, blue: 0.19, alpha: 1.0).cgColor)
+    ctx.setFillColor(NSColor(red: 0.05, green: 0.08, blue: 0.18, alpha: 1.0).cgColor)
     ctx.fillPath()
     ctx.restoreGState()
 
-    // Clip to squircle for gradient background
+    // Clip to squircle
     ctx.saveGState()
     ctx.addPath(squircle)
     ctx.clip()
 
     let cs = CGColorSpaceCreateDeviceRGB()
     let bgColors = [
-        NSColor(red: 0.07, green: 0.12, blue: 0.26, alpha: 1.0).cgColor,
-        NSColor(red: 0.12, green: 0.16, blue: 0.38, alpha: 1.0).cgColor,
-        NSColor(red: 0.04, green: 0.07, blue: 0.15, alpha: 1.0).cgColor
+        NSColor(red: 0.05, green: 0.10, blue: 0.24, alpha: 1.0).cgColor,
+        NSColor(red: 0.11, green: 0.15, blue: 0.37, alpha: 1.0).cgColor,
+        NSColor(red: 0.03, green: 0.05, blue: 0.13, alpha: 1.0).cgColor
     ] as CFArray
-    if let grad = CGGradient(colorsSpace: cs, colors: bgColors, locations: [0.0, 0.55, 1.0]) {
+    if let grad = CGGradient(colorsSpace: cs, colors: bgColors, locations: [0.0, 0.52, 1.0]) {
         ctx.drawLinearGradient(grad, start: CGPoint(x: 0, y: s), end: CGPoint(x: s, y: 0), options: [])
     }
 
-    // Subtle glass top highlight
-    let highlightRect = CGRect(x: rect.minX, y: rect.midY, width: rect.width, height: rect.height * 0.55)
+    // Soft radial cyan/indigo ambient glow behind the emblem
+    let auraColors = [
+        NSColor(red: 0.22, green: 0.74, blue: 0.98, alpha: 0.28).cgColor,
+        NSColor(red: 0.39, green: 0.40, blue: 0.95, alpha: 0.12).cgColor,
+        NSColor.clear.cgColor
+    ] as CFArray
+    if let aura = CGGradient(colorsSpace: cs, colors: auraColors, locations: [0.0, 0.5, 1.0]) {
+        ctx.drawRadialGradient(
+            aura,
+            startCenter: CGPoint(x: s * 0.5, y: s * 0.5),
+            startRadius: 0,
+            endCenter: CGPoint(x: s * 0.5, y: s * 0.5),
+            endRadius: s * 0.44,
+            options: []
+        )
+    }
+
+    // Subtle glass top specular sheen
     let hlColors = [
-        NSColor.white.withAlphaComponent(0.20).cgColor,
+        NSColor.white.withAlphaComponent(0.22).cgColor,
         NSColor.white.withAlphaComponent(0.0).cgColor
     ] as CFArray
     if let hlGrad = CGGradient(colorsSpace: cs, colors: hlColors, locations: [0.0, 1.0]) {
-        ctx.drawLinearGradient(hlGrad, start: CGPoint(x: s / 2, y: highlightRect.maxY), end: CGPoint(x: s / 2, y: highlightRect.minY), options: [])
+        ctx.drawLinearGradient(hlGrad, start: CGPoint(x: s * 0.5, y: rect.maxY), end: CGPoint(x: s * 0.5, y: rect.midY), options: [])
     }
 
-    // Zipper seam lines vertically down center
-    let seamX = s * 0.5
-    ctx.setStrokeColor(NSColor(red: 0.35, green: 0.78, blue: 0.98, alpha: 0.38).cgColor)
-    ctx.setLineWidth(max(1.0, s * 0.015))
-    for step in stride(from: s * 0.14, through: s * 0.86, by: s * 0.065) {
-        let toothW = s * 0.055
-        let isLeft = Int((step / (s * 0.065)).rounded()) % 2 == 0
-        let x1 = isLeft ? seamX - toothW : seamX
-        let x2 = isLeft ? seamX : seamX + toothW
-        ctx.move(to: CGPoint(x: x1, y: step))
-        ctx.addLine(to: CGPoint(x: x2, y: step))
-    }
-    ctx.strokePath()
+    // Tilted Lightning + "Z" Emblem:
+    // Forward-leant dynamic Z where the diagonal stroke splits like an electric bolt
+    let zBolt = CGMutablePath()
+    zBolt.move(to: CGPoint(x: s * 0.33, y: s * 0.78))
+    zBolt.addLine(to: CGPoint(x: s * 0.78, y: s * 0.78))
+    zBolt.addLine(to: CGPoint(x: s * 0.51, y: s * 0.53))
+    zBolt.addLine(to: CGPoint(x: s * 0.65, y: s * 0.53))
+    zBolt.addLine(to: CGPoint(x: s * 0.42, y: s * 0.33))
+    zBolt.addLine(to: CGPoint(x: s * 0.72, y: s * 0.33))
+    zBolt.addLine(to: CGPoint(x: s * 0.67, y: s * 0.21))
+    zBolt.addLine(to: CGPoint(x: s * 0.21, y: s * 0.21))
+    zBolt.addLine(to: CGPoint(x: s * 0.48, y: s * 0.46))
+    zBolt.addLine(to: CGPoint(x: s * 0.34, y: s * 0.46))
+    zBolt.addLine(to: CGPoint(x: s * 0.57, y: s * 0.66))
+    zBolt.addLine(to: CGPoint(x: s * 0.28, y: s * 0.66))
+    zBolt.closeSubpath()
 
-    // Lightning bolt centerpiece
-    let bolt = CGMutablePath()
-    bolt.move(to: CGPoint(x: s * 0.56, y: s * 0.82))
-    bolt.addLine(to: CGPoint(x: s * 0.30, y: s * 0.47))
-    bolt.addLine(to: CGPoint(x: s * 0.48, y: s * 0.47))
-    bolt.addLine(to: CGPoint(x: s * 0.42, y: s * 0.18))
-    bolt.addLine(to: CGPoint(x: s * 0.70, y: s * 0.54))
-    bolt.addLine(to: CGPoint(x: s * 0.52, y: s * 0.54))
-    bolt.closeSubpath()
+    // Rotate Z-Bolt slightly (-8 deg clockwise) around center so it feels like a tilted lightning strike AND a sharp Z
+    var xform = CGAffineTransform(translationX: s * 0.5, y: s * 0.5)
+        .rotated(by: -0.11)
+        .translatedBy(x: -s * 0.5, y: -s * 0.5)
+    let tiltedBolt = zBolt.copy(using: &xform) ?? zBolt
 
     ctx.saveGState()
-    ctx.setShadow(offset: .zero, blur: s * 0.08, color: NSColor(red: 0.22, green: 0.74, blue: 0.97, alpha: 0.65).cgColor)
-    ctx.addPath(bolt)
+    ctx.setShadow(offset: CGSize(width: 0, height: -s * 0.015), blur: s * 0.075, color: NSColor(red: 0.22, green: 0.78, blue: 1.0, alpha: 0.75).cgColor)
+    ctx.addPath(tiltedBolt)
     ctx.clip()
     let boltColors = [
-        NSColor(red: 0.22, green: 0.74, blue: 0.97, alpha: 1.0).cgColor,
-        NSColor(red: 0.98, green: 0.82, blue: 0.18, alpha: 1.0).cgColor
+        NSColor(red: 0.22, green: 0.84, blue: 1.0, alpha: 1.0).cgColor,
+        NSColor(red: 0.54, green: 0.72, blue: 1.0, alpha: 1.0).cgColor,
+        NSColor(red: 1.0, green: 0.84, blue: 0.18, alpha: 1.0).cgColor
     ] as CFArray
-    if let bGrad = CGGradient(colorsSpace: cs, colors: boltColors, locations: [0.0, 1.0]) {
-        ctx.drawLinearGradient(bGrad, start: CGPoint(x: s * 0.35, y: s * 0.82), end: CGPoint(x: s * 0.65, y: s * 0.18), options: [])
+    if let bGrad = CGGradient(colorsSpace: cs, colors: boltColors, locations: [0.0, 0.45, 1.0]) {
+        ctx.drawLinearGradient(bGrad, start: CGPoint(x: s * 0.26, y: s * 0.78), end: CGPoint(x: s * 0.74, y: s * 0.21), options: [])
     }
     ctx.restoreGState()
 
-    // Outer specular rim
+    // Crisp specular edge around Z-Bolt
+    ctx.addPath(tiltedBolt)
+    ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.38).cgColor)
+    ctx.setLineWidth(max(0.8, s * 0.008))
+    ctx.strokePath()
+
+    // Outer squircle glass rim
     ctx.addPath(squircle)
-    ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.28).cgColor)
+    ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.30).cgColor)
     ctx.setLineWidth(max(1.0, s * 0.012))
     ctx.strokePath()
 

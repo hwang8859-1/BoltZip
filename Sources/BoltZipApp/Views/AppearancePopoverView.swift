@@ -5,9 +5,23 @@ struct AppearancePopoverView: View {
 
     var body: some View {
         let l = vm.l10n
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 11) {
             Text(l.appearanceTitle)
                 .font(.headline)
+
+            // Dark / Light / System Theme Switcher
+            VStack(alignment: .leading, spacing: 4) {
+                Text(l.themeLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("", selection: $vm.appTheme) {
+                    ForEach(AppTheme.allCases) { theme in
+                        Text(theme.title(l)).tag(theme)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
 
             // Language Switcher
             VStack(alignment: .leading, spacing: 4) {
@@ -60,6 +74,6 @@ struct AppearancePopoverView: View {
             .font(.callout)
         }
         .padding(14)
-        .frame(width: 300)
+        .frame(width: 310)
     }
 }

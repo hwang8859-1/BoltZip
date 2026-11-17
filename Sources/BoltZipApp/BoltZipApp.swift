@@ -72,6 +72,12 @@ struct BoltZipApp: App {
             }
 
             CommandMenu(l.layoutMenuTitle) {
+                Picker(l.themeLabel, selection: $vm.appTheme) {
+                    ForEach(AppTheme.allCases) { theme in
+                        Text(theme.title(l)).tag(theme)
+                    }
+                }
+                Divider()
                 Toggle(l.enableTranslucency, isOn: $vm.isWindowTranslucent)
                 Divider()
                 Toggle(l.toggleFinderBanner, isOn: $vm.showFinderBanner)

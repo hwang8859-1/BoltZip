@@ -13,6 +13,38 @@ struct FolderTreeNode: Identifiable, Hashable, Sendable {
     let fileCount: Int
 }
 
+enum AppTheme: String, CaseIterable, Identifiable, Sendable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
+
+    func title(_ l: L10n) -> String {
+        switch self {
+        case .system: return l.themeSystem
+        case .light: return l.themeLight
+        case .dark: return l.themeDark
+        }
+    }
+}
+
 enum SortColumn: String, CaseIterable, Identifiable {
     case name
     case uncompressedSize
@@ -83,6 +115,12 @@ final class WorkspaceViewModel {
             UserDefaults.standard.set(appLanguage.rawValue, forKey: Keys.appLanguage)
         }
     }
+    var appTheme: AppTheme = .system {
+        didSet {
+            UserDefaults.standard.set(appTheme.rawValue, forKey: Keys.appTheme)
+            NSApp.appearance = appTheme.nsAppearance
+        }
+    }
     var isWindowTranslucent: Bool = true {
         didSet {
             UserDefaults.standard.set(isWindowTranslucent, forKey: Keys.windowTranslucent)
@@ -125,6 +163,7 @@ final class WorkspaceViewModel {
         static let recents = "BoltZip.RecentArchives"
         static let stripJunk = "BoltZip.ExcludeMacJunk"
         static let appLanguage = "BoltZip.AppLanguage"
+        static let appTheme = "BoltZip.AppTheme"
         static let windowTranslucent = "BoltZip.IsWindowTranslucent"
         static let windowOpacity = "BoltZip.WindowOpacity"
         static let showFinderBanner = "BoltZip.ShowFinderBanner"
@@ -147,6 +186,10 @@ final class WorkspaceViewModel {
         if let rawLang = defaults.string(forKey: Keys.appLanguage), let parsed = AppLanguage(rawValue: rawLang) {
             self.appLanguage = parsed
         }
+        if let rawTheme = defaults.string(forKey: Keys.appTheme), let parsedTheme = AppTheme(rawValue: rawTheme) {
+            self.appTheme = parsedTheme
+        }
+        NSApp.appearance = self.appTheme.nsAppearance
         if defaults.object(forKey: Keys.windowTranslucent) != nil {
             self.isWindowTranslucent = defaults.bool(forKey: Keys.windowTranslucent)
         }

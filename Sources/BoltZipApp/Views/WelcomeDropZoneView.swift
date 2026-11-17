@@ -139,21 +139,7 @@ struct WelcomeDropZoneView: View {
                 )
 
             VStack(spacing: isCompactHeight ? 7 : 10) {
-                ZStack {
-                    Circle()
-                        .fill(Color.cyan.opacity(0.14))
-                        .frame(width: isCompactHeight ? 42 : 52, height: isCompactHeight ? 42 : 52)
-                        .glassEffect(.regular.tint(.cyan.opacity(0.16)), in: Circle())
-                    Image(systemName: "bolt.shield.fill")
-                        .font(.system(size: isCompactHeight ? 19 : 24, weight: .semibold))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [.cyan, .indigo, .yellow],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                }
+                BoltLogoBadge(size: isCompactHeight ? 42 : 52)
 
                 Text(l.dropZoneTitle)
                     .font(.system(size: isNarrow ? 15.5 : 18.5, weight: .semibold, design: .rounded))

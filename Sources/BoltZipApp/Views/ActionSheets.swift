@@ -542,6 +542,12 @@ struct SettingsView: View {
                 }
 
                 Section(l.appearanceTitle) {
+                    Picker(l.themeLabel, selection: $vm.appTheme) {
+                        ForEach(AppTheme.allCases) { theme in
+                            Text(theme.title(l)).tag(theme)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                     Toggle(l.enableTranslucency, isOn: $vm.isWindowTranslucent)
                     if vm.isWindowTranslucent {
                         HStack {
@@ -599,21 +605,7 @@ struct AboutView: View {
         let l = vm.l10n
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
         VStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(Color.cyan.opacity(0.14))
-                    .frame(width: 72, height: 72)
-                    .glassEffect(.regular.tint(.cyan.opacity(0.18)), in: Circle())
-                Image(systemName: "bolt.shield.fill")
-                    .font(.system(size: 34, weight: .semibold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.cyan, .indigo, .yellow],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            }
+            BoltLogoBadge(size: 72)
 
             VStack(spacing: 4) {
                 Text("BoltZip")
@@ -671,5 +663,6 @@ struct AboutView: View {
         .frame(width: 420)
         .background(BoltAmbientBackdrop().opacity(0.5))
         .containerBackground(.ultraThinMaterial, for: .window)
+        .preferredColorScheme(vm.appTheme.colorScheme)
     }
 }

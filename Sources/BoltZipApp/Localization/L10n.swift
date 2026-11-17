@@ -61,6 +61,13 @@ struct L10n: Sendable {
         }
     }
 
+
+    // MARK: - Theme / Dark Mode
+    var themeLabel: String { t("外观模式", "外觀模式", "Appearance", "外観モード") }
+    var themeSystem: String { t("跟随系统", "跟隨系統", "System", "自動") }
+    var themeLight: String { t("浅色", "淺色", "Light", "ライト") }
+    var themeDark: String { t("深色", "深色", "Dark", "ダーク") }
+
     // MARK: - General & Welcome
     var readyStatus: String { t("就绪 · 拖入压缩包浏览，或拖入文件立即打包", "就緒 · 拖入封存檔瀏覽，或拖入檔案立即打包", "Ready — Drop an archive to browse, or files to compress", "準備完了 — 書庫をドロップして閲覧、またはファイルを圧縮") }
     var dropZoneTitle: String { t("拖放压缩包直接浏览，或拖入文件立即打包", "拖放封存檔直接瀏覽，或拖入檔案立即打包", "Drop an archive to browse, or files to compress", "書庫を開いて閲覧、またはファイルをここにドロップ") }

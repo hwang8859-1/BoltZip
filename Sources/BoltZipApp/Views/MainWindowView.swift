@@ -36,6 +36,7 @@ struct MainWindowView: View {
             )
         )
         .frame(minWidth: minW, minHeight: minH)
+        .preferredColorScheme(vm.appTheme.colorScheme)
         .containerBackground(
             vm.isWindowTranslucent ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)),
             for: .window
