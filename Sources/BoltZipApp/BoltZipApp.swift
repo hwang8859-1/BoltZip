@@ -39,11 +39,12 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct BoltZipApp: App {
     @NSApplicationDelegateAdaptor(BoltZipAppDelegate.self) private var appDelegate
+    @Environment(\.openWindow) private var openWindow
     @State private var vm = WorkspaceViewModel()
 
     var body: some Scene {
         let l = vm.l10n
-        WindowGroup {
+        WindowGroup(id: "main") {
             MainWindowView(vm: vm)
                 .onAppear {
                     appDelegate.flushPending(to: vm)
@@ -52,6 +53,12 @@ struct BoltZipApp: App {
         .defaultSize(width: 760, height: 480)
         .handlesExternalEvents(matching: Set(["*"]))
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button(l.aboutMenuTitle) {
+                    openWindow(id: "about")
+                }
+            }
+
             CommandGroup(replacing: .newItem) {
                 Button(l.newArchive) {
                     vm.startNewArchivePanel()
@@ -108,6 +115,11 @@ struct BoltZipApp: App {
                 }
             }
         }
+
+        Window(l.aboutMenuTitle, id: "about") {
+            AboutView(vm: vm)
+        }
+        .windowResizability(.contentSize)
 
         Settings {
             SettingsView(vm: vm)

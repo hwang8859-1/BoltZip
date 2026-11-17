@@ -3,7 +3,7 @@ import Foundation
 
 func printUsage() {
     print("""
-    BoltZip CLI (Open-Source macOS 27.3 Compression Engine)
+    BoltZip CLI v0.1.0 (Open-Source macOS 27.3 Compression Engine)
     Usage:
       boltzip a <output.zip|tar.zst|tar.gz|tar.xz|7z> <input1> [input2...] [--algo deflate|zstd|bzip2|xz|lz4|store] [--level N] [--password PW] [--aes256|--zipcrypto] [--split MB] [--keep-junk]
       boltzip x <archive> [dest_dir] [--mode smart|here|subfolder] [--password PW] [--encoding auto|utf8|gb18030|big5|shiftjis]
@@ -11,6 +11,7 @@ func printUsage() {
       boltzip t <archive> [--password PW]
       boltzip bench
       boltzip engines
+      boltzip version
     """)
 }
 
@@ -52,6 +53,10 @@ func parseArgs() -> Int32 {
 
     do {
         switch cmd {
+        case "version", "--version", "-v":
+            print("BoltZip 0.1.0")
+            return 0
+
         case "engines":
             for eng in CompressionCodec.engineVersions() {
                 print("• \(eng.name) v\(eng.version) [\(eng.license)]")

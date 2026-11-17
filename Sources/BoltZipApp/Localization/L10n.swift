@@ -264,5 +264,29 @@ struct L10n: Sendable {
     var compressSpeedCol: String { t("压缩速度", "壓縮速度", "Compress", "圧縮速度") }
     var decompressSpeedCol: String { t("解压速度", "解壓速度", "Decompress", "展開速度") }
 
+
+    // MARK: - Slogan & About
+    var slogan: String {
+        t(
+            "快如闪电，通透如玻 —— 让 macOS 压缩像桌面本身一样顺手",
+            "快如閃電，通透如玻 —— 讓 macOS 壓縮像桌面本身一樣順手",
+            "Lightning-fast archives. Liquid-clear macOS craft.",
+            "稲妻の速さ、ガラスの透明感 —— macOS のための書庫スタジオ"
+        )
+    }
+    var aboutMenuTitle: String { t("关于 BoltZip", "關於 BoltZip", "About BoltZip", "BoltZip について") }
+    var aboutVersionLabel: String { "v0.1.0 (macOS 27.3 · arm64)" }
+    var aboutDesc: String {
+        t(
+            "开源压缩/解压缩工作台，原生融合 Windows Zip 效率交互、访达一级 Bolt 菜单与液态玻璃设计。",
+            "開源壓縮/解壓縮工作台，原生融合 Windows Zip 效率操作、Finder 第一層 Bolt 選單與液態玻璃設計。",
+            "An open-source macOS archive studio combining Windows-Zip workflows, top-level Finder actions, and Liquid Glass craft.",
+            "Windows Zip 級の快適操作、Finder 第一階層 Bolt メニュー、Liquid Glass デザインを融合したオープンソース圧縮ツール。"
+        )
+    }
+    var openGitHub: String { t("访问 GitHub 仓库", "前往 GitHub 專案", "GitHub Repository", "GitHub リポジトリ") }
+    var openSourceEnginesLine: String { "zlib · Zstandard · XZ / LZMA2 · bzip2 · LZ4 · libarchive" }
+    var copyrightLine: String { "MIT License · © 2026 BoltZip Contributors" }
+
     var alertTitle: String { t("BoltZip 提示", "BoltZip 提示", "BoltZip", "BoltZip") }
 }

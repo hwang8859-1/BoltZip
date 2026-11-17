@@ -1,40 +1,69 @@
+<div align="center">
+
 # BoltZip ⚡
 
-专为 **macOS 27.3**（Apple Silicon 原生）打造的开源压缩/解压缩工作台。将 Windows 版 Zip 软件（7-Zip / WinZip / Bandizip）最顺手的效率交互与 macOS 原生 **Liquid Glass（液态玻璃）** 融为一体。
+**快如闪电，通透如玻 —— 让 macOS 压缩像桌面本身一样顺手**
 
-## 核心特性
+**简体中文** | [繁體中文](README.zh-Hant.md) | [English](README.en.md) | [日本語](README.ja.md)
 
-- **访达右键一级目录 `Bolt >`**：通过原生沙盒 `FinderSync` 扩展 (`BoltZipFinderSync.appex`) 将高频压缩/解压动作直接显示在访达右键最顶层菜单。
-- **Windows Zip 级档案工作台**：包内树形浏览、搜索排序、Quick Look 预览、ZIP 原地增删改（零重压缩）、右键属性详情与单独导出为新 ZIP。
-- **液态玻璃 & 模块化主界面**：
-  - 支持窗口半透明开关与背景不透明度精细滑动调节；
-  - 欢迎页各板块（访达菜单横幅、功能介绍卡、最近打开列表）与侧栏摘要/状态栏均支持独立隐藏与恢复。
-- **自然多语言适配**：支持跟随系统语言或手动切换 **简体中文 / 繁體中文 / English / 日本語**。
-- **全开源多算法内核**（静态编译 `zlib`、`libzstd`、`liblzma`、`libbz2`、`liblz4`，零第三方动态库依赖，外加 `libarchive` 桥接 `.7z/.iso/.cab/.xar`）。
-- **安全与跨平台兼容**：WinZip AE-2 AES-256 双向加密、传统 ZipCrypto、分卷压缩（`.z01/.zip`）、GB18030/Big5/Shift-JIS 文件名自动纠偏、Mac 隐藏文件过滤与 Smart 智能解压。
+![macOS 27.3+](https://img.shields.io/badge/macOS-27.3%2B%20(arm64)-0ea5e9?style=flat-square)
+![Swift 6](https://img.shields.io/badge/Swift-6.0-6366f1?style=flat-square)
+![Release v0.1.0](https://img.shields.io/badge/release-v0.1.0-facc15?style=flat-square)
+![License MIT](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)
 
-## 开发者与 AI Agent 指引
+</div>
 
-如果你准备基于本项目继续二次开发，请参阅根目录下的 [AGENTS.md](AGENTS.md)，了解模块职责、静态链接说明与关键协议约束。
+---
 
-## 克隆、构建与测试
+**BoltZip** 是一款专为 **macOS 27.3（Apple Silicon）** 打造的开源压缩与解压缩工作台。它融合了 Windows 经典压缩工具（7-Zip / WinZip / Bandizip）的高效交互与 macOS 原生 **Liquid Glass（液态玻璃）** 视觉美学，告别双击即全量解压一地的传统体验。
+
+## ✨ 核心特性
+
+- **访达右键一级目录 `Bolt >`**：通过原生沙盒 `FinderSync` 扩展（`BoltZipFinderSync.appex`），无需钻进「服务」子菜单，直接在访达右键最顶层一键完成：
+  - 智能解压到当前位置 / 解压到同名文件夹 / 打开浏览 / 完整性校验
+  - 一键压缩为 `ZIP` / `TAR.ZST (Zstd)` / `7z` / 加密与分卷高级压缩
+- **Windows Zip 级包内工作台**：双击或空格调用 macOS Quick Look 直接预览包内文件，无需解压全包；支持目录树浏览、搜索排序、查看 CRC32 属性、单独导出选中项为新 ZIP，以及 **ZIP 包内原地增删改**（未改动条目零重压缩）。
+- **液态玻璃 & 极简可定制界面**：
+  - 支持窗口半透明开关与背景不透明度精细调节（25% – 100%）；
+  - 欢迎页各板块（访达提示条、功能卡片、最近列表）与侧栏摘要、底部状态栏均支持独立隐藏；
+  - 窗口最小可自由缩至 `380 × 285` 迷你拖拽浮窗，低高度下自动收起次要面板只留主拖拽区。
+- **自然多语言适配**：支持跟随系统语言或即时切换 **简体中文 / 繁體中文 / English / 日本語**。
+- **全开源多算法内核**（静态编译 `zlib`、`libzstd`、`liblzma`、`libbz2`、`liblz4`，零第三方动态库依赖，外加系统 `libarchive` 桥接 `.7z/.iso/.cab/.xar`）。
+- **跨平台安全与痛点修复**：
+  - **WinZip AE-2 AES-256** 双向加密（PBKDF2-HMAC-SHA1 + AES-256-CTR + 10B HMAC-SHA1）及传统 ZipCrypto 兼容；
+  - **GB18030 / GBK / Big5 / Shift-JIS / EUC-KR** 文件名编码自动识别，告别 Windows 中文压缩包乱码；
+  - 默认过滤 `.DS_Store`、`__MACOSX`、`._*` 资源分叉文件；支持 `.z01 / .z02 / ... / .zip` 分卷压缩与 Smart 智能解压。
+
+## 🚀 快速开始
 
 ```bash
 git clone https://github.com/hwang8859-1/BoltZip.git
 cd BoltZip
 
-# 1. 运行全套单元测试
+# 1. 运行单元测试
 swift test
 
-# 2. 构建并签名自包含 BoltZip.app（含 BoltZipFinderSync 访达扩展与展示页）
+# 2. 编译并打包 BoltZip.app（含 BoltZipFinderSync 访达扩展、CLI 与发布压缩包）
 ./Scripts/build_app.sh
 open dist/BoltZip.app
-
-# 3. 命令行工具示例
-swift run -c release boltzip engines
-swift run -c release boltzip bench
 ```
 
-## 产品展示页面
+### 命令行工具 (`boltzip`)
 
-打开 [showcase/index.html](showcase/index.html) 即可在浏览器体验支持多语言切换的交互式界面模拟器与算法对比面板。
+```bash
+swift run -c release boltzip engines
+swift run -c release boltzip bench
+swift run -c release boltzip a release.zip ./src --algo zstd --aes256 --password YourPassword
+swift run -c release boltzip t release.zip --password YourPassword
+swift run -c release boltzip x release.zip ./out --mode smart
+```
+
+## 🧩 展示页面与开发者指引
+
+- **交互式产品展示页**：直接用浏览器打开 [showcase/index.html](showcase/index.html)，即可体验浏览器端交互模拟器、多语言切换与算法对比面板。
+- **AI Agent 与二次开发指引**：请参阅 [AGENTS.md](AGENTS.md)，了解模块划分、加密/分卷协议不变量及代码贡献规范。
+- **版本更新记录**：请参阅 [CHANGELOG.md](CHANGELOG.md)。
+
+## 📄 开源协议
+
+本项目基于 [MIT License](LICENSE) 开源。

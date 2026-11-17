@@ -590,3 +590,86 @@ struct SettingsView: View {
         }
     }
 }
+
+
+struct AboutView: View {
+    @Bindable var vm: WorkspaceViewModel
+
+    var body: some View {
+        let l = vm.l10n
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
+        VStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(Color.cyan.opacity(0.14))
+                    .frame(width: 72, height: 72)
+                    .glassEffect(.regular.tint(.cyan.opacity(0.18)), in: Circle())
+                Image(systemName: "bolt.shield.fill")
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.cyan, .indigo, .yellow],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+
+            VStack(spacing: 4) {
+                Text("BoltZip")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                Text("v\(appVersion) · macOS 27.3 · arm64")
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(l.slogan)
+                .font(.system(size: 13.5, weight: .semibold, design: .rounded))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .glassEffect(.regular.tint(.cyan.opacity(0.12)), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            Text(l.aboutDesc)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 4) {
+                Text(l.openSourceEnginesLine)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Text(l.copyrightLine)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.top, 2)
+
+            GlassEffectContainer(spacing: 8) {
+                HStack(spacing: 10) {
+                    Button {
+                        if let url = URL(string: "https://github.com/hwang8859-1/BoltZip") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        Label(l.openGitHub, systemImage: "chevron.left.forwardslash.chevron.right")
+                    }
+                    .buttonStyle(.glassProminent)
+
+                    Button {
+                        vm.openShowcaseWebsite()
+                    } label: {
+                        Label(l.showcasePage, systemImage: "safari")
+                    }
+                    .buttonStyle(.glass)
+                }
+            }
+        }
+        .padding(24)
+        .frame(width: 420)
+        .background(BoltAmbientBackdrop().opacity(0.5))
+        .containerBackground(.ultraThinMaterial, for: .window)
+    }
+}

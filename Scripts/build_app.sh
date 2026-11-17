@@ -49,7 +49,7 @@ cat <<'APPEX_PLIST' > "$APPEX_DIR/Contents/Info.plist"
     <key>CFBundlePackageType</key>
     <string>XPC!</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>0.1.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
@@ -100,7 +100,7 @@ cat <<'PLIST' > "$CONTENTS/Info.plist"
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>0.1.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
@@ -212,4 +212,9 @@ if [ -d "$HOME/Library/Services" ]; then
     /System/Library/CoreServices/pbs -update || true
 fi
 
+RELEASE_ZIP="$DIST_DIR/BoltZip-0.1.0-macOS-arm64.zip"
+rm -f "$RELEASE_ZIP"
+ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$RELEASE_ZIP"
+
 echo "==> Done! App bundle created at: $APP_DIR"
+echo "==> Release archive created at: $RELEASE_ZIP" 
