@@ -29,7 +29,9 @@ struct WelcomeDropZoneView: View {
                             lowerCards(l: l, availableWidth: w)
                         }
                         .frame(width: contentWidth, alignment: .topLeading)
-                        .padding(12)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 12)
+                        .padding(.top, 2)
                     }
                     .frame(width: w, height: h)
                 } else {
@@ -39,7 +41,9 @@ struct WelcomeDropZoneView: View {
                         }
                         heroDropZone(l: l, isNarrow: isNarrow, isCompactHeight: isCompactHeight, fillsSpace: true)
                     }
-                    .padding(12)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
+                    .padding(.top, 2)
                     .frame(width: w, height: h)
                 }
             }

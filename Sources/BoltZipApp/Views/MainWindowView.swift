@@ -334,7 +334,7 @@ struct MainWindowView: View {
                     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .padding(.horizontal, 10)
-                .padding(.top, 6)
+                .padding(.top, 2)
 
                 Table(vm.visibleEntries, selection: $vm.selectedEntryIDs) {
                     TableColumn(l.colName) { entry in
