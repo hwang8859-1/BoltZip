@@ -16,24 +16,25 @@ struct MainWindowView: View {
 
     var body: some View {
         let l = vm.l10n
-        ZStack {
-            windowBackingLayer
-
+        let minW: CGFloat = vm.listing == nil ? 380 : 500
+        let minH: CGFloat = vm.listing == nil ? 285 : 340
+        Group {
             if let listing = vm.listing {
                 archiveExplorer(listing: listing, l: l)
             } else {
                 WelcomeDropZoneView(vm: vm)
             }
         }
+        .background(windowBackingLayer)
         .background(
             WindowStyleConfigurator(
                 isTranslucent: vm.isWindowTranslucent,
                 backgroundOpacity: vm.windowBackgroundOpacity,
-                minWidth: vm.listing == nil ? 360 : 440,
-                minHeight: vm.listing == nil ? 240 : 300
+                minWidth: minW,
+                minHeight: minH
             )
         )
-        .frame(minWidth: 360, minHeight: 240)
+        .frame(minWidth: minW, minHeight: minH)
         .containerBackground(
             vm.isWindowTranslucent ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)),
             for: .window
@@ -295,7 +296,7 @@ struct MainWindowView: View {
                                             if idx == 0 { Image(systemName: "archivebox.fill") }
                                             Text(crumb.title)
                                         }
-                                        .font(.caption.weight(crumb.path == vm.currentFolder ? .semibold : .regular))
+                                        .font(.system(size: 12.5, weight: crumb.path == vm.currentFolder ? .semibold : .regular, design: .rounded))
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 3)
                                     }
@@ -314,11 +315,11 @@ struct MainWindowView: View {
 
                         HStack(spacing: 5) {
                             Image(systemName: "magnifyingglass")
-                                .font(.caption)
+                                .font(.system(size: 12.5))
                                 .foregroundStyle(.secondary)
                             TextField(l.searchPlaceholder, text: $vm.searchText)
                                 .textFieldStyle(.plain)
-                                .font(.caption)
+                                .font(.system(size: 12.5))
                                 .frame(minWidth: 90, maxWidth: 160)
                         }
                         .padding(.horizontal, 9)
@@ -338,6 +339,7 @@ struct MainWindowView: View {
                             Image(systemName: entry.isDirectory ? "folder.fill" : iconForFile(entry.name))
                                 .foregroundStyle(entry.isDirectory ? Color.cyan : Color.secondary)
                             Text(entry.name)
+                                .font(.system(size: 13))
                                 .lineLimit(1)
                             if entry.isEncrypted {
                                 Image(systemName: "lock.fill")
@@ -443,7 +445,7 @@ struct MainWindowView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .font(.caption2)
+                    .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)

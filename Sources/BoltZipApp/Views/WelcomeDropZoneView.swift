@@ -6,28 +6,32 @@ struct WelcomeDropZoneView: View {
     @Bindable var vm: WorkspaceViewModel
     @State private var isDropTargeted = false
     @State private var finderActionToast: String?
-    @State private var availableWidth: CGFloat = 720
+    @State private var containerSize: CGSize = CGSize(width: 720, height: 460)
 
-    private var isNarrow: Bool { availableWidth < 540 }
-    private var hasLowerCards: Bool { vm.showFeatureHighlights || vm.showRecentArchives }
+    private var isNarrow: Bool { containerSize.width < 540 }
+    private var isCompactHeight: Bool { containerSize.height < 350 }
+    private var showBannerHere: Bool { vm.showFinderBanner && containerSize.height >= 330 }
+    private var showLowerCardsHere: Bool { (vm.showFeatureHighlights || vm.showRecentArchives) && containerSize.height >= 390 }
 
     var body: some View {
         let l = vm.l10n
         Group {
-            if hasLowerCards {
-                ScrollView {
-                    VStack(spacing: 10) {
-                        if vm.showFinderBanner {
+            if showLowerCardsHere {
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if showBannerHere {
                             finderBanner(l: l)
                         }
                         heroDropZone(l: l, fillsSpace: false)
                         lowerCards(l: l)
                     }
                     .padding(12)
+                    .frame(width: max(300, containerSize.width), alignment: .top)
                 }
             } else {
+                // Compact / Minimal height mode: only keep the main interface, zero overflow
                 VStack(spacing: 10) {
-                    if vm.showFinderBanner {
+                    if showBannerHere {
                         finderBanner(l: l)
                     }
                     heroDropZone(l: l, fillsSpace: true)
@@ -36,10 +40,10 @@ struct WelcomeDropZoneView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .onGeometryChange(for: CGFloat.self) { proxy in
-            proxy.size.width
-        } action: { newWidth in
-            availableWidth = newWidth
+        .onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { newSize in
+            containerSize = newSize
         }
         .onAppear {
             vm.refreshQuickActionsStatus()
@@ -52,18 +56,18 @@ struct WelcomeDropZoneView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Image(systemName: vm.quickActionsInstalled ? "checkmark.circle.fill" : "contextualmenu.and.cursorarrow")
-                        .font(.subheadline)
+                        .font(.system(size: 14))
                         .foregroundStyle(vm.quickActionsInstalled ? .green : .cyan)
 
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(vm.quickActionsInstalled ? l.finderBannerEnabledTitle : l.finderBannerDisabledTitle)
-                            .font(.caption.weight(.semibold))
-                            .lineLimit(1)
+                            .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                            .fixedSize(horizontal: false, vertical: true)
                         if !isNarrow {
                             Text(finderActionToast ?? l.finderBannerSubtitle)
-                                .font(.caption2)
+                                .font(.system(size: 11.5))
                                 .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
 
@@ -79,7 +83,7 @@ struct WelcomeDropZoneView: View {
                         }
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.caption2.weight(.semibold))
+                            .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
@@ -93,8 +97,8 @@ struct WelcomeDropZoneView: View {
                     }
                 }
             }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
             .glassEffect(
                 .regular.tint((vm.quickActionsInstalled ? Color.green : Color.cyan).opacity(0.10)),
                 in: RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -130,18 +134,18 @@ struct WelcomeDropZoneView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(
-                    isDropTargeted ? Color.cyan : Color.white.opacity(0.20),
+                    isDropTargeted ? Color.cyan : Color.white.opacity(0.22),
                     style: StrokeStyle(lineWidth: isDropTargeted ? 2.5 : 1.0, dash: [7, 5])
                 )
 
-            VStack(spacing: isNarrow ? 8 : 10) {
+            VStack(spacing: isCompactHeight ? 7 : 10) {
                 ZStack {
                     Circle()
                         .fill(Color.cyan.opacity(0.14))
-                        .frame(width: isNarrow ? 44 : 52, height: isNarrow ? 44 : 52)
+                        .frame(width: isCompactHeight ? 42 : 52, height: isCompactHeight ? 42 : 52)
                         .glassEffect(.regular.tint(.cyan.opacity(0.16)), in: Circle())
                     Image(systemName: "bolt.shield.fill")
-                        .font(.system(size: isNarrow ? 20 : 24, weight: .semibold))
+                        .font(.system(size: isCompactHeight ? 19 : 24, weight: .semibold))
                         .foregroundStyle(
                             LinearGradient(
                                 colors: [.cyan, .indigo, .yellow],
@@ -152,27 +156,29 @@ struct WelcomeDropZoneView: View {
                 }
 
                 Text(l.dropZoneTitle)
-                    .font(isNarrow ? .headline : .title3.weight(.semibold))
+                    .font(.system(size: isNarrow ? 15.5 : 18.5, weight: .semibold, design: .rounded))
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 8)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 10)
 
-                if !isNarrow {
+                if !isCompactHeight {
                     Text(l.dropZoneSubtitle)
-                        .font(.caption)
+                        .font(.system(size: 12.5))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 14)
                 }
 
-                GlassEffectContainer(spacing: 6) {
+                GlassEffectContainer(spacing: 7) {
                     if isNarrow {
                         LazyVGrid(
-                            columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)],
-                            spacing: 6
+                            columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)],
+                            spacing: 7
                         ) {
                             actionButtons(l: l, fullWidth: true)
                         }
-                        .frame(maxWidth: 300)
+                        .frame(maxWidth: 320)
                     } else {
                         HStack(spacing: 8) {
                             actionButtons(l: l, fullWidth: false)
@@ -181,10 +187,10 @@ struct WelcomeDropZoneView: View {
                 }
                 .padding(.top, 2)
             }
-            .padding(.vertical, isNarrow ? 14 : 18)
-            .padding(.horizontal, 14)
+            .padding(.vertical, isCompactHeight ? 10 : 16)
+            .padding(.horizontal, 12)
         }
-        .frame(maxWidth: .infinity, minHeight: fillsSpace ? 150 : 170, maxHeight: fillsSpace ? .infinity : nil)
+        .frame(maxWidth: .infinity, minHeight: fillsSpace ? 155 : 165, maxHeight: fillsSpace ? .infinity : nil)
         .glassEffect(
             .regular
                 .tint((isDropTargeted ? Color.cyan : Color.indigo).opacity(isDropTargeted ? 0.22 : 0.08))
@@ -204,42 +210,50 @@ struct WelcomeDropZoneView: View {
             vm.startNewArchivePanel()
         } label: {
             Label(l.newArchive, systemImage: "plus.rectangle.on.folder.fill")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .lineLimit(1)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
         }
         .buttonStyle(.glassProminent)
-        .controlSize(isNarrow ? .small : .regular)
+        .controlSize(isNarrow ? .regular : .regular)
 
         Button {
             vm.openArchivePanel()
         } label: {
             Label(l.openArchive, systemImage: "folder.badge.gearshape")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .lineLimit(1)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
         }
         .buttonStyle(.glass)
-        .controlSize(isNarrow ? .small : .regular)
+        .controlSize(.regular)
 
         Button {
             vm.activeSheet = .benchmark
         } label: {
             Label(l.benchmark, systemImage: "gauge.with.dots.needle.67percent")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .lineLimit(1)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
         }
         .buttonStyle(.glass)
-        .controlSize(isNarrow ? .small : .regular)
+        .controlSize(.regular)
 
         Button {
             vm.openShowcaseWebsite()
         } label: {
             Label(l.showcasePage, systemImage: "safari")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .lineLimit(1)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
         }
         .buttonStyle(.glass)
-        .controlSize(isNarrow ? .small : .regular)
+        .controlSize(.regular)
     }
 
     @ViewBuilder
     private func lowerCards(l: L10n) -> some View {
-        let stackVertically = availableWidth < 660
+        let stackVertically = containerSize.width < 660
         if stackVertically {
             VStack(spacing: 10) {
                 if vm.showFeatureHighlights { featuresCard(l: l) }
@@ -255,10 +269,10 @@ struct WelcomeDropZoneView: View {
 
     @ViewBuilder
     private func featuresCard(l: L10n) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label(l.featuresTitle, systemImage: "sparkles")
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 13.5, weight: .semibold, design: .rounded))
                 Spacer()
                 Button {
                     withAnimation(.easeInOut(duration: 0.16)) {
@@ -266,7 +280,7 @@ struct WelcomeDropZoneView: View {
                     }
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.caption2)
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -278,21 +292,21 @@ struct WelcomeDropZoneView: View {
             FeatureRow(icon: "character.book.closed.fill", title: l.featEncodingTitle, detail: l.featEncodingDesc)
             FeatureRow(icon: "lock.shield.fill", title: l.featCryptoTitle, detail: l.featCryptoDesc)
         }
-        .padding(11)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     @ViewBuilder
     private func recentsCard(l: L10n) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label(l.recentsTitle, systemImage: "clock.arrow.circlepath")
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 13.5, weight: .semibold, design: .rounded))
                 Spacer()
                 if !vm.recentArchiveURLs.isEmpty {
                     Text(l.itemCount(vm.recentArchiveURLs.count))
-                        .font(.caption2)
+                        .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                 }
                 Button {
@@ -301,7 +315,7 @@ struct WelcomeDropZoneView: View {
                     }
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.caption2)
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -314,10 +328,10 @@ struct WelcomeDropZoneView: View {
                         .font(.title3)
                         .foregroundStyle(.tertiary)
                     Text(l.noRecents)
-                        .font(.caption2)
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
-                .frame(maxWidth: .infinity, minHeight: 96)
+                .frame(maxWidth: .infinity, minHeight: 88)
             } else {
                 ForEach(vm.recentArchiveURLs.prefix(5), id: \.path) { url in
                     Button {
@@ -325,24 +339,26 @@ struct WelcomeDropZoneView: View {
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "doc.zipper")
-                                .font(.caption)
+                                .font(.system(size: 13))
                                 .foregroundStyle(.cyan)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(url.lastPathComponent)
-                                    .font(.caption.weight(.medium))
+                                    .font(.system(size: 13, weight: .medium))
                                     .lineLimit(1)
+                                    .truncationMode(.middle)
                                 Text(url.deletingLastPathComponent().path)
-                                    .font(.caption2)
+                                    .font(.system(size: 11))
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
+                                    .truncationMode(.middle)
                             }
-                            Spacer()
+                            Spacer(minLength: 4)
                             Image(systemName: "chevron.right")
-                                .font(.caption2)
+                                .font(.system(size: 11))
                                 .foregroundStyle(.tertiary)
                         }
-                        .padding(.vertical, 4)
-                        .padding(.horizontal, 7)
+                        .padding(.vertical, 5)
+                        .padding(.horizontal, 8)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -360,7 +376,7 @@ struct WelcomeDropZoneView: View {
                 }
             }
         }
-        .padding(11)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
@@ -372,15 +388,20 @@ private struct FeatureRow: View {
     let detail: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 7) {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: icon)
-                .font(.caption2)
+                .font(.system(size: 13))
                 .foregroundStyle(.cyan)
-                .frame(width: 16)
+                .frame(width: 18)
                 .padding(.top, 2)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.caption.weight(.semibold))
-                Text(detail).font(.caption2).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(detail)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

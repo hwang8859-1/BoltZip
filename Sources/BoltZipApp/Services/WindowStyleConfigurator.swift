@@ -27,14 +27,29 @@ struct WindowStyleConfigurator: NSViewRepresentable {
         window.contentMinSize = minSz
         window.minSize = minSz
 
+        // Ensure current frame respects updated minimum height/width cleanly
+        var frame = window.frame
+        var needsResize = false
+        if frame.size.width < minWidth {
+            frame.size.width = minWidth
+            needsResize = true
+        }
+        if frame.size.height < minHeight {
+            let delta = minHeight - frame.size.height
+            frame.origin.y -= delta
+            frame.size.height = minHeight
+            needsResize = true
+        }
+        if needsResize {
+            window.setFrame(frame, display: true, animate: false)
+        }
+
         if isTranslucent {
             window.isOpaque = false
             window.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(max(0.02, min(0.95, backgroundOpacity * 0.45)))
-            window.titlebarAppearsTransparent = true
         } else {
             window.isOpaque = true
             window.backgroundColor = NSColor.windowBackgroundColor
-            window.titlebarAppearsTransparent = false
         }
     }
 }
