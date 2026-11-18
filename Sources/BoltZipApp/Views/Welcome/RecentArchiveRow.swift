@@ -53,7 +53,6 @@ struct RecentArchiveRow: View {
         .background(
             shape.fill(Color.primary.opacity(isHovered ? 0.06 : 0.0))
         )
-        .boltGlassSurface(.clear, interactive: true, in: shape)
         .onHover { isHovered = $0 }
         .contextMenu {
             Button(l.ctxOpenBrowse) { vm.openArchive(url: url) }

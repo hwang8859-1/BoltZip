@@ -28,9 +28,90 @@ enum BoltPlatformCapabilities {
     }
 }
 
-enum BoltSurfaceTone {
+enum BoltSurfaceTone: Sendable {
     case regular
+    /// Only for components floating over rich media (photo/video). Never over text or mixed with `.regular`.
     case clear
+}
+
+/// Visual depth tier separating glass chrome (`.window`, `.elevated`) from non-glass content cards (`.card`).
+enum BoltGlassLevel: Sendable {
+    case window
+    case card
+    case elevated
+}
+
+/// Centralized translucency & opacity curves driven by a single `glassIntensity` slider (`0.0 ... 1.0`).
+/// Enforces at most one blur/glass layer per surface.
+enum BoltGlassMetrics: Sendable {
+    static func clamped(_ intensity: Double) -> Double {
+        min(max(intensity, 0), 1)
+    }
+
+    // MARK: L1 — Window glass (single NSGlassEffectView + color veil)
+
+    static func windowGlassTintAlpha(intensity: Double) -> CGFloat {
+        let t = clamped(intensity)
+        return CGFloat(0.20 - t * 0.08)
+    }
+
+    static func windowVeilAlpha(intensity: Double, isDark: Bool, isColoredPreset: Bool) -> Double {
+        let t = clamped(intensity)
+        if isColoredPreset {
+            let minAlpha = isDark ? 0.24 : 0.28
+            return 0.86 - t * (0.86 - minAlpha)
+        }
+        return 0.82 - t * 0.56
+    }
+
+    // MARK: L2 — Sheet single material + veil
+
+    static func sheetVeilAlpha(intensity: Double, isDark: Bool, isColoredPreset: Bool) -> Double {
+        let t = clamped(intensity)
+        let minAlpha = isColoredPreset ? (isDark ? 0.30 : 0.32) : (isDark ? 0.28 : 0.26)
+        return 0.84 - t * (0.84 - minAlpha)
+    }
+
+    // MARK: L3 — Content cards (fill + hairline only, never glass)
+
+    static func cardFillAlpha(intensity: Double, isDark: Bool) -> Double {
+        let t = clamped(intensity)
+        let base = isDark ? 0.12 : 0.10
+        return base - t * 0.04
+    }
+
+    // MARK: L4' — Pinned bars / sticky covers (material + light scrim)
+
+    static func coverScrimAlpha(intensity: Double, isDark: Bool) -> Double {
+        let t = clamped(intensity)
+        let base = isDark ? 0.36 : 0.34
+        return base - t * 0.14
+    }
+
+    static func borderOpacity(level: BoltGlassLevel, isDark: Bool, increasedContrast: Bool) -> Double {
+        if increasedContrast {
+            return level == .elevated ? 0.28 : 0.22
+        }
+        switch level {
+        case .window:
+            return 0
+        case .card:
+            return isDark ? 0.14 : 0.10
+        case .elevated:
+            return isDark ? 0.18 : 0.13
+        }
+    }
+}
+
+private struct BoltGlassIntensityKey: EnvironmentKey {
+    static let defaultValue: Double = 0.75
+}
+
+extension EnvironmentValues {
+    var boltGlassIntensity: Double {
+        get { self[BoltGlassIntensityKey.self] }
+        set { self[BoltGlassIntensityKey.self] = newValue }
+    }
 }
 
 enum BoltRadius {
@@ -91,11 +172,12 @@ struct BoltGlassContainer<Content: View>: View {
     }
 }
 
-/// Reusable Layer-2 frosted glass section card for forms, settings, and wizards.
+/// Reusable frosted glass section card for forms, settings, and wizards.
 struct BoltGlassSectionCard<Content: View>: View {
     let title: String?
     var icon: String? = nil
     let glassEnabled: Bool
+    var level: BoltGlassLevel = .card
     var tint: Color? = nil
     @ViewBuilder let content: () -> Content
 
@@ -103,12 +185,14 @@ struct BoltGlassSectionCard<Content: View>: View {
         _ title: String? = nil,
         icon: String? = nil,
         glassEnabled: Bool,
+        level: BoltGlassLevel = .card,
         tint: Color? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
         self.icon = icon
         self.glassEnabled = glassEnabled
+        self.level = level
         self.tint = tint
         self.content = content
     }
@@ -137,6 +221,7 @@ struct BoltGlassSectionCard<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .boltLayeredSurface(
                 glassEnabled: glassEnabled,
+                level: level,
                 tone: .regular,
                 tint: tint,
                 in: RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous)
@@ -167,38 +252,26 @@ extension View {
         self.glassEffect(makeBoltGlass(tone, tint: tint, interactive: interactive), in: shape)
     }
 
-    /// Applies Liquid Glass when enabled and supported (macOS 26+), otherwise clean solid native chrome.
-    @ViewBuilder
+    /// Applies tiered Liquid Glass (`.window`, `.elevated`) or non-glass fill surfaces (`.card`),
+    /// automatically adapting to `boltGlassIntensity` and macOS Reduce Transparency / Increase Contrast.
     func boltLayeredSurface<S: InsettableShape>(
         glassEnabled: Bool,
+        level: BoltGlassLevel = .card,
         tone: BoltSurfaceTone = .regular,
         tint: Color? = nil,
         interactive: Bool = false,
         in shape: S
     ) -> some View {
-        if glassEnabled {
-            self.boltGlassSurface(tone, tint: tint, interactive: interactive, in: shape)
-        } else {
-            switch tone {
-            case .clear:
-                self.background(tint ?? Color.clear, in: shape)
-            case .regular:
-                self
-                    .background(Color(nsColor: .controlBackgroundColor), in: shape)
-                    .overlay(
-                        shape.strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.75)
-                    )
-            }
-        }
-    }
-
-    @ViewBuilder
-    func boltSheetPresentationGlass(_ enabled: Bool) -> some View {
-        if enabled {
-            self.presentationBackground(.ultraThinMaterial)
-        } else {
-            self.presentationBackground(Color(nsColor: .windowBackgroundColor))
-        }
+        self.modifier(
+            BoltLayeredSurfaceModifier(
+                glassEnabled: glassEnabled,
+                level: level,
+                tone: tone,
+                tint: tint,
+                interactive: interactive,
+                shape: shape
+            )
+        )
     }
 
     /// Applies the unified translucent sheet backdrop + presentation glass + preferred theme across modal sheets.
@@ -206,6 +279,7 @@ extension View {
         enabled: Bool,
         glassIntensity: Double = 0.75,
         backgroundNSColor: NSColor? = nil,
+        isColoredPreset: Bool = false,
         colorScheme: ColorScheme?
     ) -> some View {
         self.modifier(
@@ -213,6 +287,7 @@ extension View {
                 enabled: enabled,
                 glassIntensity: glassIntensity,
                 backgroundNSColor: backgroundNSColor,
+                isColoredPreset: isColoredPreset,
                 preferredScheme: colorScheme
             )
         )
@@ -224,7 +299,6 @@ extension View {
     }
 
     /// Within-window frosted glass overlay cap for pinned headers/footers/bars over app content & background.
-    @ViewBuilder
     func boltWithinWindowGlassCover(
         glassEnabled: Bool,
         dividerEdge: Edge? = .bottom,
@@ -239,6 +313,12 @@ extension View {
         )
     }
 
+    /// Applies unified transparent `.clear` container background when glass is active so `BoltUnifiedWindowBacking`
+    /// renders identically across SwiftUI Scenes and AppKit-hosted windows without double material stacking.
+    func boltUnifiedWindowContainerBackground(glassEnabled: Bool) -> some View {
+        self.modifier(BoltWindowContainerBackgroundModifier(glassEnabled: glassEnabled))
+    }
+
     func boltGlassButton() -> some View {
         self.buttonStyle(.glass)
     }
@@ -250,14 +330,6 @@ extension View {
     func boltSoftTopScrollEdgeEffect() -> some View {
         self.scrollEdgeEffectStyle(.soft, for: .top)
     }
-
-    func boltWindowToolbarBackgroundVisibility(_ visibility: Visibility) -> some View {
-        self.toolbarBackgroundVisibility(visibility, for: .windowToolbar)
-    }
-
-    func boltWindowContainerBackground(_ style: AnyShapeStyle) -> some View {
-        self.containerBackground(style, for: .window)
-    }
 }
 
 extension ToolbarContent {
@@ -267,16 +339,131 @@ extension ToolbarContent {
     }
 }
 
+private struct BoltLayeredSurfaceModifier<S: InsettableShape>: ViewModifier {
+    let glassEnabled: Bool
+    let level: BoltGlassLevel
+    let tone: BoltSurfaceTone
+    let tint: Color?
+    let interactive: Bool
+    let shape: S
+
+    @Environment(\.boltGlassIntensity) private var glassIntensity
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let isDark = colorScheme == .dark
+        let increasedContrast = colorSchemeContrast == .increased
+        let effectiveGlass = glassEnabled && !reduceTransparency
+        let borderWidth: CGFloat = increasedContrast ? 1.0 : 0.5
+
+        switch tone {
+        case .clear:
+            if effectiveGlass {
+                content.boltGlassSurface(.clear, tint: tint, interactive: interactive, in: shape)
+            } else {
+                content.background(tint ?? Color.clear, in: shape)
+            }
+        case .regular:
+            regularSurface(
+                content: content,
+                isDark: isDark,
+                increasedContrast: increasedContrast,
+                effectiveGlass: effectiveGlass,
+                borderWidth: borderWidth
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func regularSurface(
+        content: Content,
+        isDark: Bool,
+        increasedContrast: Bool,
+        effectiveGlass: Bool,
+        borderWidth: CGFloat
+    ) -> some View {
+        if !effectiveGlass {
+            content
+                .background(Color(nsColor: .controlBackgroundColor), in: shape)
+                .overlay(
+                    shape.strokeBorder(
+                        Color.primary.opacity(increasedContrast ? 0.24 : 0.10),
+                        lineWidth: borderWidth
+                    )
+                )
+        } else {
+            switch level {
+            case .window, .elevated:
+                content
+                    .boltGlassSurface(.regular, tint: tint, interactive: interactive, in: shape)
+                    .overlay(
+                        shape.strokeBorder(
+                            Color.primary.opacity(
+                                BoltGlassMetrics.borderOpacity(
+                                    level: level, isDark: isDark, increasedContrast: increasedContrast
+                                )
+                            ),
+                            lineWidth: borderWidth
+                        )
+                    )
+            case .card:
+                content
+                    .background {
+                        ZStack {
+                            shape.fill(
+                                Color(nsColor: .controlBackgroundColor)
+                                    .opacity(BoltGlassMetrics.cardFillAlpha(intensity: glassIntensity, isDark: isDark))
+                            )
+                            if let tint {
+                                shape.fill(tint)
+                            }
+                        }
+                    }
+                    .overlay(
+                        shape.strokeBorder(
+                            Color.primary.opacity(
+                                BoltGlassMetrics.borderOpacity(
+                                    level: .card, isDark: isDark, increasedContrast: increasedContrast
+                                )
+                            ),
+                            lineWidth: borderWidth
+                        )
+                    )
+            }
+        }
+    }
+}
+
+private struct BoltWindowContainerBackgroundModifier: ViewModifier {
+    let glassEnabled: Bool
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        let effectiveGlass = glassEnabled && !reduceTransparency
+        content
+            .containerBackground(
+                effectiveGlass ? AnyShapeStyle(Color.clear) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)),
+                for: .window
+            )
+            .toolbarBackgroundVisibility(effectiveGlass ? .hidden : .automatic, for: .windowToolbar)
+    }
+}
+
 private struct BoltUnifiedSheetModifier: ViewModifier {
     @Bindable var vm: WorkspaceViewModel
     @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
         content
+            .environment(\.boltGlassIntensity, vm.glassIntensity)
             .boltGlassSheetStyle(
                 enabled: vm.effectiveWindowTranslucency,
                 glassIntensity: vm.glassIntensity,
                 backgroundNSColor: vm.resolvedBackgroundNSColor(isDark: colorScheme == .dark),
+                isColoredPreset: vm.appBackgroundColor != .pureWhite,
                 colorScheme: vm.appTheme.colorScheme
             )
     }
@@ -286,17 +473,23 @@ private struct BoltWithinWindowGlassCoverModifier: ViewModifier {
     let glassEnabled: Bool
     let dividerEdge: Edge?
     let cornerRadius: CGFloat
+    @Environment(\.boltGlassIntensity) private var glassIntensity
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     func body(content: Content) -> some View {
         let isDark = colorScheme == .dark
+        let effectiveGlass = glassEnabled && !reduceTransparency
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let scrimAlpha = BoltGlassMetrics.coverScrimAlpha(intensity: glassIntensity, isDark: isDark)
+
         content
             .background {
-                if glassEnabled {
+                if effectiveGlass {
                     ZStack {
-                        Rectangle().fill(.ultraThinMaterial)
-                        Color.white.opacity(isDark ? 0.05 : 0.14)
+                        Rectangle().fill(.regularMaterial)
+                        Color(nsColor: .controlBackgroundColor).opacity(scrimAlpha)
                     }
                     .clipShape(shape)
                 } else {
@@ -306,10 +499,13 @@ private struct BoltWithinWindowGlassCoverModifier: ViewModifier {
             }
             .overlay(alignment: dividerEdge == .top ? .top : .bottom) {
                 if dividerEdge != nil {
+                    let dividerOpacity = colorSchemeContrast == .increased
+                        ? 0.28
+                        : (isDark ? 0.18 : 0.11)
                     Rectangle()
                         .fill(
-                            glassEnabled
-                                ? Color.primary.opacity(isDark ? 0.14 : 0.08)
+                            effectiveGlass
+                                ? Color.primary.opacity(dividerOpacity)
                                 : Color(nsColor: .separatorColor)
                         )
                         .frame(height: 0.5)
@@ -322,29 +518,31 @@ private struct BoltGlassSheetStyleModifier: ViewModifier {
     let enabled: Bool
     let glassIntensity: Double
     let backgroundNSColor: NSColor?
+    let isColoredPreset: Bool
     let preferredScheme: ColorScheme?
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var envColorScheme
 
     func body(content: Content) -> some View {
         let isDark = envColorScheme == .dark
-        let clamped = min(max(glassIntensity, 0), 1)
+        let effectiveGlass = enabled && !reduceTransparency
+        let clamped = BoltGlassMetrics.clamped(glassIntensity)
         let baseColor = backgroundNSColor ?? NSColor.windowBackgroundColor
-        let veilOpacity = max(0.14, (1.0 - clamped) * 0.72 + 0.08)
+        let veilOpacity = BoltGlassMetrics.sheetVeilAlpha(
+            intensity: clamped,
+            isDark: isDark,
+            isColoredPreset: isColoredPreset
+        )
+
         content
             .preferredColorScheme(preferredScheme)
             .background {
-                if enabled {
-                    ZStack {
-                        Rectangle().fill(.regularMaterial)
-                        Color(nsColor: baseColor)
-                            .opacity(isDark ? max(0.24, veilOpacity) : veilOpacity)
-                    }
+                Color(nsColor: baseColor)
+                    .opacity(effectiveGlass ? veilOpacity : 1.0)
                     .ignoresSafeArea()
-                } else {
-                    Color(nsColor: baseColor)
-                        .ignoresSafeArea()
-                }
             }
-            .boltSheetPresentationGlass(enabled)
+            .presentationBackground(
+                effectiveGlass ? AnyShapeStyle(.thinMaterial) : AnyShapeStyle(Color(nsColor: baseColor))
+            )
     }
 }

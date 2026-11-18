@@ -33,6 +33,7 @@ final class QuickLookPreviewController: NSObject, QLPreviewPanelDataSource, QLPr
     func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> (any QLPreviewItem)! {
         lock.lock()
         defer { lock.unlock() }
+        guard index >= 0 && index < previewURLs.count else { return nil }
         return previewURLs[index] as NSURL
     }
 }

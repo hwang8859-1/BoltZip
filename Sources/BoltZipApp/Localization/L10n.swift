@@ -119,21 +119,36 @@ struct L10n: Sendable {
     var newCompress: String { t("新建", "新增", "Compress", "新規圧縮") }
     var open: String { t("打开", "開啟", "Open", "開く") }
     var smartExtract: String { t("智能解压", "智慧解壓", "Smart Extract", "スマート展開") }
+    var smartExtractShortcutHint: String { t("智能解压 (⌘E)", "智慧解壓 (⌘E)", "Smart Extract (⌘E)", "スマート展開 (⌘E)") }
     var extractTo: String { t("解压到...", "解壓至...", "Extract...", "展開先を指定...") }
     var addInside: String { t("添加", "加入", "Add", "追加") }
     var newFolder: String { t("新建目录", "新增資料夾", "New Folder", "新規フォルダ") }
     var delete: String { t("删除", "刪除", "Delete", "削除") }
     var verify: String { t("校验", "驗證", "Verify", "整合性検証") }
+    var inspectorButton: String { t("显示/隐藏简介 (⌘I)", "顯示/隱藏簡介 (⌘I)", "Toggle Inspector (⌘I)", "インスペクタ表示切替 (⌘I)") }
     var layoutMenuTitle: String { t("界面与透明度", "介面與透明度", "Appearance", "表示・透過設定") }
 
     var folderTreeSection: String { t("目录结构", "目錄結構", "Folders", "フォルダ構成") }
     var rootLabel: String { t("根目录", "根目錄", "Root", "ルート") }
     var encryptedBadge: String { t("已加密", "已加密", "Encrypted", "暗号化") }
+    var unencryptedLabel: String { t("未加密", "未加密", "Unencrypted", "暗号化なし") }
     var totalEntries: String { t("条目总数", "項目總數", "Entries", "総項目数") }
     var originalSize: String { t("原始大小", "原始大小", "Original", "元のサイズ") }
     var packedSize: String { t("压缩后", "壓縮後", "Packed", "圧縮後") }
     var spaceSaved: String { t("节省空间", "節省空間", "Saved", "削減率") }
     var filenameEncoding: String { t("文件名编码", "檔名編碼", "Encoding", "文字コード") }
+    var selectedItemTitle: String { t("选中条目", "選取項目", "Selected Item", "選択中の項目") }
+    func selectedMultiTitle(_ count: Int) -> String {
+        t("已选 \(count) 项", "已選 \(count) 項", "\(count) Selected", "\(count) 項目選択中")
+    }
+    var inspectorFolderType: String { t("文件夹", "資料夾", "Folder", "フォルダ") }
+    var inspectorGenericFile: String { t("文件", "檔案", "File", "ファイル") }
+    func inspectorFileExt(_ ext: String) -> String {
+        t("\(ext) 文件", "\(ext) 檔案", "\(ext) File", "\(ext) ファイル")
+    }
+    var quickLookShort: String { t("预览", "預覽", "Quick Look", "プレビュー") }
+    var extractSelectedShort: String { t("解压选中项", "解壓選取項目", "Extract Selected", "選択を展開") }
+    var moreDetailsShort: String { t("详情…", "詳細資訊…", "Details…", "詳細…") }
     var searchPlaceholder: String { t("搜索目录...", "搜尋目錄...", "Search...", "検索...") }
 
     // MARK: - Table Columns & Drop Hint
@@ -337,7 +352,7 @@ struct L10n: Sendable {
         )
     }
     var aboutMenuTitle: String { t("关于 BoltZip", "關於 BoltZip", "About BoltZip", "BoltZip について") }
-    var aboutVersionLabel: String { BoltPlatformCapabilities.runtimeVersionSummary(appVersion: "1.0.0") }
+    var aboutVersionLabel: String { BoltPlatformCapabilities.runtimeVersionSummary(appVersion: BoltZipVersion.current) }
     var aboutDesc: String {
         t(
             "开源压缩/解压缩工作台，原生融合 Windows Zip 效率交互、访达一级 Bolt 菜单与液态玻璃设计。",
@@ -395,6 +410,25 @@ struct L10n: Sendable {
     }
     var overwriteExistingBtn: String { t("覆盖", "覆蓋", "Overwrite", "上書き") }
     var keepBothRenameBtn: String { t("自动重命名保留两者", "自動重新命名保留兩者", "Keep Both", "両方とも残す") }
+    func batchArchivesTitle(_ count: Int) -> String {
+        t("\(count) 个压缩包", "\(count) 個封存檔", "\(count) Archives", "\(count) 件の書庫")
+    }
+    func batchExtractConflictMessage(archives: [(archiveName: String, conflictingNames: [String])]) -> String {
+        let previewLines = archives.prefix(3).map { item -> String in
+            let names = item.conflictingNames.prefix(2).joined(separator: ", ")
+            let more = item.conflictingNames.count > 2 ? "…" : ""
+            return "• \(item.archiveName) → \(names)\(more)"
+        }.joined(separator: "\n")
+        let remaining = archives.count > 3
+            ? t("\n…另有 \(archives.count - 3) 个压缩包存在同名冲突", "\n…另有 \(archives.count - 3) 個封存檔存在同名衝突", "\n…and \(archives.count - 3) more conflicting archive(s)", "\n…ほか \(archives.count - 3) 件の書庫で重複あり")
+            : ""
+        return t(
+            "以下目标路径已存在同名文件或文件夹，是否覆盖？\n\n\(previewLines)\(remaining)",
+            "以下目標路徑已存在同名檔案或資料夾，是否覆蓋？\n\n\(previewLines)\(remaining)",
+            "Existing files or folders were found at the destination for:\n\n\(previewLines)\(remaining)\n\nDo you want to overwrite them?",
+            "以下の展開先に同名の項目が既に存在します。上書きしますか？\n\n\(previewLines)\(remaining)"
+        )
+    }
 
     // MARK: - Quick Task Floating HUD
     func hudCompressingTitle(_ fmt: String) -> String {

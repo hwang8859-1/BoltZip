@@ -47,7 +47,9 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
-        NSApp.setActivationPolicy(.regular)
+        let app = (notification.object as? NSApplication) ?? (NSApp as NSApplication?)
+        app?.setActivationPolicy(.regular)
+        app?.appearance = viewModel.appTheme.nsAppearance
         BoltAppIconRenderer.apply(whiteBackground: viewModel.useWhiteAppIcon)
         wireLifecycleCallbacks()
         viewModel.configureHUD()
@@ -61,8 +63,11 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        let app = (notification.object as? NSApplication) ?? (NSApp as NSApplication?)
+        app?.setActivationPolicy(.regular)
+        app?.appearance = viewModel.appTheme.nsAppearance
         BoltAppIconRenderer.apply(whiteBackground: viewModel.useWhiteAppIcon)
+        viewModel.refreshQuickActionsStatus()
         wireLifecycleCallbacks()
         viewModel.configureHUD()
         installWindowObservers()
@@ -122,6 +127,10 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showMainWindow()
         return true
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        viewModel.cleanupPreviewTempFiles()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -191,11 +200,13 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
             forName: NSWindow.willCloseNotification,
             object: nil,
             queue: .main
-        ) { [weak self] note in
-            let closingID = (note.object as AnyObject?).map { ObjectIdentifier($0) }
+        ) { [weak self] _ in
+            // Delay termination checks briefly so closing windows finish ordering out (`isVisible == false`),
+            // without blindly excluding an NSWindow instance that SwiftUI immediately recycles and shows
+            // during cold-launch external URL activation (`boltzip://finder?op=open...`).
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .milliseconds(60))
-                self?.terminateIfIdleAndNoVisibleWindows(excludingWindowID: closingID)
+                self?.terminateIfIdleAndNoVisibleWindows()
             }
         }
 
@@ -221,9 +232,8 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         return id == "boltzip.main" || id.hasPrefix("main")
     }
 
-    private func hasVisibleUserWindow(excludingWindowID: ObjectIdentifier? = nil) -> Bool {
+    private func hasVisibleUserWindow() -> Bool {
         for window in NSApp.windows {
-            if let excludingWindowID, ObjectIdentifier(window) == excludingWindowID { continue }
             guard window.isVisible, window.alphaValue > 0.05 else { continue }
             let id = window.identifier?.rawValue ?? ""
             if id == "boltzip.quickhud" || id == "boltzip.compress" || id == "boltzip.main" || id == "boltzip.about" {
@@ -236,12 +246,12 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
-    private func terminateIfIdleAndNoVisibleWindows(excludingWindowID: ObjectIdentifier? = nil) {
+    private func terminateIfIdleAndNoVisibleWindows() {
         guard viewModel.hudModel.phase == .idle else { return }
         guard !viewModel.isPreparingHUDExtract else { return }
         guard !viewModel.isHUDWindowVisible else { return }
         guard !viewModel.isCompressWindowVisible else { return }
-        guard !hasVisibleUserWindow(excludingWindowID: excludingWindowID) else { return }
+        guard !hasVisibleUserWindow() else { return }
         NSApp.terminate(nil)
     }
 

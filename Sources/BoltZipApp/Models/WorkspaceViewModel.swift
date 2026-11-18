@@ -28,7 +28,7 @@ final class WorkspaceViewModel {
 
     var recentArchivePaths: [String] = []
     var defaultStripMacJunk: Bool = true
-    var quickActionsInstalled: Bool = QuickActionInstaller.isExtensionEnabled()
+    var quickActionsInstalled: Bool = false
     var associationStatuses: [ArchiveAssociationStatus] = []
     var isUpdatingAssociations: Bool = false
 
@@ -42,7 +42,7 @@ final class WorkspaceViewModel {
     var appTheme: AppTheme = .system {
         didSet {
             UserDefaults.standard.set(appTheme.rawValue, forKey: Keys.appTheme)
-            NSApp.appearance = appTheme.nsAppearance
+            (NSApp as NSApplication?)?.appearance = appTheme.nsAppearance
         }
     }
     var isWindowTranslucent: Bool = true {
@@ -120,6 +120,7 @@ final class WorkspaceViewModel {
     var onLanguageChanged: (() -> Void)?
 
     let previewTempRoot: URL
+    var activePreviewTempDir: URL?
 
     enum Keys {
         static let recents = "BoltZip.RecentArchives"
@@ -147,7 +148,8 @@ final class WorkspaceViewModel {
     var isCompressWindowVisible: Bool { compressWindowController.isVisible }
 
     var hasVisibleMainWindow: Bool {
-        NSApp.windows.contains { window in
+        guard let app = NSApp as NSApplication? else { return false }
+        return app.windows.contains { window in
             let id = window.identifier?.rawValue ?? ""
             let isMainID = id == "boltzip.main" || id.hasPrefix("main")
             return isMainID
@@ -182,7 +184,6 @@ final class WorkspaceViewModel {
         if let rawTheme = defaults.string(forKey: Keys.appTheme), let parsedTheme = AppTheme(rawValue: rawTheme) {
             self.appTheme = parsedTheme
         }
-        NSApp.appearance = self.appTheme.nsAppearance
         if defaults.object(forKey: Keys.windowTranslucent) != nil {
             self.isWindowTranslucent = defaults.bool(forKey: Keys.windowTranslucent)
         }
@@ -216,7 +217,6 @@ final class WorkspaceViewModel {
         if defaults.object(forKey: Keys.whiteAppIcon) != nil {
             self.useWhiteAppIcon = defaults.bool(forKey: Keys.whiteAppIcon)
         }
-        BoltAppIconRenderer.apply(whiteBackground: self.useWhiteAppIcon)
         self.statusMessage = L10n(language: self.appLanguage).readyStatus
     }
 
@@ -245,5 +245,10 @@ final class WorkspaceViewModel {
 
     func shouldReturnHomeOnWindowClose() -> Bool {
         listing != nil && openedArchiveFromHome
+    }
+
+    func cleanupPreviewTempFiles() {
+        activePreviewTempDir = nil
+        try? FileManager.default.removeItem(at: previewTempRoot)
     }
 }

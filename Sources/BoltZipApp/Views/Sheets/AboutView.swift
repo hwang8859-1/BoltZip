@@ -1,4 +1,5 @@
 import AppKit
+import BoltZipCore
 import SwiftUI
 
 struct AboutView: View {
@@ -8,10 +9,14 @@ struct AboutView: View {
     var body: some View {
         let l = vm.l10n
         let glassEnabled = vm.effectiveWindowTranslucency
-        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? BoltZipVersion.current
 
         VStack(spacing: 12) {
-            BoltLogoBadge(size: 64, whiteBackground: vm.useWhiteAppIcon)
+            BoltLogoBadge(
+                size: 64,
+                whiteBackground: vm.useWhiteAppIcon,
+                glassEnabled: glassEnabled
+            )
 
             VStack(spacing: 4) {
                 Text("BoltZip")
@@ -85,10 +90,8 @@ struct AboutView: View {
                 backgroundOpacity: vm.windowBackgroundOpacity
             )
         )
-        .boltWindowContainerBackground(
-            glassEnabled ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
-        )
-        .boltWindowToolbarBackgroundVisibility(glassEnabled ? .hidden : .automatic)
+        .environment(\.boltGlassIntensity, vm.glassIntensity)
+        .boltUnifiedWindowContainerBackground(glassEnabled: glassEnabled)
         .preferredColorScheme(vm.appTheme.colorScheme)
     }
 }

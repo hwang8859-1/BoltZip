@@ -37,7 +37,7 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
         case .xz: return "XZ (.xz)"
         case .bz2: return "Bzip2 (.bz2)"
         case .lz4: return "LZ4 (.lz4)"
-        case .iso: return "ISO 镜像 (.iso)"
+        case .iso: return BoltCoreLocalization.t("ISO 镜像 (.iso)", "ISO 光碟映像 (.iso)", "ISO Image (.iso)", "ISO イメージ (.iso)")
         case .cab: return "Windows CAB (.cab)"
         case .xar: return "macOS XAR (.xar)"
         }
@@ -70,7 +70,7 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
         case .tar:
             return [.store]
         case .sevenZip:
-            return [.xz]
+            return [.xz, .bzip2, .deflate, .store]
         default:
             return [.store]
         }
@@ -97,9 +97,9 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
 
         let ext = url.pathExtension.lowercased()
         switch ext {
-        case "zip", "zipx": return .zip
-        case "rar": return .rar
-        case "7z": return .sevenZip
+        case "zip", "zipx", "cbz": return .zip
+        case "rar", "cbr": return .rar
+        case "7z", "cb7": return .sevenZip
         case "tar": return .tar
         case "gz": return .gz
         case "zst", "zstd": return .zst
@@ -135,7 +135,7 @@ public enum CompressionAlgorithm: String, CaseIterable, Identifiable, Codable, S
 
     public var displayName: String {
         switch self {
-        case .store: return "仅存储 (Store)"
+        case .store: return BoltCoreLocalization.t("仅存储 (Store)", "僅儲存 (Store)", "Store (No Compression)", "無圧縮 (Store)")
         case .deflate: return "DEFLATE (zlib)"
         case .zstd: return "Zstandard (zstd)"
         case .xz: return "LZMA2 (xz)"
@@ -157,12 +157,12 @@ public enum CompressionAlgorithm: String, CaseIterable, Identifiable, Codable, S
 
     public var openSourceLicenseNote: String {
         switch self {
-        case .store: return "无压缩直存"
-        case .deflate: return "zlib License · 全平台最通用"
-        case .zstd: return "BSD License · Meta 开源高比高速"
-        case .xz: return "0BSD / Public Domain · 极限压缩比"
-        case .bzip2: return "bzip2 License · 经典块排序压缩"
-        case .lz4: return "BSD 2-Clause · 实时超高速"
+        case .store: return BoltCoreLocalization.t("无压缩直存", "無壓縮直存", "Uncompressed raw storage", "無圧縮ダイレクト保存")
+        case .deflate: return BoltCoreLocalization.t("zlib License · 全平台最通用", "zlib License · 全平台最通用", "zlib License · Universal compatibility", "zlib License · 汎用性重視")
+        case .zstd: return BoltCoreLocalization.t("BSD License · Meta 开源高比高速", "BSD License · Meta 開源高壓縮高速度", "BSD License · High ratio & fast", "BSD License · 高圧縮・超高速")
+        case .xz: return BoltCoreLocalization.t("0BSD / Public Domain · 极限压缩比", "0BSD / Public Domain · 極限壓縮比", "0BSD / Public Domain · Maximum ratio", "0BSD / Public Domain · 最高圧縮率")
+        case .bzip2: return BoltCoreLocalization.t("bzip2 License · 经典块排序压缩", "bzip2 License · 經典區塊排序壓縮", "bzip2 License · Classic block sorting", "bzip2 License · クラシック高圧縮")
+        case .lz4: return BoltCoreLocalization.t("BSD 2-Clause · 实时超高速", "BSD 2-Clause · 即時超高速", "BSD 2-Clause · Real-time ultra fast", "BSD 2-Clause · リアルタイム超高速")
         }
     }
 
@@ -211,11 +211,11 @@ public enum CompressionPreset: String, CaseIterable, Identifiable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .store: return "仅存储"
-        case .fastest: return "极速压缩"
-        case .balanced: return "标准均衡"
-        case .maximum: return "高压缩率"
-        case .ultra: return "极限压缩"
+        case .store: return BoltCoreLocalization.t("仅存储", "僅儲存", "Store", "無圧縮")
+        case .fastest: return BoltCoreLocalization.t("极速压缩", "極速壓縮", "Fastest", "最速")
+        case .balanced: return BoltCoreLocalization.t("标准均衡", "標準均衡", "Balanced", "標準")
+        case .maximum: return BoltCoreLocalization.t("高压缩率", "高壓縮率", "Maximum", "高圧縮")
+        case .ultra: return BoltCoreLocalization.t("极限压缩", "極限壓縮", "Ultra", "最高圧縮")
         }
     }
 
@@ -256,9 +256,9 @@ public enum EncryptionMethod: String, CaseIterable, Identifiable, Codable, Senda
 
     public var displayName: String {
         switch self {
-        case .none: return "不加密"
-        case .aes256: return "AES-256 (WinZip AE-2 标准)"
-        case .zipCrypto: return "ZipCrypto (传统兼容)"
+        case .none: return BoltCoreLocalization.t("不加密", "不加密", "None", "暗号化なし")
+        case .aes256: return BoltCoreLocalization.t("AES-256 (WinZip AE-2 标准)", "AES-256 (WinZip AE-2 標準)", "AES-256 (WinZip AE-2)", "AES-256 (WinZip AE-2 準拠)")
+        case .zipCrypto: return BoltCoreLocalization.t("ZipCrypto (传统兼容)", "ZipCrypto (傳統相容)", "ZipCrypto (Legacy Compatible)", "ZipCrypto (従来互換)")
         }
     }
 }
@@ -276,13 +276,13 @@ public enum FilenameEncodingOption: String, CaseIterable, Identifiable, Codable,
 
     public var displayName: String {
         switch self {
-        case .auto: return "智能自动识别 (推荐)"
+        case .auto: return BoltCoreLocalization.t("智能自动识别 (推荐)", "智慧自動辨識 (推薦)", "Auto-Detect (Recommended)", "自動判別 (推奨)")
         case .utf8: return "UTF-8 (Unicode)"
-        case .gb18030: return "简体中文 (GB18030 / GBK)"
-        case .big5: return "繁体中文 (Big5)"
-        case .shiftJIS: return "日文 (Shift-JIS)"
-        case .eucKR: return "韩文 (EUC-KR)"
-        case .cp437: return "DOS / 英文 (CP437)"
+        case .gb18030: return BoltCoreLocalization.t("简体中文 (GB18030 / GBK)", "簡體中文 (GB18030 / GBK)", "Simplified Chinese (GB18030 / GBK)", "簡体字中国語 (GB18030 / GBK)")
+        case .big5: return BoltCoreLocalization.t("繁体中文 (Big5)", "繁體中文 (Big5)", "Traditional Chinese (Big5)", "繁体字中国語 (Big5)")
+        case .shiftJIS: return BoltCoreLocalization.t("日文 (Shift-JIS)", "日文 (Shift-JIS)", "Japanese (Shift-JIS)", "日本語 (Shift-JIS)")
+        case .eucKR: return BoltCoreLocalization.t("韩文 (EUC-KR)", "韓文 (EUC-KR)", "Korean (EUC-KR)", "韓国語 (EUC-KR)")
+        case .cp437: return BoltCoreLocalization.t("DOS / 英文 (CP437)", "DOS / 英文 (CP437)", "DOS / Western (CP437)", "DOS / 欧文 (CP437)")
         }
     }
 }
@@ -303,9 +303,9 @@ public enum OverwritePolicy: String, CaseIterable, Identifiable, Codable, Sendab
 
     public var displayName: String {
         switch self {
-        case .overwrite: return "覆盖已有文件"
-        case .skip: return "跳过已有文件"
-        case .rename: return "自动重命名保留两者"
+        case .overwrite: return BoltCoreLocalization.t("覆盖已有文件", "覆蓋既有檔案", "Overwrite Existing", "既存ファイルを上書き")
+        case .skip: return BoltCoreLocalization.t("跳过已有文件", "略過既有檔案", "Skip Existing", "既存ファイルをスキップ")
+        case .rename: return BoltCoreLocalization.t("自动重命名保留两者", "自動重新命名保留兩者", "Keep Both (Auto Rename)", "自動リネームして両方残す")
         }
     }
 }
@@ -503,6 +503,24 @@ public struct IntegrityReport: Sendable {
     public let skippedEncryptedCount: Int
     public let elapsedSeconds: Double
     public let results: [IntegrityEntryResult]
+
+    public init(
+        archiveName: String,
+        totalEntries: Int,
+        passedCount: Int,
+        failedCount: Int,
+        skippedEncryptedCount: Int,
+        elapsedSeconds: Double,
+        results: [IntegrityEntryResult]
+    ) {
+        self.archiveName = archiveName
+        self.totalEntries = totalEntries
+        self.passedCount = passedCount
+        self.failedCount = failedCount
+        self.skippedEncryptedCount = skippedEncryptedCount
+        self.elapsedSeconds = elapsedSeconds
+        self.results = results
+    }
 
     public var isHealthy: Bool { failedCount == 0 && skippedEncryptedCount == 0 }
 }

@@ -8,7 +8,7 @@
 
 ![macOS 26.0+](https://img.shields.io/badge/macOS-26.0%2B%20(Apple%20Silicon)-0ea5e9?style=flat-square)
 ![Swift 6.2](https://img.shields.io/badge/Swift-6.2-6366f1?style=flat-square)
-![Release v1.0.0](https://img.shields.io/badge/release-v1.0.0-facc15?style=flat-square)
+![Release v1.0.1](https://img.shields.io/badge/release-v1.0.1-facc15?style=flat-square)
 ![License MIT](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)
 
 </div>
@@ -17,7 +17,7 @@
 
 **BoltZip** は **Apple Silicon（M シリーズ `arm64`）& macOS 26.0+ 専用** に最適化されたオープンソースの圧縮・展開ツールです。7-Zip / WinZip / Bandizip など Windows 定番圧縮ソフトの軽快な操作性とネイティブの **Liquid Glass** を融合しました。
 
-> 💡 **Intel Mac や macOS 12〜15 をお使いの方**：長期互換リリース **v0.9.1 Universal (`arm64 + x86_64`)** を [`legacy/macos-12`](../../tree/legacy/macos-12) ブランチおよび `v0.9.1` タグにて提供しています。
+> 💡 **Intel Mac や macOS 12〜15 をお使いの方**：長期互換リリース **v0.9.3 Universal (`arm64 + x86_64`)** を [`legacy/macos-12`](../../tree/legacy/macos-12) ブランチおよび `v0.9.3` タグにて提供しています。
 
 > [!IMPORTANT]
 > **現在の開発ブランチ：[GitHub デフォルトの `dev-*` ブランチ](../../)** · `main` は保護されたリリース専用ブランチです。PR は必ず現在のデフォルト開発ブランチをターゲットに作成してください（詳細は [CONTRIBUTING.md](CONTRIBUTING.md)）。
@@ -66,7 +66,7 @@ swift run -c release boltzip x release.zip ./out --mode smart
 
 ## 🧩 紹介ページ ＆ 開発者向けドキュメント
 
-- **オンライン紹介・ダウンロードページ**：公開サイト [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/) にて UI シミュレーター、圧縮エンジン比較、および `BoltZip v1.0.0 Apple Silicon` とソースコードアーカイブのダウンロードをご確認いただけます（ソースは [showcase/](showcase/) に同梱）。
+- **オンライン紹介・ダウンロードページ**：公開サイト [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/) にて UI シミュレーター、圧縮エンジン比較、および `BoltZip v1.0.1 Apple Silicon` とソースコードアーカイブのダウンロードをご確認いただけます（ソースは [showcase/](showcase/) に同梱）。
 - **AI Agent / コントリビューターガイド**：[AGENTS.md](AGENTS.md) をご覧ください。
 - **変更履歴**：[CHANGELOG.md](CHANGELOG.md) をご覧ください。
 

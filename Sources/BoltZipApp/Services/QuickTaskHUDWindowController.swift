@@ -20,6 +20,7 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
     private var hideGeneration: Int = 0
     private var hasPositionedOnce: Bool = false
     private var isProgrammaticFrameUpdate: Bool = false
+    private var isResizeScheduled: Bool = false
 
     var isVisible: Bool { panel?.isVisible == true }
     var onDidHide: (() -> Void)?
@@ -30,7 +31,9 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
             hostingController.rootView = rootView
         } else {
             let hc = NSHostingController(rootView: rootView)
-            hc.sizingOptions = [.preferredContentSize]
+            // Keep sizingOptions empty: `.preferredContentSize` triggers recursive
+            // `NSHostingView.windowDidLayout() -> updateAnimatedWindowSize` on macOS 26+.
+            hc.sizingOptions = []
             self.hostingController = hc
         }
 
@@ -42,6 +45,9 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
         }
         hudModel.onKeyFocusRequested = { [weak self] in
             self?.makeKeyIfPasswordNeeded()
+        }
+        hudModel.onLayoutNeedsUpdate = { [weak self] in
+            self?.scheduleResizeToFit()
         }
     }
 
@@ -76,18 +82,12 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
             panel = created
         }
 
-        hostingController.view.layoutSubtreeIfNeeded()
-        let fitting = hostingController.sizeThatFits(in: NSSize(width: 436, height: 420))
+        let fitting = measuredFittingSize(using: hostingController)
         if !hasPositionedOnce {
             positionInitialFrame(panel: panel, size: fitting)
             hasPositionedOnce = true
         } else {
-            let current = panel.frame
-            if abs(current.width - fitting.width) > 2 || abs(current.height - fitting.height) > 2 {
-                let topLeftOrigin = NSPoint(x: current.origin.x, y: current.maxY - fitting.height)
-                let clamped = clampedOrigin(topLeftOrigin, size: fitting, preferredScreen: panel.screen ?? activeScreen())
-                applyProgrammaticFrame(NSRect(origin: clamped, size: fitting), to: panel)
-            }
+            resizePanelIfNeeded(panel, to: fitting)
         }
 
         let wasVisible = panel.isVisible && panel.alphaValue > 0.05
@@ -110,7 +110,38 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
     }
 
     func makeKeyIfPasswordNeeded() {
+        scheduleResizeToFit()
         panel?.makeKeyAndOrderFront(nil)
+    }
+
+    private func scheduleResizeToFit() {
+        guard !isResizeScheduled else { return }
+        isResizeScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isResizeScheduled = false
+            guard let panel = self.panel, panel.isVisible, let hostingController = self.hostingController else { return }
+            let fitting = self.measuredFittingSize(using: hostingController)
+            self.resizePanelIfNeeded(panel, to: fitting)
+        }
+    }
+
+    private func measuredFittingSize(using hostingController: NSHostingController<QuickTaskHUDRootView>) -> NSSize {
+        hostingController.view.layoutSubtreeIfNeeded()
+        let raw = hostingController.sizeThatFits(in: NSSize(width: 436, height: 420))
+        return NSSize(
+            width: max(380, ceil(raw.width)),
+            height: max(100, ceil(raw.height))
+        )
+    }
+
+    private func resizePanelIfNeeded(_ panel: NSPanel, to fitting: NSSize) {
+        let current = panel.frame
+        if abs(current.width - fitting.width) > 1.0 || abs(current.height - fitting.height) > 1.0 {
+            let topLeftOrigin = NSPoint(x: current.origin.x, y: current.maxY - fitting.height)
+            let clamped = clampedOrigin(topLeftOrigin, size: fitting, preferredScreen: panel.screen ?? activeScreen())
+            applyProgrammaticFrame(NSRect(origin: clamped, size: fitting), to: panel)
+        }
     }
 
     func hide() {
@@ -202,6 +233,7 @@ private struct QuickTaskHUDRootView: View {
 
     var body: some View {
         QuickTaskHUDView(vm: vm, hud: hud)
+            .environment(\.boltGlassIntensity, vm.glassIntensity)
             .preferredColorScheme(vm.appTheme.colorScheme)
     }
 }

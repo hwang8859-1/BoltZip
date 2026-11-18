@@ -8,7 +8,7 @@
 | :--- | :--- | :--- |
 | **[默认 `dev-*` 分支](../../)** *(当前 `dev-1.0.1`)* | **当前活跃开发分支** | 所有日常开发与外部贡献 PR **均须基于并提交至此默认分支**；受 Ruleset 保护禁止强推与误删 |
 | **`main`** | **稳定发布分支**（受保护） | 禁止直接 `git push`；仅接收从活跃 `dev-*` 合入的版本发布 PR，受 [`pr-target-guard`](.github/workflows/pr-target-guard.yml) 强校验 |
-| **`legacy/macos-12`** | **v0.9.1 LTS 兼容分支** | 仅维护 Intel (`x86_64`) + macOS 12–26 关键兼容性修复；受 Ruleset 保护禁止强推与删除 |
+| **`legacy/macos-12`** | **v0.9.3 LTS 兼容分支** | 仅维护 Intel (`x86_64`) + macOS 12–26 关键兼容性修复；受 Ruleset 保护禁止强推与删除 |
 
 > [!IMPORTANT]
 > 请不要将常规开发 PR 指向 `main`。由于当前默认分支已设置为活跃 `dev-*` 分支，直接执行 `git clone` 或在 GitHub 点击创建 PR 时会自动指向正确分支；若错指 `main`，[`pr-target-guard`](.github/workflows/pr-target-guard.yml) 会自动提示改投并关闭该 PR。

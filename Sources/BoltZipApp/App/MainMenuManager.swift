@@ -135,13 +135,13 @@ final class MainMenuManager {
     }
 
     func pruneIfNeeded(using l: L10n) {
-        guard !isPruning, let mainMenu = NSApp.mainMenu, !mainMenu.items.isEmpty else { return }
+        guard !isPruning, let app = NSApp as NSApplication?, let mainMenu = app.mainMenu, !mainMenu.items.isEmpty else { return }
         isPruning = true
         defer { isPruning = false }
 
-        if NSApp.windowsMenu != nil { NSApp.windowsMenu = nil }
-        if NSApp.servicesMenu != nil { NSApp.servicesMenu = nil }
-        if NSApp.helpMenu != nil { NSApp.helpMenu = nil }
+        if app.windowsMenu != nil { app.windowsMenu = nil }
+        if app.servicesMenu != nil { app.servicesMenu = nil }
+        if app.helpMenu != nil { app.helpMenu = nil }
 
         guard let appItem = mainMenu.items.first, let appSubmenu = appItem.submenu else { return }
         if appItem.title != "BoltZip" { appItem.title = "BoltZip" }

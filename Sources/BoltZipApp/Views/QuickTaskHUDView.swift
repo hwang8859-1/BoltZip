@@ -10,7 +10,7 @@ struct QuickTaskHUDView: View {
     private var l10n: L10n { vm.l10n }
 
     var body: some View {
-        let glassEnabled = isFloatingWindow ? vm.supportsLiquidGlass : vm.effectiveWindowTranslucency
+        let glassEnabled = vm.effectiveWindowTranslucency
         BoltGlassContainer(spacing: 12) {
             VStack(alignment: .leading, spacing: 12) {
                 headerRow
@@ -27,6 +27,7 @@ struct QuickTaskHUDView: View {
             .frame(maxWidth: isFloatingWindow ? 404 : 408)
             .modifier(HUDSurfaceModifier(useLiquidGlass: glassEnabled, isFloatingWindow: isFloatingWindow))
         }
+        .environment(\.boltGlassIntensity, vm.glassIntensity)
         .padding(.horizontal, 16)
         .padding(.vertical, isFloatingWindow ? 14 : 16)
         .onHover { hovering in
@@ -394,20 +395,31 @@ struct QuickTaskHUDView: View {
 private struct HUDSurfaceModifier: ViewModifier {
     let useLiquidGlass: Bool
     let isFloatingWindow: Bool
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     @ViewBuilder
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: BoltRadius.hero, style: .continuous)
-        if useLiquidGlass && isFloatingWindow {
+        if isFloatingWindow {
             content
-                .boltGlassSurface(.regular, in: shape)
+                .boltLayeredSurface(
+                    glassEnabled: useLiquidGlass,
+                    level: .elevated,
+                    tone: .regular,
+                    in: shape
+                )
                 .shadow(color: .black.opacity(0.16), radius: 14, y: 6)
         } else {
+            let effectiveCover = useLiquidGlass && !reduceTransparency
             content
-                .background(.regularMaterial, in: shape)
+                .boltWithinWindowGlassCover(
+                    glassEnabled: effectiveCover,
+                    dividerEdge: nil,
+                    cornerRadius: BoltRadius.hero
+                )
                 .overlay(
                     shape
-                        .strokeBorder(Color.primary.opacity(0.14), lineWidth: 0.75)
+                        .strokeBorder(Color.primary.opacity(0.14), lineWidth: 0.5)
                 )
                 .shadow(color: .black.opacity(0.20), radius: 14, y: 6)
         }

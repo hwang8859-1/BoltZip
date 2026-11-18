@@ -10,6 +10,7 @@ struct WindowStyleConfigurator: NSViewRepresentable {
     var hideWindowTitle: Bool = false
     @Binding var titlebarHeight: CGFloat
     @Binding var isFullScreen: Bool
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     @MainActor
     final class Coordinator: NSObject {
@@ -57,7 +58,16 @@ struct WindowStyleConfigurator: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
-        let coordinator = context.coordinator
+        scheduleApply(for: view, coordinator: context.coordinator)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        scheduleApply(for: nsView, coordinator: context.coordinator)
+    }
+
+    private func scheduleApply(for view: NSView, coordinator: Coordinator) {
+        let allowTranslucency = isTranslucent && !reduceTransparency
         DispatchQueue.main.async {
             if let win = view.window {
                 coordinator.observe(window: win) { full in
@@ -66,26 +76,11 @@ struct WindowStyleConfigurator: NSViewRepresentable {
                     }
                 }
             }
-            apply(to: view.window)
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        let coordinator = context.coordinator
-        DispatchQueue.main.async {
-            if let win = nsView.window {
-                coordinator.observe(window: win) { full in
-                    if isFullScreen != full {
-                        isFullScreen = full
-                    }
-                }
-            }
-            apply(to: nsView.window)
+            apply(to: view.window, allowTranslucency: allowTranslucency)
         }
     }
 
-    private func apply(to window: NSWindow?) {
+    private func apply(to window: NSWindow?, allowTranslucency: Bool) {
         guard let window else { return }
 
         let nowFull = window.styleMask.contains(.fullScreen)
@@ -137,18 +132,6 @@ struct WindowStyleConfigurator: NSViewRepresentable {
             }
         }
 
-        if isTranslucent {
-            if window.isOpaque { window.isOpaque = false }
-            if !window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = true }
-            if window.titlebarSeparatorStyle != .none { window.titlebarSeparatorStyle = .none }
-            if window.backgroundColor != .clear { window.backgroundColor = .clear }
-        } else {
-            if !window.isOpaque { window.isOpaque = true }
-            if window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = false }
-            if window.titlebarSeparatorStyle != .automatic { window.titlebarSeparatorStyle = .automatic }
-            if window.backgroundColor != NSColor.windowBackgroundColor {
-                window.backgroundColor = NSColor.windowBackgroundColor
-            }
-        }
+        applyBoltWindowTranslucency(allowTranslucency, to: window)
     }
 }

@@ -46,7 +46,7 @@ extension ArchiveExplorerView {
             vm.testIntegrity()
         }
 
-        if listing.format.supportsInPlaceEditing {
+        if listing.canEditInPlace {
             Divider()
             Button(l.ctxAddHere) {
                 vm.addItemsToCurrentZipPanel()
@@ -78,7 +78,7 @@ extension ArchiveExplorerView {
             vm.activeSheet = .extractOptions(.smart)
         }
 
-        if listing.format.supportsInPlaceEditing {
+        if listing.canEditInPlace {
             Divider()
             Button(l.ctxAddHere) {
                 vm.addItemsToCurrentZipPanel()

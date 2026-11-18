@@ -2,6 +2,26 @@
 
 All notable changes to **BoltZip** will be documented in this file.
 
+## [1.0.1] - 2026-11-18 (`main`: Apple Silicon + macOS 26+ Hotfix & Quality Release)
+
+### Fixed
+- **Finder Quick-Action HUD Stack Overflow (`EXC_BAD_ACCESS / SIGSEGV`)**:
+  - Removed `hc.sizingOptions = [.preferredContentSize]` in [`QuickTaskHUDWindowController.swift`](Sources/BoltZipApp/Services/QuickTaskHUDWindowController.swift) where macOS 26's `NSHostingView.windowDidLayout() -> updateAnimatedWindowSize(_:)` caused infinite layout recursion inside the borderless `QuickHUDPanel` during Finder right-click compress & extract actions.
+  - Added coalesced `scheduleResizeToFit()` triggered by [`QuickTaskHUDModel.swift`](Sources/BoltZipApp/Models/QuickTaskHUDModel.swift) `phase` changes and password focus transitions with `ceil`-rounded bounds.
+- **Cold-Launch External URL Auto-Exit**:
+  - Removed the blind `excludingWindowID` exclusion in [`BoltZipAppDelegate.swift`](Sources/BoltZipApp/App/BoltZipAppDelegate.swift) so SwiftUI recycling and ordering front an initial `NSWindow` during cold-launch Finder actions (`boltzip://finder?op=open...` / `op=openWorkspace`) stays alive cleanly.
+- **macOS Lifecycle, 7z Levels & Split-ZIP Safety**:
+  - Deferred `NSApp` initialization out of `WorkspaceViewModel.init()`, fixed `.7z` compression level forwarding, guarded in-place editing of split-volume ZIPs, wired status bar toggle & Quick Look temp-file cleanup, and fixed multi-archive batch extraction & integrity reports.
+
+### Improved
+- **Liquid Glass Hierarchy, Localized FinderSync & Centralized Version Metadata**:
+  - Aligned toolbar, inspector, and sheet surfaces to native macOS 26 Liquid Glass hierarchy; localized `BoltZipCore` errors/metadata and embedded `.lproj` localization bundles in `BoltZipFinderSync.appex`; centralized `BoltZipVersion` (`1.0.1`) across `BoltZipCore`, `boltzip` CLI, `BoltZipApp`, and `build_app.sh`.
+
+## [0.9.3 (`legacy/macos-12`)] - 2026-11-18
+
+### Fixed
+- **Universal LTS HUD Layout & Cold-Launch URL Guards**: Backported the `QuickTaskHUDWindowController` `sizingOptions = []` resize-coalescing fix and the `BoltZipAppDelegate` `willCloseNotification` window-visibility check to `legacy/macos-12` (`v0.9.3` Universal `arm64` + `x86_64`, `minOS 12.0`).
+
 ## [1.0.0] - 2026-11-18 (`main`: Apple Silicon + macOS 26+ Exclusive)
 
 ### Changed
@@ -10,11 +30,18 @@ All notable changes to **BoltZip** will be documented in this file.
 - **Apple Silicon (`arm64`) + macOS 26+ Baseline**:
   - Raised deployment target on `main` to **macOS 26.0+** with `swift-tools-version: 6.2` and exclusively targets **Apple Silicon (`arm64` / M-series)** (`Scripts/build_app.sh` and `Scripts/build_universal_deps.sh` drop `x86_64` fat slices for smaller binaries and zero deprecation warnings).
   - Simplified [`WindowBackingViews.swift`](Sources/BoltZipApp/Views/Design/WindowBackingViews.swift) and [`GlassDesignSystem.swift`](Sources/BoltZipApp/Views/Design/GlassDesignSystem.swift) to use native macOS 26 **Liquid Glass** APIs (`GlassEffectContainer`, `.glassEffect`, `NSGlassEffectView`, `.buttonStyle(.glass)`, `.toolbarBackgroundVisibility`, `.sharedBackgroundVisibility(.hidden)`) directly without pre-macOS-26 `#available` fallbacks.
-  - Legacy support for **macOS 12 Monterey through macOS 26+ Universal (`arm64` + `x86_64` / Intel)** is preserved as **`v0.9.1`** on branch [`legacy/macos-12`](../../tree/legacy/macos-12).
+  - Legacy support for **macOS 12 Monterey through macOS 26+ Universal (`arm64` + `x86_64` / Intel)** is maintained on branch [`legacy/macos-12`](../../tree/legacy/macos-12) (latest **`v0.9.2`**).
 - **RAR / RAR5, Multi-Core Parallelism & Default File Associations**:
   - Added full inspection, integrity check, password unlock, and extraction for `.rar`, `.r00/.r01`, `.part1.rar`, and RAR5 archives.
   - Added multi-core parallel entry preparation and chunked extraction via `ParallelExecutor`.
   - Added default archive file association management in Settings and return-to-welcome navigation on archive close.
+
+## [0.9.2 (`legacy/macos-12`)] - 2026-11-18
+
+### Fixed
+- **macOS 12 / 13 Startup `SIGTRAP` Fix & Compatibility Hardening** (`legacy/macos-12`, also backported to `dev-1.0.1`):
+  - Deferred `NSApp.appearance`, `BoltAppIconRenderer.apply`, and `QuickActionInstaller.isExtensionEnabled()` out of `WorkspaceViewModel.init()` into AppKit launch delegates (`applicationWillFinishLaunching` / `applicationDidFinishLaunching`) so macOS 12/13 SwiftUI initialization never force-unwraps `NSApp` while nil.
+  - Guarded `(NSApp as NSApplication?)` across lifecycle/menu/window helpers, added bounds checks in `QuickLookPreviewController`, added modifier filtering on the `< macOS 14` explorer keyboard monitor, split 16 `CommandGroup` items into two `.commands` blocks, and added `UTImportedTypeDeclarations` + dynamic extension fallback for clean macOS 12–15 default archive association resolution.
 
 ## [0.9.0] - 2026-11-17
 

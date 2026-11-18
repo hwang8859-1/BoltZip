@@ -43,6 +43,7 @@ struct BoltZMark: Shape {
 struct BoltLogoBadge: View {
     let size: CGFloat
     var whiteBackground: Bool = false
+    var glassEnabled: Bool = true
 
     var body: some View {
         ZStack {
@@ -63,9 +64,15 @@ struct BoltLogoBadge: View {
                     .shadow(color: Color.black.opacity(0.10), radius: size * 0.08, y: size * 0.03)
             } else {
                 Circle()
-                    .fill(Color.cyan.opacity(0.16))
+                    .fill(Color.clear)
                     .frame(width: size, height: size)
-                    .boltGlassSurface(.regular, tint: .cyan.opacity(0.18), in: Circle())
+                    .boltLayeredSurface(
+                        glassEnabled: glassEnabled,
+                        level: .card,
+                        tone: .regular,
+                        tint: .cyan.opacity(0.18),
+                        in: Circle()
+                    )
             }
 
             BoltZMark()

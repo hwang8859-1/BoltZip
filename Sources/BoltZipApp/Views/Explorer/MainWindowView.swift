@@ -9,7 +9,7 @@ struct MainWindowView: View {
 
     var body: some View {
         let l = vm.l10n
-        let minW: CGFloat = vm.listing == nil ? 350 : 540
+        let minW: CGFloat = vm.listing == nil ? 350 : 560
         let minH: CGFloat = vm.listing == nil ? 270 : 320
 
         Group {
@@ -34,12 +34,10 @@ struct MainWindowView: View {
             )
         )
         .frame(minWidth: minW, minHeight: minH)
+        .environment(\.boltGlassIntensity, vm.glassIntensity)
         .preferredColorScheme(vm.appTheme.colorScheme)
         .navigationTitle(vm.listing == nil ? "BoltZip" : " ")
-        .boltWindowContainerBackground(
-            vm.effectiveWindowTranslucency ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
-        )
-        .boltWindowToolbarBackgroundVisibility(vm.effectiveWindowTranslucency ? .hidden : .automatic)
+        .boltUnifiedWindowContainerBackground(glassEnabled: vm.effectiveWindowTranslucency)
         .toolbar {
             mainToolbarContent(l: l)
         }
@@ -141,7 +139,7 @@ struct MainWindowView: View {
                 }
                 .padding(.horizontal, 4)
                 .frame(height: 30)
-                .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, tone: .regular, interactive: true, in: Capsule())
+                .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, level: .elevated, tone: .regular, interactive: true, in: Capsule())
             }
             .boltHiddenSharedBackground()
 
@@ -168,7 +166,7 @@ struct MainWindowView: View {
                     }
                     .padding(.horizontal, 9)
                     .frame(height: 28)
-                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, tone: .regular, interactive: true, in: Capsule())
+                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, level: .elevated, tone: .regular, interactive: true, in: Capsule())
 
                     HStack(spacing: 1) {
                         ToolbarPillIconButton(
@@ -184,10 +182,11 @@ struct MainWindowView: View {
                         ToolbarPillIconButton(
                             systemImage: "arrow.down.doc.fill",
                             label: l.smartExtract,
-                            helpText: l.smartExtract
+                            helpText: l.smartExtractShortcutHint
                         ) {
                             vm.triggerSmartExtractNow()
                         }
+                        .keyboardShortcut("e", modifiers: .command)
 
                         ToolbarPillIconButton(
                             systemImage: "square.and.arrow.down.on.square",
@@ -198,7 +197,7 @@ struct MainWindowView: View {
                             vm.activeSheet = .extractOptions(mode)
                         }
 
-                        if listing.format.supportsInPlaceEditing {
+                        if listing.canEditInPlace {
                             ToolbarPillIconButton(
                                 systemImage: "doc.badge.plus",
                                 label: l.addInside,
@@ -215,10 +214,30 @@ struct MainWindowView: View {
                                 vm.activeSheet = .createFolder(parentFolder: vm.currentFolder)
                             }
                         }
+
+                        toolbarDivider
+
+                        ToolbarPillIconButton(
+                            systemImage: "checkmark.shield",
+                            label: l.verify,
+                            helpText: l.verify
+                        ) {
+                            vm.testIntegrity()
+                        }
+
+                        ToolbarPillIconButton(
+                            systemImage: "info.circle",
+                            label: l.inspectorButton,
+                            helpText: l.inspectorButton,
+                            isActive: vm.showSidebarInspector && vm.columnVisibility != .detailOnly
+                        ) {
+                            toggleExplorerInspector()
+                        }
+                        .keyboardShortcut("i", modifiers: .command)
                     }
                     .padding(.horizontal, 5)
                     .frame(height: 30)
-                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, tone: .regular, interactive: true, in: Capsule())
+                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, level: .elevated, tone: .regular, interactive: true, in: Capsule())
                 }
             }
             .boltHiddenSharedBackground()
@@ -234,7 +253,7 @@ struct MainWindowView: View {
                     }
                     .padding(.horizontal, 2)
                     .frame(height: 30)
-                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, tone: .regular, interactive: true, in: Capsule())
+                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, level: .elevated, tone: .regular, interactive: true, in: Capsule())
                 }
                 .boltHiddenSharedBackground()
             }
@@ -268,7 +287,7 @@ struct MainWindowView: View {
                 }
                 .padding(.horizontal, 4)
                 .frame(height: 30)
-                .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, tone: .regular, interactive: true, in: Capsule())
+                .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, level: .elevated, tone: .regular, interactive: true, in: Capsule())
             }
             .boltHiddenSharedBackground()
         }
@@ -279,6 +298,17 @@ struct MainWindowView: View {
             .fill(Color.primary.opacity(0.14))
             .frame(width: 1, height: 14)
             .padding(.horizontal, 3)
+    }
+
+    private func toggleExplorerInspector() {
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.88)) {
+            if vm.columnVisibility == .detailOnly {
+                vm.columnVisibility = .all
+                vm.showSidebarInspector = true
+            } else {
+                vm.showSidebarInspector.toggle()
+            }
+        }
     }
 
     private func closeActiveArchiveOrWindow() {
@@ -312,12 +342,13 @@ struct MainWindowView: View {
                         .lineLimit(1)
                 }
                 .padding(18)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: BoltRadius.hero, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: BoltRadius.hero, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.75)
+                .boltLayeredSurface(
+                    glassEnabled: vm.effectiveWindowTranslucency,
+                    level: .card,
+                    tone: .regular,
+                    in: RoundedRectangle(cornerRadius: BoltRadius.hero, style: .continuous)
                 )
-                .shadow(radius: 16)
+                .shadow(color: .black.opacity(0.18), radius: 16, y: 6)
             }
         }
     }

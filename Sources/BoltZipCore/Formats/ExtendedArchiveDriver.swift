@@ -399,7 +399,12 @@ public enum ExtendedArchiveDriver {
                                 if let chunkPtr, chunkLen > 0 {
                                     if st.activeFileHandle == nil {
                                         guard fm.createFile(atPath: targetURL.path, contents: nil) else {
-                                            throw BoltZipError.ioError("无法创建解压目标文件：\(targetURL.lastPathComponent)")
+                                            throw BoltZipError.ioError(BoltCoreLocalization.t(
+                                                "无法创建解压目标文件：\(targetURL.lastPathComponent)",
+                                                "無法建立解壓縮目標檔案：\(targetURL.lastPathComponent)",
+                                                "Unable to create extracted file: \(targetURL.lastPathComponent)",
+                                                "展開先ファイルを作成できません: \(targetURL.lastPathComponent)"
+                                            ))
                                         }
                                         st.activeEntryCreated = true
                                         st.activeFileHandle = try FileHandle(forWritingTo: targetURL)
@@ -426,7 +431,12 @@ public enum ExtendedArchiveDriver {
                                     // End of entry: ensure zero-byte regular files are created, then close & set metadata
                                     if !st.activeEntryCreated {
                                         guard fm.createFile(atPath: targetURL.path, contents: nil) else {
-                                            throw BoltZipError.ioError("无法创建解压目标文件：\(targetURL.lastPathComponent)")
+                                            throw BoltZipError.ioError(BoltCoreLocalization.t(
+                                                "无法创建解压目标文件：\(targetURL.lastPathComponent)",
+                                                "無法建立解壓縮目標檔案：\(targetURL.lastPathComponent)",
+                                                "Unable to create extracted file: \(targetURL.lastPathComponent)",
+                                                "展開先ファイルを作成できません: \(targetURL.lastPathComponent)"
+                                            ))
                                         }
                                         st.activeEntryCreated = true
                                     }
@@ -502,13 +512,25 @@ public enum ExtendedArchiveDriver {
                             let detailStr = cDetail.map { String(cString: $0) } ?? ""
                             if statusCode == 0 {
                                 st.passed += 1
-                                st.results.append(IntegrityEntryResult(path: pathStr, status: .passed, detail: "流解码与校验通过"))
+                                st.results.append(IntegrityEntryResult(
+                                    path: pathStr,
+                                    status: .passed,
+                                    detail: BoltCoreLocalization.t("流解码与校验通过", "串流解碼與驗證通過", "Stream decode & verification passed", "ストリームデコード・検証に合格")
+                                ))
                             } else if statusCode == BOLT_LA_ERR_PASSWORD_REQUIRED {
                                 st.missingPw += 1
-                                st.results.append(IntegrityEntryResult(path: pathStr, status: .missingPassword, detail: "需要密码"))
+                                st.results.append(IntegrityEntryResult(
+                                    path: pathStr,
+                                    status: .missingPassword,
+                                    detail: BoltCoreLocalization.t("需要密码", "需要密碼", "Password required", "パスワードが必要です")
+                                ))
                             } else if statusCode == BOLT_LA_ERR_WRONG_PASSWORD {
                                 st.failed += 1
-                                st.results.append(IntegrityEntryResult(path: pathStr, status: .failed, detail: "密码错误，无法解密"))
+                                st.results.append(IntegrityEntryResult(
+                                    path: pathStr,
+                                    status: .failed,
+                                    detail: BoltCoreLocalization.t("密码错误，无法解密", "密碼錯誤，無法解密", "Incorrect password", "パスワードが正しくありません")
+                                ))
                             } else {
                                 st.failed += 1
                                 st.results.append(IntegrityEntryResult(path: pathStr, status: .failed, detail: detailStr))
@@ -530,7 +552,11 @@ public enum ExtendedArchiveDriver {
                 failedCount: 0,
                 skippedEncryptedCount: 1,
                 elapsedSeconds: CFAbsoluteTimeGetCurrent() - start,
-                results: [IntegrityEntryResult(path: url.lastPathComponent, status: .missingPassword, detail: "归档文件头已加密，需要密码")]
+                results: [IntegrityEntryResult(
+                    path: url.lastPathComponent,
+                    status: .missingPassword,
+                    detail: BoltCoreLocalization.t("归档文件头已加密，需要密码", "封存檔標頭已加密，需要密碼", "Archive header is encrypted; password required", "書庫ヘッダが暗号化されています（パスワードが必要）")
+                )]
             )
         }
         if rc != 0 && state.failed > 0 {
@@ -552,7 +578,13 @@ public enum ExtendedArchiveDriver {
             if rc == BOLT_LA_ERR_WRONG_PASSWORD {
                 throw BoltZipError.wrongPassword(url.lastPathComponent)
             }
-            let detail = errDetail.isEmpty ? "归档流读取或校验失败 (code \(rc))" : errDetail
+            let fallbackDetail = BoltCoreLocalization.t(
+                "归档流读取或校验失败 (code \(rc))",
+                "封存檔串流讀取或驗證失敗 (code \(rc))",
+                "Archive stream read or verification failed (code \(rc))",
+                "書庫ストリームの読み込みまたは検証に失敗しました (code \(rc))"
+            )
+            let detail = errDetail.isEmpty ? fallbackDetail : errDetail
             state.failed += 1
             state.results.append(IntegrityEntryResult(path: url.lastPathComponent, status: .failed, detail: detail))
             return IntegrityReport(
@@ -580,6 +612,8 @@ public enum ExtendedArchiveDriver {
     public static func create7z(
         from inputURLs: [URL],
         to outputURL: URL,
+        algorithm: CompressionAlgorithm = .xz,
+        level: Int? = nil,
         excludeMacJunk: Bool,
         controller: ArchiveTaskController? = nil,
         progress: (@Sendable (OperationProgress) -> Void)? = nil
@@ -626,7 +660,12 @@ public enum ExtendedArchiveDriver {
             try fm.removeItem(at: outputURL)
         }
 
-        var args = ["--format=7zip", "-cf", outputURL.path, "-C", staging.path]
+        let tarOptions = sevenZipTarOptions(algorithm: algorithm, level: level)
+        var args = ["--format=7zip"]
+        if let tarOptions {
+            args.append(contentsOf: ["--options", tarOptions])
+        }
+        args.append(contentsOf: ["-cf", outputURL.path, "-C", staging.path])
         args.append(contentsOf: topLevelNames.isEmpty ? ["."] : topLevelNames)
         let outName = outputURL.lastPathComponent
         let compressStart = CFAbsoluteTimeGetCurrent()
@@ -650,6 +689,25 @@ public enum ExtendedArchiveDriver {
             throw error
         }
         progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outName, processedBytes: totalBytes, totalBytes: totalBytes))
+    }
+
+    private static func sevenZipTarOptions(algorithm: CompressionAlgorithm, level: Int?) -> String? {
+        switch algorithm {
+        case .store:
+            return "7zip:compression=store"
+        case .xz:
+            let lvl = min(max(level ?? algorithm.defaultLevel, 0), 9)
+            return "7zip:compression=lzma2,7zip:compression-level=\(lvl)"
+        case .bzip2:
+            let lvl = min(max(level ?? algorithm.defaultLevel, 1), 9)
+            return "7zip:compression=bzip2,7zip:compression-level=\(lvl)"
+        case .deflate:
+            let lvl = min(max(level ?? algorithm.defaultLevel, 1), 9)
+            return "7zip:compression=deflate,7zip:compression-level=\(lvl)"
+        case .zstd, .lz4:
+            let lvl = min(max(level ?? CompressionAlgorithm.xz.defaultLevel, 0), 9)
+            return "7zip:compression=lzma2,7zip:compression-level=\(lvl)"
+        }
     }
 
     /// Decodes `bsdtar` `safe_fprintf` octal escapes (`\350\213\217`) back into UTF-8/CJK paths.
@@ -766,7 +824,13 @@ public enum ExtendedArchiveDriver {
                 guard let base = buf.baseAddress else { return "" }
                 return String(cString: base).trimmingCharacters(in: .whitespacesAndNewlines)
             }
-            throw BoltZipError.externalToolFailed(msg.isEmpty ? "归档处理失败 (code \(code))" : msg)
+            let fallback = BoltCoreLocalization.t(
+                "归档处理失败 (code \(code))",
+                "封存檔處理失敗 (code \(code))",
+                "Archive processing failed (code \(code))",
+                "書庫処理に失敗しました (code \(code))"
+            )
+            throw BoltZipError.externalToolFailed(msg.isEmpty ? fallback : msg)
         }
     }
 
@@ -842,7 +906,13 @@ public enum ExtendedArchiveDriver {
 
         if proc.terminationStatus != 0 {
             let errMsg = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "tar failed"
-            throw BoltZipError.externalToolFailed(errMsg.isEmpty ? "归档处理失败 (code \(proc.terminationStatus))" : errMsg)
+            let fallback = BoltCoreLocalization.t(
+                "归档处理失败 (code \(proc.terminationStatus))",
+                "封存檔處理失敗 (code \(proc.terminationStatus))",
+                "Archive processing failed (code \(proc.terminationStatus))",
+                "書庫処理に失敗しました (code \(proc.terminationStatus))"
+            )
+            throw BoltZipError.externalToolFailed(errMsg.isEmpty ? fallback : errMsg)
         }
         return outData
     }

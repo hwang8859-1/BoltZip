@@ -40,6 +40,9 @@ extension WorkspaceViewModel {
             do {
                 let result = try BoltArchiveEngine.inspect(archiveURL: url, encoding: encoding, password: password)
                 await MainActor.run {
+                    if self.listing?.archiveURL != url {
+                        self.cleanupPreviewTempFiles()
+                    }
                     self.listing = result
                     self.openedArchiveFromHome = fromHomeOrigin
                     self.currentFolder = ""
@@ -76,6 +79,7 @@ extension WorkspaceViewModel {
     }
 
     func closeArchive() {
+        cleanupPreviewTempFiles()
         listing = nil
         openedArchiveFromHome = false
         currentFolder = ""
@@ -249,6 +253,40 @@ extension WorkspaceViewModel {
         }
     }
 
+    func testIntegrityBatch(archiveURLs: [URL]) {
+        let archives = BoltArchiveEngine.filterArchiveURLs(archiveURLs)
+        guard !archives.isEmpty else { return }
+        if archives.count == 1 {
+            testIntegrity(archiveURL: archives[0])
+            return
+        }
+
+        let pw = savedPassword
+        let enc = encodingOption
+        let title = l10n.batchArchivesTitle(archives.count)
+        isBusy = true
+        progress = OperationProgress(fractionCompleted: 0, currentItem: archives[0].lastPathComponent)
+
+        Task.detached(priority: .userInitiated) {
+            let report = BoltArchiveEngine.testIntegrityBatch(
+                archiveURLs: archives,
+                password: pw,
+                encoding: enc,
+                batchTitle: title
+            ) { prog in
+                Task { @MainActor in
+                    self.progress = prog
+                }
+            }
+            await MainActor.run {
+                self.isBusy = false
+                self.progress = nil
+                self.activeSheet = .integrityReport(report)
+                self.statusMessage = "\(report.passedCount)/\(report.totalEntries)"
+            }
+        }
+    }
+
     func previewOrOpenEntry(_ entry: ArchiveEntry, password: String? = nil) {
         if entry.isDirectory {
             searchText = ""
@@ -279,6 +317,14 @@ extension WorkspaceViewModel {
                     if let pw, !pw.isEmpty { self.savedPassword = pw }
                     self.statusMessage = entry.name
                     QuickLookPreviewController.shared.preview(url: fileURL)
+                    let previousDir = self.activePreviewTempDir
+                    self.activePreviewTempDir = subDir
+                    if let previousDir, previousDir != subDir {
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(400))
+                            try? FileManager.default.removeItem(at: previousDir)
+                        }
+                    }
                 }
             } catch BoltZipError.passwordRequired, BoltZipError.wrongPassword {
                 await MainActor.run {
@@ -345,7 +391,7 @@ extension WorkspaceViewModel {
     }
 
     private func editCurrentZip(_ ops: [ZipEditOperation]) {
-        guard let listing, listing.format.supportsInPlaceEditing else { return }
+        guard let listing, listing.canEditInPlace else { return }
         let url = listing.archiveURL
         let enc = encodingOption
         let opts = CreateArchiveOptions(
