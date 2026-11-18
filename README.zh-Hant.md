@@ -19,6 +19,9 @@
 
 > 💡 **Intel Mac 或 macOS 12–15 使用者**：長期相容版本 **v0.9.1 Universal (`arm64 + x86_64`)** 維護於 [`legacy/macos-12`](../../tree/legacy/macos-12) 分支與 `v0.9.1` 標籤。
 
+> [!IMPORTANT]
+> **目前活躍開發分支：`dev-1.0.1`**（預設分支）· `main` 分支僅供穩定版發佈使用且已受保護。提交程式碼或 PR 請務必指向 **`dev-1.0.1`**，詳見 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
 ## ✨ 核心功能
 
 - **自動刪除 `.DS_Store` 等 Mac 隱藏垃圾檔**：壓縮建立、ZIP 封存檔原地新增檔案以及解壓縮時預設自動剔除 `.DS_Store`、`__MACOSX`、`._*`、`.Spotlight-V100`、`.Trashes` 等系統中繼檔，傳送給 Windows/Linux 使用者不污染目錄，智慧解壓也不受 `__MACOSX` 干擾。
