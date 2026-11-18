@@ -161,15 +161,22 @@ extension WorkspaceViewModel {
         case "open":
             onRequestShowMainWindow?()
             NSApp.activate(ignoringOtherApps: true)
-            if let first = paths.first { openArchive(url: first, fromExternalFinder: true) }
+            if let first = BoltArchiveEngine.filterArchiveURLs(paths).first ?? paths.first {
+                openArchive(url: first, fromExternalFinder: true)
+            }
         case "testIntegrity":
-            onRequestShowMainWindow?()
-            NSApp.activate(ignoringOtherApps: true)
-            if let first = paths.first { testIntegrity(archiveURL: first) }
+            let archives = BoltArchiveEngine.filterArchiveURLs(paths)
+            if !archives.isEmpty {
+                onRequestShowMainWindow?()
+                NSApp.activate(ignoringOtherApps: true)
+                testIntegrityBatch(archiveURLs: archives)
+            }
         case "smartExtract":
-            if let first = paths.first { quickExtractInHUD(mode: .smart, archiveURL: first) }
+            let archives = BoltArchiveEngine.filterArchiveURLs(paths)
+            if !archives.isEmpty { quickExtractBatchInHUD(mode: .smart, archiveURLs: archives) }
         case "extractSubfolder":
-            if let first = paths.first { quickExtractInHUD(mode: .subfolder, archiveURL: first) }
+            let archives = BoltArchiveEngine.filterArchiveURLs(paths)
+            if !archives.isEmpty { quickExtractBatchInHUD(mode: .subfolder, archiveURLs: archives) }
         case "compressZip":
             if !paths.isEmpty { quickCompressInHUD(inputs: paths, format: .zip, algorithm: .deflate) }
         case "compressTarZst":
@@ -208,30 +215,58 @@ extension WorkspaceViewModel {
     }
 
     func quickExtractInHUD(mode: ExtractMode, archiveURL: URL) {
+        quickExtractBatchInHUD(mode: mode, archiveURLs: [archiveURL])
+    }
+
+    func quickExtractBatchInHUD(mode: ExtractMode, archiveURLs: [URL]) {
+        guard !archiveURLs.isEmpty else { return }
         configureHUD()
         isPreparingHUDExtract = true
-        let destDir = archiveURL.deletingLastPathComponent()
-        let options = ExtractOptions(
-            destinationURL: destDir,
-            mode: mode,
-            overwritePolicy: .overwrite,
-            password: nil,
-            encoding: encodingOption,
-            stripMacJunk: defaultStripMacJunk
-        )
+        let enc = encodingOption
+        let strip = defaultStripMacJunk
+
+        let initialPlans: [(archiveURL: URL, options: ExtractOptions)] = archiveURLs.map { archiveURL in
+            let options = ExtractOptions(
+                destinationURL: archiveURL.deletingLastPathComponent(),
+                mode: mode,
+                overwritePolicy: .overwrite,
+                password: nil,
+                encoding: enc,
+                stripMacJunk: strip
+            )
+            return (archiveURL, options)
+        }
+
         Task.detached(priority: .userInitiated) {
-            let conflicts = try? BoltArchiveEngine.detectExtractConflicts(archiveURL: archiveURL, options: options)
+            var checked: [(archiveURL: URL, options: ExtractOptions, conflicts: ExtractConflictSummary?)] = []
+            checked.reserveCapacity(initialPlans.count)
+            for plan in initialPlans {
+                let summary = try? BoltArchiveEngine.detectExtractConflicts(archiveURL: plan.archiveURL, options: plan.options)
+                checked.append((plan.archiveURL, plan.options, summary))
+            }
+
             await MainActor.run {
-                if let conflicts, conflicts.hasConflicts {
+                let conflicting = checked.filter { $0.conflicts?.hasConflicts == true }
+                var chosenOverwritePolicy: OverwritePolicy = .overwrite
+
+                if !conflicting.isEmpty {
                     NSApp.activate(ignoringOtherApps: true)
                     let l = self.l10n
                     let alert = NSAlert()
                     alert.alertStyle = .warning
                     alert.messageText = l.extractConflictTitle
-                    alert.informativeText = l.extractConflictMessage(
-                        folder: conflicts.destinationRoot.lastPathComponent,
-                        names: conflicts.conflictingNames
-                    )
+                    if conflicting.count == 1, let single = conflicting.first, let summary = single.conflicts {
+                        alert.informativeText = l.extractConflictMessage(
+                            folder: summary.destinationRoot.lastPathComponent,
+                            names: summary.conflictingNames
+                        )
+                    } else {
+                        let summaryPairs = conflicting.compactMap { item -> (archiveName: String, conflictingNames: [String])? in
+                            guard let summary = item.conflicts else { return nil }
+                            return (item.archiveURL.lastPathComponent, summary.conflictingNames)
+                        }
+                        alert.informativeText = l.batchExtractConflictMessage(archives: summaryPairs)
+                    }
                     alert.addButton(withTitle: l.overwriteExistingBtn)
                     alert.addButton(withTitle: l.keepBothRenameBtn)
                     alert.addButton(withTitle: l.cancel)
@@ -240,23 +275,25 @@ extension WorkspaceViewModel {
                     self.isPreparingHUDExtract = false
                     switch response {
                     case .alertFirstButtonReturn:
-                        self.hudModel.enqueue(.extract(archiveURL: archiveURL, options: options))
+                        chosenOverwritePolicy = .overwrite
                     case .alertSecondButtonReturn:
-                        let renamedOpts = ExtractOptions(
-                            destinationURL: options.destinationURL,
-                            mode: options.mode,
-                            overwritePolicy: .rename,
-                            password: options.password,
-                            encoding: options.encoding,
-                            stripMacJunk: options.stripMacJunk
-                        )
-                        self.hudModel.enqueue(.extract(archiveURL: archiveURL, options: renamedOpts))
+                        chosenOverwritePolicy = .rename
                     default:
-                        self.onHUDDidHide?()
+                        if self.hudModel.phase == .idle && !self.hasVisibleMainWindow {
+                            self.onHUDDidHide?()
+                        }
+                        return
                     }
                 } else {
                     self.isPreparingHUDExtract = false
-                    self.hudModel.enqueue(.extract(archiveURL: archiveURL, options: options))
+                }
+
+                for item in checked {
+                    var finalOpts = item.options
+                    if item.conflicts?.hasConflicts == true && chosenOverwritePolicy == .rename {
+                        finalOpts.overwritePolicy = .rename
+                    }
+                    self.hudModel.enqueue(.extract(archiveURL: item.archiveURL, options: finalOpts))
                 }
             }
         }

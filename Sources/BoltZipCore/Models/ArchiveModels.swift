@@ -504,6 +504,24 @@ public struct IntegrityReport: Sendable {
     public let elapsedSeconds: Double
     public let results: [IntegrityEntryResult]
 
+    public init(
+        archiveName: String,
+        totalEntries: Int,
+        passedCount: Int,
+        failedCount: Int,
+        skippedEncryptedCount: Int,
+        elapsedSeconds: Double,
+        results: [IntegrityEntryResult]
+    ) {
+        self.archiveName = archiveName
+        self.totalEntries = totalEntries
+        self.passedCount = passedCount
+        self.failedCount = failedCount
+        self.skippedEncryptedCount = skippedEncryptedCount
+        self.elapsedSeconds = elapsedSeconds
+        self.results = results
+    }
+
     public var isHealthy: Bool { failedCount == 0 && skippedEncryptedCount == 0 }
 }
 

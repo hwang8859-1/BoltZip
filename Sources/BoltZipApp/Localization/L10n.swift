@@ -410,6 +410,25 @@ struct L10n: Sendable {
     }
     var overwriteExistingBtn: String { t("覆盖", "覆蓋", "Overwrite", "上書き") }
     var keepBothRenameBtn: String { t("自动重命名保留两者", "自動重新命名保留兩者", "Keep Both", "両方とも残す") }
+    func batchArchivesTitle(_ count: Int) -> String {
+        t("\(count) 个压缩包", "\(count) 個封存檔", "\(count) Archives", "\(count) 件の書庫")
+    }
+    func batchExtractConflictMessage(archives: [(archiveName: String, conflictingNames: [String])]) -> String {
+        let previewLines = archives.prefix(3).map { item -> String in
+            let names = item.conflictingNames.prefix(2).joined(separator: ", ")
+            let more = item.conflictingNames.count > 2 ? "…" : ""
+            return "• \(item.archiveName) → \(names)\(more)"
+        }.joined(separator: "\n")
+        let remaining = archives.count > 3
+            ? t("\n…另有 \(archives.count - 3) 个压缩包存在同名冲突", "\n…另有 \(archives.count - 3) 個封存檔存在同名衝突", "\n…and \(archives.count - 3) more conflicting archive(s)", "\n…ほか \(archives.count - 3) 件の書庫で重複あり")
+            : ""
+        return t(
+            "以下目标路径已存在同名文件或文件夹，是否覆盖？\n\n\(previewLines)\(remaining)",
+            "以下目標路徑已存在同名檔案或資料夾，是否覆蓋？\n\n\(previewLines)\(remaining)",
+            "Existing files or folders were found at the destination for:\n\n\(previewLines)\(remaining)\n\nDo you want to overwrite them?",
+            "以下の展開先に同名の項目が既に存在します。上書きしますか？\n\n\(previewLines)\(remaining)"
+        )
+    }
 
     // MARK: - Quick Task Floating HUD
     func hudCompressingTitle(_ fmt: String) -> String {

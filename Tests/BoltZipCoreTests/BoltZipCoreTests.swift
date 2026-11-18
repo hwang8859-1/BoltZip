@@ -696,4 +696,43 @@ final class BoltZipCoreTests: XCTestCase {
         BoltCoreLocalization.overrideLanguage = .zhHans
         XCTAssertEqual(BoltZipError.cancelled.localizedDescription, "操作已取消")
     }
+
+    func testBatchArchiveFilteringAndIntegrityAggregation() throws {
+        let dir = tempDir.appendingPathComponent("folder.zip", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let plainTxt = tempDir.appendingPathComponent("notes.txt")
+        try Data("hello".utf8).write(to: plainTxt)
+
+        let srcA = tempDir.appendingPathComponent("a.txt")
+        let srcB = tempDir.appendingPathComponent("b.txt")
+        try Data("Alpha payload".utf8).write(to: srcA)
+        try Data("Beta payload".utf8).write(to: srcB)
+
+        let zipA = tempDir.appendingPathComponent("first.zip")
+        let zipB = tempDir.appendingPathComponent("second.zip")
+        try BoltArchiveEngine.createArchive(from: [srcA], to: zipA, options: CreateArchiveOptions(format: .zip, algorithm: .deflate))
+        try BoltArchiveEngine.createArchive(
+            from: [srcB],
+            to: zipB,
+            options: CreateArchiveOptions(format: .zip, algorithm: .deflate, encryption: .aes256, password: "pw")
+        )
+
+        let filtered = BoltArchiveEngine.filterArchiveURLs([dir, plainTxt, zipA, zipB])
+        XCTAssertEqual(filtered, [zipA, zipB])
+
+        let reportNoPw = BoltArchiveEngine.testIntegrityBatch(archiveURLs: filtered)
+        XCTAssertEqual(reportNoPw.totalEntries, 2)
+        XCTAssertEqual(reportNoPw.passedCount, 1)
+        XCTAssertEqual(reportNoPw.skippedEncryptedCount, 1)
+        XCTAssertEqual(reportNoPw.failedCount, 0)
+        XCTAssertFalse(reportNoPw.isHealthy)
+        XCTAssertTrue(reportNoPw.results.contains { $0.path.hasPrefix("first.zip /") })
+        XCTAssertTrue(reportNoPw.results.contains { $0.path.hasPrefix("second.zip /") })
+
+        let reportWithPw = BoltArchiveEngine.testIntegrityBatch(archiveURLs: filtered, password: "pw")
+        XCTAssertEqual(reportWithPw.passedCount, 2)
+        XCTAssertEqual(reportWithPw.failedCount, 0)
+        XCTAssertEqual(reportWithPw.skippedEncryptedCount, 0)
+        XCTAssertTrue(reportWithPw.isHealthy)
+    }
 }

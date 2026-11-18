@@ -120,6 +120,8 @@ final class FinderSync: FIFinderSync {
                 addItem(to: submenu, title: FinderL10n.extractSubfolder, icon: "folder.badge.gearshape", action: #selector(extractSubfolderAction(_:)))
                 if targets.count == 1 {
                     addItem(to: submenu, title: FinderL10n.openInBoltZip, icon: "eye.fill", action: #selector(openArchiveAction(_:)))
+                }
+                if onlyArchives {
                     addItem(to: submenu, title: FinderL10n.verifyIntegrity, icon: "checkmark.shield.fill", action: #selector(testIntegrityAction(_:)))
                 }
                 if !onlyArchives {

@@ -249,6 +249,40 @@ extension WorkspaceViewModel {
         }
     }
 
+    func testIntegrityBatch(archiveURLs: [URL]) {
+        let archives = BoltArchiveEngine.filterArchiveURLs(archiveURLs)
+        guard !archives.isEmpty else { return }
+        if archives.count == 1 {
+            testIntegrity(archiveURL: archives[0])
+            return
+        }
+
+        let pw = savedPassword
+        let enc = encodingOption
+        let title = l10n.batchArchivesTitle(archives.count)
+        isBusy = true
+        progress = OperationProgress(fractionCompleted: 0, currentItem: archives[0].lastPathComponent)
+
+        Task.detached(priority: .userInitiated) {
+            let report = BoltArchiveEngine.testIntegrityBatch(
+                archiveURLs: archives,
+                password: pw,
+                encoding: enc,
+                batchTitle: title
+            ) { prog in
+                Task { @MainActor in
+                    self.progress = prog
+                }
+            }
+            await MainActor.run {
+                self.isBusy = false
+                self.progress = nil
+                self.activeSheet = .integrityReport(report)
+                self.statusMessage = "\(report.passedCount)/\(report.totalEntries)"
+            }
+        }
+    }
+
     func previewOrOpenEntry(_ entry: ArchiveEntry, password: String? = nil) {
         if entry.isDirectory {
             searchText = ""
