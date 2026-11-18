@@ -128,7 +128,13 @@ final class QuickTaskHUDModel: ObservableObject {
 
     @Published private(set) var currentOperation: Operation?
     @Published private(set) var pendingQueue: [Operation] = []
-    @Published private(set) var phase: Phase = .idle
+    @Published private(set) var phase: Phase = .idle {
+        didSet {
+            if oldValue != phase {
+                onLayoutNeedsUpdate?()
+            }
+        }
+    }
 
     @Published private(set) var fractionCompleted: Double = 0
     @Published private(set) var currentItem: String = ""
@@ -146,6 +152,7 @@ final class QuickTaskHUDModel: ObservableObject {
     var onPresentRequested: (() -> Void)?
     var onDismissRequested: (() -> Void)?
     var onKeyFocusRequested: (() -> Void)?
+    var onLayoutNeedsUpdate: (() -> Void)?
     var onOperationSucceeded: ((Operation, URL) -> Void)?
     var completionAutoDismissDelay: TimeInterval = 2.6
     var cancelledAutoDismissDelay: TimeInterval = 1.2

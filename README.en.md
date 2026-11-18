@@ -8,14 +8,14 @@
 
 ![macOS 12.0+](https://img.shields.io/badge/macOS-12.0%E2%80%9326%20(Universal)-0ea5e9?style=flat-square)
 ![Swift 6](https://img.shields.io/badge/Swift-6.0-6366f1?style=flat-square)
-![Release v0.9.2](https://img.shields.io/badge/release-v0.9.2-facc15?style=flat-square)
+![Release v0.9.3](https://img.shields.io/badge/release-v0.9.3-facc15?style=flat-square)
 ![License MIT](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)
 
 </div>
 
 ---
 
-**BoltZip v0.9.2** is the Universal compatibility release supporting **macOS 12 Monterey through macOS 26+ (Apple Silicon `arm64` & Intel `x86_64`)** (new development on `main` targets Apple Silicon + macOS 26+ exclusively). It pairs the productive, desktop-class archive workflows popularized by Windows tools (7-Zip, WinZip, Bandizip) with native macOS styling—enabling **Liquid Glass** on macOS 26+ while cleanly disabling glass effects on macOS 12–15—so you never have to extract an entire archive just to inspect or edit one file.
+**BoltZip v0.9.3** is the Universal compatibility release supporting **macOS 12 Monterey through macOS 26+ (Apple Silicon `arm64` & Intel `x86_64`)** (new development on `main` targets Apple Silicon + macOS 26+ exclusively). It pairs the productive, desktop-class archive workflows popularized by Windows tools (7-Zip, WinZip, Bandizip) with native macOS styling—enabling **Liquid Glass** on macOS 26+ while cleanly disabling glass effects on macOS 12–15—so you never have to extract an entire archive just to inspect or edit one file.
 
 ## ✨ Highlights
 
@@ -61,7 +61,7 @@ swift run -c release boltzip x release.zip ./out --mode smart
 
 ## 🧩 Interactive Showcase & Developer Docs
 
-- **Live Showcase & Download Page**: Visit [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/) to explore the live interactive Windows-Zip UI simulator, multi-language switcher, codec benchmarks, and direct downloads for `BoltZip v0.9.2 Universal` & source archives (sources in [showcase/](showcase/)).
+- **Live Showcase & Download Page**: Visit [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/) to explore the live interactive Windows-Zip UI simulator, multi-language switcher, codec benchmarks, and direct downloads for `BoltZip v0.9.3 Universal` & source archives (sources in [showcase/](showcase/)).
 - **Contributor & AI Agent Guide**: See [AGENTS.md](AGENTS.md) for architecture boundaries, static-linking details, and engineering invariants.
 - **Release History**: See [CHANGELOG.md](CHANGELOG.md).
 

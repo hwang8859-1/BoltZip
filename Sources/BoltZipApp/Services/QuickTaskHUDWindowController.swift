@@ -20,6 +20,7 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
     private var hideGeneration: Int = 0
     private var hasPositionedOnce: Bool = false
     private var isProgrammaticFrameUpdate: Bool = false
+    private var isResizeScheduled: Bool = false
 
     var isVisible: Bool { panel?.isVisible == true }
     var onDidHide: (() -> Void)?
@@ -31,7 +32,9 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
         } else {
             let hc = NSHostingController(rootView: rootView)
             if #available(macOS 13.0, *) {
-                hc.sizingOptions = [.preferredContentSize]
+                // Keep sizingOptions empty: `.preferredContentSize` triggers recursive
+                // `NSHostingView.windowDidLayout() -> updateAnimatedWindowSize` on macOS 26+.
+                hc.sizingOptions = []
             }
             self.hostingController = hc
         }
@@ -44,6 +47,9 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
         }
         hudModel.onKeyFocusRequested = { [weak self] in
             self?.makeKeyIfPasswordNeeded()
+        }
+        hudModel.onLayoutNeedsUpdate = { [weak self] in
+            self?.scheduleResizeToFit()
         }
     }
 
@@ -78,24 +84,12 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
             panel = created
         }
 
-        hostingController.view.layoutSubtreeIfNeeded()
-        let fitting: NSSize
-        if #available(macOS 13.0, *) {
-            fitting = hostingController.sizeThatFits(in: NSSize(width: 436, height: 420))
-        } else {
-            let f = hostingController.view.fittingSize
-            fitting = NSSize(width: f.width > 10 ? f.width : 436, height: f.height > 10 ? f.height : 184)
-        }
+        let fitting = measuredFittingSize(using: hostingController)
         if !hasPositionedOnce {
             positionInitialFrame(panel: panel, size: fitting)
             hasPositionedOnce = true
         } else {
-            let current = panel.frame
-            if abs(current.width - fitting.width) > 2 || abs(current.height - fitting.height) > 2 {
-                let topLeftOrigin = NSPoint(x: current.origin.x, y: current.maxY - fitting.height)
-                let clamped = clampedOrigin(topLeftOrigin, size: fitting, preferredScreen: panel.screen ?? activeScreen())
-                applyProgrammaticFrame(NSRect(origin: clamped, size: fitting), to: panel)
-            }
+            resizePanelIfNeeded(panel, to: fitting)
         }
 
         let wasVisible = panel.isVisible && panel.alphaValue > 0.05
@@ -118,7 +112,44 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
     }
 
     func makeKeyIfPasswordNeeded() {
+        scheduleResizeToFit()
         panel?.makeKeyAndOrderFront(nil)
+    }
+
+    private func scheduleResizeToFit() {
+        guard !isResizeScheduled else { return }
+        isResizeScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isResizeScheduled = false
+            guard let panel = self.panel, panel.isVisible, let hostingController = self.hostingController else { return }
+            let fitting = self.measuredFittingSize(using: hostingController)
+            self.resizePanelIfNeeded(panel, to: fitting)
+        }
+    }
+
+    private func measuredFittingSize(using hostingController: NSHostingController<QuickTaskHUDRootView>) -> NSSize {
+        hostingController.view.layoutSubtreeIfNeeded()
+        let raw: NSSize
+        if #available(macOS 13.0, *) {
+            raw = hostingController.sizeThatFits(in: NSSize(width: 436, height: 420))
+        } else {
+            let f = hostingController.view.fittingSize
+            raw = NSSize(width: f.width > 10 ? f.width : 436, height: f.height > 10 ? f.height : 184)
+        }
+        return NSSize(
+            width: max(380, ceil(raw.width)),
+            height: max(100, ceil(raw.height))
+        )
+    }
+
+    private func resizePanelIfNeeded(_ panel: NSPanel, to fitting: NSSize) {
+        let current = panel.frame
+        if abs(current.width - fitting.width) > 1.0 || abs(current.height - fitting.height) > 1.0 {
+            let topLeftOrigin = NSPoint(x: current.origin.x, y: current.maxY - fitting.height)
+            let clamped = clampedOrigin(topLeftOrigin, size: fitting, preferredScreen: panel.screen ?? activeScreen())
+            applyProgrammaticFrame(NSRect(origin: clamped, size: fitting), to: panel)
+        }
     }
 
     func hide() {

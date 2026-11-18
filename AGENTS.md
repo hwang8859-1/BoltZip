@@ -4,7 +4,7 @@ Welcome! This file gives human contributors and AI coding agents an accurate map
 
 ## 1. Project Overview
 
-**BoltZip (`legacy/macos-12`, v0.9.2)** is an open-source macOS archive manager (targeting **macOS 12.0+ / Universal `arm64` + `x86_64`**, with native Liquid Glass on macOS 26+ and clean non-glass fallback on macOS 12–15) inspired by classic Windows archive tools (7-Zip / WinZip / Bandizip), built with **Swift 6**, **SwiftUI + AppKit**, a pure-Swift/C open-source core (`BoltZipCore` + `CBoltCompression`), a CLI (`boltzip`), and a sandboxed Finder Sync Extension (`BoltZipFinderSync`).
+**BoltZip (`legacy/macos-12`, v0.9.3)** is an open-source macOS archive manager (targeting **macOS 12.0+ / Universal `arm64` + `x86_64`**, with native Liquid Glass on macOS 26+ and clean non-glass fallback on macOS 12–15) inspired by classic Windows archive tools (7-Zip / WinZip / Bandizip), built with **Swift 6**, **SwiftUI + AppKit**, a pure-Swift/C open-source core (`BoltZipCore` + `CBoltCompression`), a CLI (`boltzip`), and a sandboxed Finder Sync Extension (`BoltZipFinderSync`).
 
 - **Repository**: `https://github.com/hwang8859-1/BoltZip.git`
 - **License**: MIT ([LICENSE](LICENSE))

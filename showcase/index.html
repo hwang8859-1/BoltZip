@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BoltZip v0.9.2 — 为 macOS 12.0+ 打造的开源通用极速压缩工作台</title>
+  <title>BoltZip v0.9.3 — 为 macOS 12.0+ 打造的开源通用极速压缩工作台</title>
   <link rel="icon" type="image/png" sizes="64x64" href="favicon.png" />
   <link rel="apple-touch-icon" sizes="256x256" href="app-icon.png" />
   <link rel="stylesheet" href="styles.css" />
@@ -21,7 +21,7 @@
       <a href="#hero" class="brand">
         <img src="app-icon.png" alt="BoltZip" class="brand-icon" />
         <span class="brand-name">BoltZip</span>
-        <span class="badge-mini">v0.9.2 · macOS 12+ Universal</span>
+        <span class="badge-mini">v0.9.3 · macOS 12+ Universal</span>
       </a>
       <nav class="nav-links">
         <a href="#downloads" data-i18n="navDownload">下载安装包</a>
@@ -59,7 +59,7 @@
             告别双击就一股脑解压一地的传统体验。BoltZip 基于纯正开源压缩底座（zlib · Zstandard · LZMA2 · bzip2 · LZ4），原生还原「包内浏览、直接增删改、自动删除 .DS_Store、GBK 乱码自愈、访达一级 Bolt 菜单与 macOS 26+ 液态玻璃（旧版自动禁用）」。
           </p>
           <div class="hero-cta">
-            <a href="#downloads" class="btn btn-primary" data-i18n="heroCtaDownload">⬇ 下载 v0.9.2 Universal</a>
+            <a href="#downloads" class="btn btn-primary" data-i18n="heroCtaDownload">⬇ 下载 v0.9.3 Universal</a>
             <a href="#simulator" class="btn btn-glass" data-i18n="heroCta1">▶ 体验界面交互模拟器</a>
             <a href="#quickstart" class="btn btn-glass" data-i18n="heroCta2">克隆源码并构建</a>
           </div>
@@ -296,8 +296,8 @@
     <section id="downloads" class="section">
       <div class="container">
         <div class="section-head">
-          <span class="eyebrow">RELEASE ARTIFACTS · V0.9.2</span>
-          <h2 data-i18n="dlTitle">下载 BoltZip v0.9.2 安装包与源代码</h2>
+          <span class="eyebrow">RELEASE ARTIFACTS · V0.9.3</span>
+          <h2 data-i18n="dlTitle">下载 BoltZip v0.9.3 安装包与源代码</h2>
           <p data-i18n="dlSub">Universal 通用二进制（原生支持 Apple Silicon M 系列与 Intel x86_64），静态链接全部开源压缩库</p>
         </div>
 
@@ -307,32 +307,32 @@
               <div class="dl-tag" data-i18n="dlAppTag">macOS App · 推荐下载</div>
               <img src="app-icon.png" alt="BoltZip App Icon" class="dl-app-icon" />
             </div>
-            <h3>BoltZip v0.9.2 Universal</h3>
+            <h3>BoltZip v0.9.3 Universal</h3>
             <p class="dl-meta">macOS 12.0+ (arm64 + x86_64) · macOS 26+ Liquid Glass</p>
             <p class="dl-desc" data-i18n="dlAppDesc">包含 BoltZip.app、内置 boltzip CLI 与 FinderSync 右键菜单扩展，开箱即用零外部依赖。</p>
             <div class="dl-actions">
-              <a href="./downloads/BoltZip-0.9.2-macOS-universal.dmg" download="BoltZip-0.9.2-macOS-universal.dmg" class="btn btn-primary" data-i18n="dlAppBtn">⬇ 下载 macOS 安装镜像 (.dmg)</a>
+              <a href="./downloads/BoltZip-0.9.3-macOS-universal.dmg" download="BoltZip-0.9.3-macOS-universal.dmg" class="btn btn-primary" data-i18n="dlAppBtn">⬇ 下载 macOS 安装镜像 (.dmg)</a>
             </div>
           </article>
 
           <article class="download-card glass-surface">
             <div class="dl-tag" data-i18n="dlSrcTag">MIT 完整源码归档</div>
-            <h3 data-i18n="dlSrcTitle">Source Code v0.9.2</h3>
+            <h3 data-i18n="dlSrcTitle">Source Code v0.9.3</h3>
             <p class="dl-meta">Swift 6.0 · CBridge · FinderSync · Tests</p>
             <p class="dl-desc" data-i18n="dlSrcDesc">包含完整 SwiftPM 工程源码、C 编解码桥接与 Universal 构建脚本。</p>
             <div class="dl-actions dl-actions-row">
-              <a href="./downloads/BoltZip-0.9.2-source.zip" download="BoltZip-0.9.2-source.zip" class="btn btn-glass btn-sm">Source (.zip)</a>
-              <a href="./downloads/BoltZip-0.9.2-source.tar.gz" download="BoltZip-0.9.2-source.tar.gz" class="btn btn-glass btn-sm">Source (.tar.gz)</a>
+              <a href="./downloads/BoltZip-0.9.3-source.zip" download="BoltZip-0.9.3-source.zip" class="btn btn-glass btn-sm">Source (.zip)</a>
+              <a href="./downloads/BoltZip-0.9.3-source.tar.gz" download="BoltZip-0.9.3-source.tar.gz" class="btn btn-glass btn-sm">Source (.tar.gz)</a>
             </div>
           </article>
 
           <article class="download-card glass-surface">
             <div class="dl-tag" data-i18n="dlVerifyTag">完整性校验</div>
             <h3 data-i18n="dlVerifyTitle">SHA-256 校验清单</h3>
-            <p class="dl-meta">BoltZip-0.9.2-SHA256SUMS.txt</p>
-            <p class="dl-desc" data-i18n="dlVerifyDesc">下载后可执行 shasum -a 256 -c BoltZip-0.9.2-SHA256SUMS.txt 验证包完整性。</p>
+            <p class="dl-meta">BoltZip-0.9.3-SHA256SUMS.txt</p>
+            <p class="dl-desc" data-i18n="dlVerifyDesc">下载后可执行 shasum -a 256 -c BoltZip-0.9.3-SHA256SUMS.txt 验证包完整性。</p>
             <div class="dl-actions">
-              <a href="./downloads/BoltZip-0.9.2-SHA256SUMS.txt" download="BoltZip-0.9.2-SHA256SUMS.txt" class="btn btn-glass btn-sm" data-i18n="dlVerifyBtn">查看 / 下载 SHA256SUMS.txt</a>
+              <a href="./downloads/BoltZip-0.9.3-SHA256SUMS.txt" download="BoltZip-0.9.3-SHA256SUMS.txt" class="btn btn-glass btn-sm" data-i18n="dlVerifyBtn">查看 / 下载 SHA256SUMS.txt</a>
             </div>
           </article>
         </div>
@@ -384,7 +384,7 @@ swift run -c release boltzip bench</code></pre>
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <div data-i18n-html="footerDesc"><strong>BoltZip v0.9.2</strong> · Open-Source Universal Archive Studio for macOS 12.0+</div>
+      <div data-i18n-html="footerDesc"><strong>BoltZip v0.9.3</strong> · Open-Source Universal Archive Studio for macOS 12.0+</div>
       <div class="footer-note">MIT License · Swift 6 · zlib · Zstandard · XZ · bzip2 · LZ4</div>
     </div>
   </footer>

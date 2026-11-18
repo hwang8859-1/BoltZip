@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-APP_VERSION="0.9.2"
-APP_BUILD="11"
+APP_VERSION="0.9.3"
+APP_BUILD="12"
 MIN_MACOS="12.0"
 VENDOR_LIB_DIR="$ROOT_DIR/Vendor/Compression/lib"
 

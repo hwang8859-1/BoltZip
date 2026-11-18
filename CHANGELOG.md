@@ -2,6 +2,14 @@
 
 All notable changes to **BoltZip** will be documented in this file.
 
+## [0.9.3] - 2026-11-18
+
+### Fixed (`legacy/macos-12` Universal Compatibility Hotfix)
+- **Quick Task HUD Layout Recursion Guard**:
+  - Removed `NSHostingController.sizingOptions = [.preferredContentSize]` in [`QuickTaskHUDWindowController.swift`](Sources/BoltZipApp/Services/QuickTaskHUDWindowController.swift) so `NSHostingView.windowDidLayout()` never recurses into `updateAnimatedWindowSize(_:)` on borderless HUD panels, driving HUD resize explicitly from [`QuickTaskHUDModel.swift`](Sources/BoltZipApp/Models/QuickTaskHUDModel.swift) `phase` transitions with `ceil`-rounded bounds while preserving `#available(macOS 13.0, *)` / macOS 12 `fittingSize` compatibility.
+- **Cold-Launch External URL Auto-Exit Guard**:
+  - Removed the blind `excludingWindowID` exclusion in [`BoltZipAppDelegate.swift`](Sources/BoltZipApp/App/BoltZipAppDelegate.swift) so SwiftUI recycling and ordering front a provisional `NSWindow` during cold-launch Finder URL activation (`boltzip://finder?op=open...` / `op=openWorkspace`) is recognized accurately by `window.isVisible` without terminating prematurely.
+
 ## [0.9.2] - 2026-11-18
 
 ### Fixed (`legacy/macos-12` Universal Compatibility Hotfix)

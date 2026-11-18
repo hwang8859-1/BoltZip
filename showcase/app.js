@@ -2,7 +2,7 @@
   const siteI18n = {
     "zh-Hans": {
       htmlLang: "zh-CN",
-      pageTitle: "BoltZip v0.9.2 — 为 macOS 12.0+ 打造的开源通用极速压缩工作台",
+      pageTitle: "BoltZip v0.9.3 — 为 macOS 12.0+ 打造的开源通用极速压缩工作台",
       navDownload: "下载安装包",
       navSim: "交互演示",
       navFeat: "核心特性",
@@ -12,7 +12,7 @@
       heroBadge: "macOS 12+ Universal (Apple Silicon & Intel) · 26+ Liquid Glass · MIT 开源",
       heroTitle: "<span class=\"gradient-text\">快如闪电，通透如玻</span><br />让 macOS 压缩像桌面一样顺手。",
       heroDesc: "告别双击就一股脑解压一地的传统体验。BoltZip 基于纯正开源压缩底座（zlib · Zstandard · LZMA2 · bzip2 · LZ4），原生还原「包内浏览、直接增删改、自动删除 .DS_Store、GBK 乱码自愈、访达一级 Bolt 菜单（独立进度浮窗）与 macOS 26+ 液态玻璃（旧版自动禁用）」。",
-      heroCtaDownload: "⬇ 下载 v0.9.2 Universal",
+      heroCtaDownload: "⬇ 下载 v0.9.3 Universal",
       heroCta1: "▶ 体验界面交互模拟器",
       heroCta2: "克隆源码并构建",
       stat1Val: "6 大开源内核",
@@ -115,17 +115,17 @@
           { name: "LZ4 (lz4frame -3)", sub: ".tar.lz4 · 快速打包分发", ratio: 31, speed: 98, ratioText: "节省 31%", speedText: "超快" }
         ]
       },
-      dlTitle: "下载 BoltZip v0.9.2 安装包与源代码",
+      dlTitle: "下载 BoltZip v0.9.3 安装包与源代码",
       dlSub: "Universal 通用二进制（原生支持 Apple Silicon M 系列与 Intel x86_64），静态链接全部开源压缩库",
       dlAppTag: "macOS App · 推荐下载",
       dlAppDesc: "包含 BoltZip.app、内置 boltzip CLI 与 FinderSync 右键菜单扩展，开箱即用零外部依赖。",
       dlAppBtn: "⬇ 下载 macOS 安装镜像 (.dmg)",
       dlSrcTag: "MIT 完整源码归档",
-      dlSrcTitle: "Source Code v0.9.2",
+      dlSrcTitle: "Source Code v0.9.3",
       dlSrcDesc: "包含完整 SwiftPM 工程源码、C 编解码桥接与 Universal 构建脚本。",
       dlVerifyTag: "完整性校验",
       dlVerifyTitle: "SHA-256 校验清单",
-      dlVerifyDesc: "下载后可执行 shasum -a 256 -c BoltZip-0.9.2-SHA256SUMS.txt 验证包完整性。",
+      dlVerifyDesc: "下载后可执行 shasum -a 256 -c BoltZip-0.9.3-SHA256SUMS.txt 验证包完整性。",
       dlVerifyBtn: "查看 / 下载 SHA256SUMS.txt",
       qsTitle: "从 GitHub 克隆并构建 BoltZip",
       qsSub: "仓库提供完整的 SwiftPM 工程、Universal 打包脚本以及面向开发者的 AGENTS.md",
@@ -135,11 +135,11 @@
       copyBtn: "复制",
       copiedBtn: "已复制 ✓",
       copyManualBtn: "请手动复制",
-      footerDesc: "<strong>BoltZip v0.9.2</strong> · 面向 macOS 12.0+ 的开源通用极速压缩工作台"
+      footerDesc: "<strong>BoltZip v0.9.3</strong> · 面向 macOS 12.0+ 的开源通用极速压缩工作台"
     },
     "zh-Hant": {
       htmlLang: "zh-TW",
-      pageTitle: "BoltZip v0.9.2 — 為 macOS 12.0+ 打造的開源通用極速壓縮工作台",
+      pageTitle: "BoltZip v0.9.3 — 為 macOS 12.0+ 打造的開源通用極速壓縮工作台",
       navDownload: "下載安裝包",
       navSim: "互動模擬",
       navFeat: "核心功能",
@@ -149,7 +149,7 @@
       heroBadge: "macOS 12+ Universal (Apple Silicon & Intel) · 26+ Liquid Glass · MIT 開源",
       heroTitle: "<span class=\"gradient-text\">快如閃電，通透如玻</span><br />讓 macOS 壓縮像桌面一樣順手。",
       heroDesc: "告別雙擊就整包解壓一地的困擾。BoltZip 結合純淨開源演算法核心，完整提供「封存檔內建瀏覽、直接增刪修改、自動刪除 .DS_Store、編碼亂碼自動修正、Finder 第一層 Bolt 獨立進度視窗與舊版 macOS 自適應介面」。",
-      heroCtaDownload: "⬇ 下載 v0.9.2 Universal",
+      heroCtaDownload: "⬇ 下載 v0.9.3 Universal",
       heroCta1: "▶ 體驗互動模擬器",
       heroCta2: "取得原始碼並建置",
       stat1Val: "6 大開源核心",
@@ -251,17 +251,17 @@
           { name: "LZ4 (lz4frame -3)", sub: ".tar.lz4 · 快速打包分發", ratio: 31, speed: 98, ratioText: "節省 31%", speedText: "超快" }
         ]
       },
-      dlTitle: "下載 BoltZip v0.9.2 安裝包與原始碼",
+      dlTitle: "下載 BoltZip v0.9.3 安裝包與原始碼",
       dlSub: "Universal 通用執行檔（原生支援 Apple Silicon 與 Intel x86_64），靜態連結全套開源壓縮庫",
       dlAppTag: "macOS App · 推薦下載",
       dlAppDesc: "內含 BoltZip.app、boltzip CLI 與 FinderSync 右鍵選單延伸功能，開箱即用。",
       dlAppBtn: "⬇ 下載 macOS 安裝映像檔 (.dmg)",
       dlSrcTag: "MIT 完整原始碼",
-      dlSrcTitle: "Source Code v0.9.2",
+      dlSrcTitle: "Source Code v0.9.3",
       dlSrcDesc: "包含完整 SwiftPM 專案、C 橋接程式與 Universal 打包腳本。",
       dlVerifyTag: "完整性校驗",
       dlVerifyTitle: "SHA-256 雜湊清單",
-      dlVerifyDesc: "下載後可透過 shasum -a 256 -c BoltZip-0.9.2-SHA256SUMS.txt 驗證檔案一致性。",
+      dlVerifyDesc: "下載後可透過 shasum -a 256 -c BoltZip-0.9.3-SHA256SUMS.txt 驗證檔案一致性。",
       dlVerifyBtn: "檢視 / 下載 SHA256SUMS.txt",
       qsTitle: "從 GitHub 取得並建置 BoltZip",
       qsSub: "內含完整 SwiftPM 專案、Universal 打包腳本與開發者指引 AGENTS.md",
@@ -271,11 +271,11 @@
       copyBtn: "複製",
       copiedBtn: "已複製 ✓",
       copyManualBtn: "請手動複製",
-      footerDesc: "<strong>BoltZip v0.9.2</strong> · 專為 macOS 12.0+ 打造的開源通用壓縮工作台"
+      footerDesc: "<strong>BoltZip v0.9.3</strong> · 專為 macOS 12.0+ 打造的開源通用壓縮工作台"
     },
     "en": {
       htmlLang: "en",
-      pageTitle: "BoltZip v0.9.2 — Open-Source Universal Archive Studio for macOS 12.0+",
+      pageTitle: "BoltZip v0.9.3 — Open-Source Universal Archive Studio for macOS 12.0+",
       navDownload: "Downloads",
       navSim: "Simulator",
       navFeat: "Features",
@@ -285,7 +285,7 @@
       heroBadge: "macOS 12+ Universal (Apple Silicon & Intel) · 26+ Liquid Glass · MIT",
       heroTitle: "<span class=\"gradient-text\">Lightning-fast archives.</span><br />Liquid-clear macOS craft.",
       heroDesc: "Stop extracting entire archives just to peek inside. BoltZip pairs open-source codecs (zlib, Zstandard, LZMA2, bzip2, LZ4) with in-archive browsing, live ZIP editing, automatic .DS_Store removal, CJK encoding auto-fix, a floating Finder HUD, and adaptive macOS 26+ Liquid Glass.",
-      heroCtaDownload: "⬇ Download v0.9.2 Universal",
+      heroCtaDownload: "⬇ Download v0.9.3 Universal",
       heroCta1: "▶ Try Interactive Simulator",
       heroCta2: "Clone & Build",
       stat1Val: "6 Open Codecs",
@@ -387,17 +387,17 @@
           { name: "LZ4 (lz4frame -3)", sub: ".tar.lz4 · Fast bundling", ratio: 31, speed: 98, ratioText: "31% saved", speedText: "Ultra fast" }
         ]
       },
-      dlTitle: "Download BoltZip v0.9.2 App & Source Archives",
+      dlTitle: "Download BoltZip v0.9.3 App & Source Archives",
       dlSub: "Universal macOS binary (Apple Silicon & Intel x86_64) with zero Homebrew runtime dependencies",
       dlAppTag: "macOS App · Recommended",
       dlAppDesc: "Includes BoltZip.app, bundled boltzip CLI, and the sandboxed FinderSync right-click extension.",
       dlAppBtn: "⬇ Download macOS Installer (.dmg)",
       dlSrcTag: "MIT Source Archives",
-      dlSrcTitle: "Source Code v0.9.2",
+      dlSrcTitle: "Source Code v0.9.3",
       dlSrcDesc: "Complete SwiftPM workspace, C codec bridge, tests, and Universal packager scripts.",
       dlVerifyTag: "Checksums",
       dlVerifyTitle: "SHA-256 Verification",
-      dlVerifyDesc: "Run shasum -a 256 -c BoltZip-0.9.2-SHA256SUMS.txt to verify release integrity.",
+      dlVerifyDesc: "Run shasum -a 256 -c BoltZip-0.9.3-SHA256SUMS.txt to verify release integrity.",
       dlVerifyBtn: "View / Download SHA256SUMS.txt",
       qsTitle: "Clone & Build BoltZip from GitHub",
       qsSub: "Includes full SwiftPM sources, Universal app bundler scripts, and AGENTS.md",
@@ -407,11 +407,11 @@
       copyBtn: "Copy",
       copiedBtn: "Copied ✓",
       copyManualBtn: "Copy manually",
-      footerDesc: "<strong>BoltZip v0.9.2</strong> · Open-Source Universal Archive Studio for macOS 12.0+"
+      footerDesc: "<strong>BoltZip v0.9.3</strong> · Open-Source Universal Archive Studio for macOS 12.0+"
     },
     "ja": {
       htmlLang: "ja",
-      pageTitle: "BoltZip v0.9.2 — macOS 12.0+ 対応のオープンソース高機能書庫ワークベンチ",
+      pageTitle: "BoltZip v0.9.3 — macOS 12.0+ 対応のオープンソース高機能書庫ワークベンチ",
       navDownload: "ダウンロード",
       navSim: "シミュレーター",
       navFeat: "主な機能",
@@ -421,7 +421,7 @@
       heroBadge: "macOS 12+ Universal (Apple Silicon & Intel) · 26+ Liquid Glass · MIT",
       heroTitle: "<span class=\"gradient-text\">稲妻の速さ、ガラスの透明感</span><br />macOS のための書庫スタジオ。",
       heroDesc: "中身を見るたびに丸ごと展開する必要はありません。BoltZip はオープンソース圧縮基盤に加え、展開不要の閲覧・編集、.DS_Store 自動除去、文字化け補正、Finder 第一階層「Bolt ›」進捗 HUD と macOS 26+ Liquid Glass を提供します。",
-      heroCtaDownload: "⬇ v0.9.2 Universal を入手",
+      heroCtaDownload: "⬇ v0.9.3 Universal を入手",
       heroCta1: "▶ インタラクティブ体験",
       heroCta2: "ソースを取得してビルド",
       stat1Val: "6 つの圧縮方式",
@@ -523,17 +523,17 @@
           { name: "LZ4 (lz4frame -3)", sub: ".tar.lz4 · 高速バンドル", ratio: 31, speed: 98, ratioText: "31% 削減", speedText: "超高速" }
         ]
       },
-      dlTitle: "BoltZip v0.9.2 アプリ & ソースをダウンロード",
+      dlTitle: "BoltZip v0.9.3 アプリ & ソースをダウンロード",
       dlSub: "Universal バイナリ（Apple Silicon & Intel x86_64 ネイティブ対応、外部依存なし）",
       dlAppTag: "macOS アプリ · 推奨",
       dlAppDesc: "BoltZip.app、boltzip CLI、FinderSync 右クリック拡張をすべて同梱しています。",
       dlAppBtn: "⬇ macOS インストーラーをダウンロード (.dmg)",
       dlSrcTag: "MIT ソースアーカイブ",
-      dlSrcTitle: "Source Code v0.9.2",
+      dlSrcTitle: "Source Code v0.9.3",
       dlSrcDesc: "SwiftPM ソース一式、C ブリッジ、テストと Universal ビルドスクリプトを含みます。",
       dlVerifyTag: "整合性検証",
       dlVerifyTitle: "SHA-256 チェックサム",
-      dlVerifyDesc: "shasum -a 256 -c BoltZip-0.9.2-SHA256SUMS.txt でファイル整合性を検証できます。",
+      dlVerifyDesc: "shasum -a 256 -c BoltZip-0.9.3-SHA256SUMS.txt でファイル整合性を検証できます。",
       dlVerifyBtn: "SHA256SUMS.txt をダウンロード",
       qsTitle: "GitHub からクローンしてビルド",
       qsSub: "SwiftPM 構成、Universal アプリ化スクリプト、開発者向け AGENTS.md を同梱",
@@ -543,7 +543,7 @@
       copyBtn: "コピー",
       copiedBtn: "コピー完了 ✓",
       copyManualBtn: "手動コピー",
-      footerDesc: "<strong>BoltZip v0.9.2</strong> · macOS 12.0+ 対応オープンソース圧縮ワークベンチ"
+      footerDesc: "<strong>BoltZip v0.9.3</strong> · macOS 12.0+ 対応オープンソース圧縮ワークベンチ"
     }
   };
 
