@@ -42,7 +42,7 @@ public enum ExtendedArchiveDriver {
                     isDirectory: isDir,
                     uncompressedSize: isDir ? 0 : size,
                     compressedSize: 0,
-                    compressionMethodName: format == .sevenZip ? "LZMA (libarchive)" : format.fileExtension.uppercased(),
+                    compressionMethodName: format == .sevenZip ? "LZMA (libarchive)" : format == .rar ? "RAR (libarchive)" : format.fileExtension.uppercased(),
                     crc32: 0,
                     modifiedDate: Date()
                 )

@@ -32,6 +32,27 @@ private let boltCodecControlBridge: bolt_control_cb = { bytesRead, totalBytes, r
     return 0
 }
 
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
+
+private func bolt_libarchive_version() -> String {
+    let handle = dlopen("/usr/lib/libarchive.dylib", RTLD_LAZY) ?? dlopen(nil, RTLD_LAZY)
+    guard let handle else { return "3.7.4" }
+    defer { dlclose(handle) }
+    guard let sym = dlsym(handle, "archive_version_string") else { return "3.7.4" }
+    typealias VersionFn = @convention(c) () -> UnsafePointer<CChar>?
+    let fn = unsafeBitCast(sym, to: VersionFn.self)
+    guard let ptr = fn() else { return "3.7.4" }
+    let full = String(cString: ptr)
+    if full.hasPrefix("libarchive ") {
+        return String(full.dropFirst("libarchive ".count))
+    }
+    return full
+}
+
 public enum CompressionCodec {
     private static func mapAlgo(_ algo: CompressionAlgorithm) -> bolt_algo_t {
         switch algo {
@@ -182,12 +203,15 @@ public enum CompressionCodec {
     }
 
     public static func engineVersions() -> [CodecEngineInfo] {
-        [
+        let libarchiveVer = bolt_libarchive_version()
+
+        return [
             CodecEngineInfo(id: "zlib", name: "zlib (DEFLATE / Gzip)", version: String(cString: bolt_zlib_version()), license: "zlib License"),
             CodecEngineInfo(id: "zstd", name: "Zstandard (libzstd)", version: String(cString: bolt_zstd_version()), license: "BSD-3-Clause"),
             CodecEngineInfo(id: "xz", name: "XZ Utils (liblzma / LZMA2)", version: String(cString: bolt_lzma_version()), license: "0BSD / Public Domain"),
             CodecEngineInfo(id: "bzip2", name: "bzip2 (libbz2)", version: String(cString: bolt_bz2_version()), license: "bzip2 License"),
-            CodecEngineInfo(id: "lz4", name: "LZ4 (lz4frame)", version: String(cString: bolt_lz4_version()), license: "BSD-2-Clause")
+            CodecEngineInfo(id: "lz4", name: "LZ4 (lz4frame)", version: String(cString: bolt_lz4_version()), license: "BSD-2-Clause"),
+            CodecEngineInfo(id: "rar", name: "libarchive RAR (RAR / RAR5 解压内核)", version: libarchiveVer, license: "BSD-2-Clause")
         ]
     }
 }

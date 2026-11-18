@@ -17,6 +17,7 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
     case iso
     case cab
     case xar
+    case rar
 
     public var id: String { rawValue }
 
@@ -38,6 +39,7 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
         case .iso: return "ISO 镜像 (.iso)"
         case .cab: return "Windows CAB (.cab)"
         case .xar: return "macOS XAR (.xar)"
+        case .rar: return "RAR 归档 (.rar)"
         }
     }
 
@@ -106,10 +108,15 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
         case "iso": return .iso
         case "cab": return .cab
         case "xar", "pkg": return .xar
+        case "rar": return .rar
         default:
             // Detect split zip volume like archive.z01, archive.z02
             if ext.count >= 2, ext.hasPrefix("z"), Int(ext.dropFirst()) != nil {
                 return .zip
+            }
+            // Detect split rar volume like archive.r00, archive.r01
+            if ext.count >= 2, ext.hasPrefix("r"), Int(ext.dropFirst()) != nil {
+                return .rar
             }
             return nil
         }

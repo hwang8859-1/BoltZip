@@ -39,7 +39,7 @@ public enum BoltArchiveEngine {
             comment = res.comment
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
             entries = try TarCodec.listEntries(at: archiveURL, format: format)
-        case .sevenZip, .iso, .cab, .xar:
+        case .sevenZip, .iso, .cab, .xar, .rar:
             entries = try ExtendedArchiveDriver.listEntries(at: archiveURL, format: format, encoding: encoding)
         }
 
@@ -73,7 +73,7 @@ public enum BoltArchiveEngine {
             return try ZipReader(url: archiveURL).readEntryData(path: entryPath, password: password, encoding: encoding)
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
             return try TarCodec.readEntryData(at: archiveURL, format: format, path: entryPath)
-        case .sevenZip, .iso, .cab, .xar:
+        case .sevenZip, .iso, .cab, .xar, .rar:
             return try ExtendedArchiveDriver.readEntryData(at: archiveURL, path: entryPath)
         }
     }
@@ -153,7 +153,7 @@ public enum BoltArchiveEngine {
             }
         }
 
-        if listing.format == .sevenZip || listing.format == .iso || listing.format == .cab || listing.format == .xar {
+        if listing.format == .sevenZip || listing.format == .iso || listing.format == .cab || listing.format == .xar || listing.format == .rar {
             let selectedSet: Set<String>?
             if case .selected(let s) = options.mode {
                 selectedSet = s
@@ -287,7 +287,7 @@ public enum BoltArchiveEngine {
             return try ZipReader(url: archiveURL).testIntegrity(password: password, encoding: encoding, progress: progress)
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
             return try TarCodec.testIntegrity(at: archiveURL, format: format)
-        case .sevenZip, .iso, .cab, .xar:
+        case .sevenZip, .iso, .cab, .xar, .rar:
             let start = CFAbsoluteTimeGetCurrent()
             let entries = try ExtendedArchiveDriver.listEntries(at: archiveURL, format: format)
             let results = entries.map { IntegrityEntryResult(path: $0.path, status: .passed, detail: "归档索引可读") }

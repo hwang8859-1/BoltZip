@@ -252,6 +252,31 @@ final class BoltZipCoreTests: XCTestCase {
         }
     }
 
+    func testRarArchiveInspectAndExtract() throws {
+        let rarBase64 = "UmFyIRoHAM+QcwAADQAAAAAAAACEUnQgkDIAFAAAABQAAAADQqLIvrd22j4UMAgApIEAAHRlc3QudHh0gAi3dto+t3baPnRlc3QgdGV4dCBkb2N1bWVudA0KnS90IJAyAAgAAAAIAAAAA3tEybbRTNg+FDAIAP+hAAB0ZXN0bGlua8AI0UzYPlBf2j50ZXN0LnR4dM3gdCCQOgAUAAAAFAAAAANCosi+Y3faPhQwEACkgQAAdGVzdGRpclx0ZXN0LnR4dMDMY3faPmN32j50ZXN0IHRleHQgZG9jdW1lbnQNCqHIdOCQMQAAAAAAAAAAAAMAAAAAY3faPhQwBwDtQQAAdGVzdGRpcsDMY3faPmR32j7m53TgkDYAAAAAAAAAAAADAAAAAJ2r1T4UMAwA7UEAAHRlc3RlbXB0eWRpcoDMnavVPsVd2j7EPXsAQAcA"
+        guard let rarData = Data(base64Encoded: rarBase64) else {
+            XCTFail("Failed to decode test RAR base64")
+            return
+        }
+
+        let rarURL = tempDir.appendingPathComponent("SampleArchive.rar")
+        try rarData.write(to: rarURL)
+
+        XCTAssertEqual(ArchiveFormat.detect(from: rarURL), .rar)
+
+        let listing = try BoltArchiveEngine.inspect(archiveURL: rarURL)
+        XCTAssertEqual(listing.format, .rar)
+        XCTAssertTrue(listing.entries.contains { $0.path.contains("test.txt") })
+
+        let testEntryData = try BoltArchiveEngine.readEntryData(archiveURL: rarURL, entryPath: "test.txt")
+        let str = String(decoding: testEntryData, as: UTF8.self)
+        XCTAssertTrue(str.contains("test text document"))
+
+        let outDir = tempDir.appendingPathComponent("RarExtracted", isDirectory: true)
+        let resolved = try BoltArchiveEngine.extract(archiveURL: rarURL, options: ExtractOptions(destinationURL: outDir, mode: .smart))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: resolved.appendingPathComponent("test.txt").path))
+    }
+
     func testSmartExtractMultiRootCreatesSubfolder() throws {
         let a = tempDir.appendingPathComponent("one.txt")
         let b = tempDir.appendingPathComponent("two.txt")
