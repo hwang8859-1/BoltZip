@@ -2,6 +2,16 @@ import BoltZipCore
 import SwiftUI
 import UniformTypeIdentifiers
 
+private struct FeaturesCardHeightKey: PreferenceKey {
+    nonisolated(unsafe) static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        let next = nextValue()
+        if next > 0 {
+            value = next
+        }
+    }
+}
+
 struct WelcomeDropZoneView: View {
     @Bindable var vm: WorkspaceViewModel
     let titlebarHeight: CGFloat
@@ -9,6 +19,7 @@ struct WelcomeDropZoneView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var isDropTargeted = false
     @State private var finderActionToast: String?
+    @State private var featuresCardHeight: CGFloat = 0
 
     var body: some View {
         let l = vm.l10n
@@ -23,7 +34,6 @@ struct WelcomeDropZoneView: View {
             let contentWidth = max(280, w - 24)
 
             ZStack(alignment: .top) {
-                // Layer 2: Scrollable or compact main content (slides underneath Layer 3 when scrolling)
                 if showLowerCardsHere {
                     ScrollView(.vertical) {
                         VStack(alignment: .leading, spacing: 10) {
@@ -54,7 +64,6 @@ struct WelcomeDropZoneView: View {
                     .frame(width: w, height: h)
                 }
 
-                // Layer 3: Dedicated Liquid Glass Titlebar Cap floating cleanly over scrolled content
                 titlebarGlassOverlay(width: w, height: topOffset)
             }
         }
@@ -67,49 +76,29 @@ struct WelcomeDropZoneView: View {
 
     @ViewBuilder
     private func titlebarGlassOverlay(width: CGFloat, height: CGFloat) -> some View {
-        let isDark = colorScheme == .dark
-        Group {
-            if vm.effectiveWindowTranslucency {
-                Rectangle()
-                    .fill(Color.clear)
-                    .boltGlassSurface(
-                        .regular,
-                        tint: Color.white.opacity(isDark ? 0.04 : 0.10),
-                        in: Rectangle()
-                    )
-                    .overlay(alignment: .bottom) {
-                        Rectangle()
-                            .fill(Color.white.opacity(isDark ? 0.10 : 0.28))
-                            .frame(height: 0.5)
-                    }
-            } else {
-                Rectangle()
-                    .fill(Color(nsColor: .windowBackgroundColor))
-                    .overlay(alignment: .bottom) {
-                        Divider()
-                    }
-            }
-        }
-        .frame(width: width, height: height)
-        .allowsHitTesting(false)
+        Color.clear
+            .frame(width: width, height: height)
+            .boltWithinWindowGlassCover(glassEnabled: vm.effectiveWindowTranslucency, dividerEdge: .bottom)
+            .allowsHitTesting(false)
     }
 
     @ViewBuilder
     private func finderBanner(l: L10n, isNarrow: Bool) -> some View {
+        let accent: Color = vm.quickActionsInstalled ? .green : .orange
         BoltGlassContainer(spacing: 8) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Image(systemName: vm.quickActionsInstalled ? "checkmark.circle.fill" : "contextualmenu.and.cursorarrow")
-                        .font(.system(size: 14))
+                        .font(BoltType.windowTitle)
                         .foregroundStyle(vm.quickActionsInstalled ? .green : .cyan)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(vm.quickActionsInstalled ? l.finderBannerEnabledTitle : l.finderBannerDisabledTitle)
-                            .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                            .font(BoltType.subbodyMedium)
                             .fixedSize(horizontal: false, vertical: true)
                         if !isNarrow {
                             Text(finderActionToast ?? l.finderBannerSubtitle)
-                                .font(.system(size: 11.5))
+                                .font(BoltType.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -121,17 +110,11 @@ struct WelcomeDropZoneView: View {
                         bannerButtons(l: l)
                     }
 
-                    Button {
+                    BoltCloseIconButton(helpText: l.hideThisSection) {
                         withAnimation(.easeInOut(duration: 0.16)) {
                             vm.showFinderBanner = false
                         }
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
-                    .help(l.hideThisSection)
                 }
 
                 if isNarrow {
@@ -143,10 +126,18 @@ struct WelcomeDropZoneView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
+            .background(
+                accent.opacity(0.13),
+                in: RoundedRectangle(cornerRadius: BoltRadius.bar, style: .continuous)
+            )
             .boltGlassSurface(
                 .regular,
-                tint: (vm.quickActionsInstalled ? Color.green : Color.cyan).opacity(0.10),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                tint: accent.opacity(0.22),
+                in: RoundedRectangle(cornerRadius: BoltRadius.bar, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: BoltRadius.bar, style: .continuous)
+                    .strokeBorder(accent.opacity(0.26), lineWidth: 0.75)
             )
         }
     }
@@ -176,25 +167,29 @@ struct WelcomeDropZoneView: View {
 
     @ViewBuilder
     private func heroDropZone(l: L10n, isNarrow: Bool, isCompactHeight: Bool, fillsSpace: Bool) -> some View {
+        let isDark = colorScheme == .dark
         ZStack {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: BoltRadius.hero, style: .continuous)
                 .strokeBorder(
-                    isDropTargeted ? Color.cyan : Color.white.opacity(0.22),
+                    isDropTargeted ? Color.cyan : Color.primary.opacity(isDark ? 0.14 : 0.10),
                     style: StrokeStyle(lineWidth: isDropTargeted ? 2.5 : 1.0, dash: [7, 5])
                 )
 
             VStack(spacing: isCompactHeight ? 7 : 10) {
-                BoltLogoBadge(size: isCompactHeight ? 42 : 52)
+                BoltLogoBadge(
+                    size: isCompactHeight ? 42 : 52,
+                    whiteBackground: vm.useWhiteAppIcon
+                )
 
                 Text(l.dropZoneTitle)
-                    .font(.system(size: isNarrow ? 15.5 : 18.5, weight: .semibold, design: .rounded))
+                    .font(BoltType.heroTitle(compact: isNarrow))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 10)
 
                 if !isCompactHeight {
                     Text(l.dropZoneSubtitle)
-                        .font(.system(size: 12.5))
+                        .font(BoltType.subbody)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
@@ -222,11 +217,12 @@ struct WelcomeDropZoneView: View {
             .padding(.horizontal, 12)
         }
         .frame(maxWidth: .infinity, minHeight: fillsSpace ? 155 : 165, maxHeight: fillsSpace ? .infinity : nil)
-        .boltGlassSurface(
-            .regular,
-            tint: (isDropTargeted ? Color.cyan : Color.indigo).opacity(isDropTargeted ? 0.22 : 0.08),
+        .boltLayeredSurface(
+            glassEnabled: vm.effectiveWindowTranslucency,
+            tone: .regular,
+            tint: isDropTargeted ? Color.cyan.opacity(0.18) : nil,
             interactive: true,
-            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+            in: RoundedRectangle(cornerRadius: BoltRadius.hero, style: .continuous)
         )
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             DropHelper.extractFileURLs(from: providers) { urls in
@@ -241,7 +237,7 @@ struct WelcomeDropZoneView: View {
             vm.startNewArchivePanel()
         } label: {
             Label(l.newArchive, systemImage: "plus.rectangle.on.folder.fill")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(BoltType.subbodyMedium)
                 .lineLimit(1)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
         }
@@ -252,7 +248,7 @@ struct WelcomeDropZoneView: View {
             vm.openArchivePanel()
         } label: {
             Label(l.openArchive, systemImage: "folder.badge.gearshape")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(BoltType.subbodyMedium)
                 .lineLimit(1)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
         }
@@ -263,7 +259,7 @@ struct WelcomeDropZoneView: View {
             vm.activeSheet = .benchmark
         } label: {
             Label(l.benchmark, systemImage: "gauge.with.dots.needle.67percent")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(BoltType.subbodyMedium)
                 .lineLimit(1)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
         }
@@ -274,7 +270,7 @@ struct WelcomeDropZoneView: View {
             vm.openShowcaseWebsite()
         } label: {
             Label(l.showcasePage, systemImage: "safari")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(BoltType.subbodyMedium)
                 .lineLimit(1)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
         }
@@ -285,15 +281,26 @@ struct WelcomeDropZoneView: View {
     @ViewBuilder
     private func lowerCards(l: L10n, availableWidth: CGFloat) -> some View {
         let stackVertically = availableWidth < 660
-        if stackVertically {
-            VStack(spacing: 10) {
-                if vm.showFeatureHighlights { featuresCard(l: l) }
-                if vm.showRecentArchives { recentsCard(l: l) }
+        let matchedRecentsHeight: CGFloat? = (!stackVertically && vm.showFeatureHighlights && featuresCardHeight > 120)
+            ? featuresCardHeight
+            : nil
+
+        Group {
+            if stackVertically {
+                VStack(spacing: 10) {
+                    if vm.showFeatureHighlights { featuresCard(l: l) }
+                    if vm.showRecentArchives { recentsCard(l: l, matchedHeight: nil) }
+                }
+            } else {
+                HStack(alignment: .top, spacing: 10) {
+                    if vm.showFeatureHighlights { featuresCard(l: l) }
+                    if vm.showRecentArchives { recentsCard(l: l, matchedHeight: matchedRecentsHeight) }
+                }
             }
-        } else {
-            HStack(alignment: .top, spacing: 10) {
-                if vm.showFeatureHighlights { featuresCard(l: l) }
-                if vm.showRecentArchives { recentsCard(l: l) }
+        }
+        .onPreferenceChange(FeaturesCardHeightKey.self) { height in
+            if abs(featuresCardHeight - height) > 0.5 {
+                featuresCardHeight = height
             }
         }
     }
@@ -303,19 +310,13 @@ struct WelcomeDropZoneView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label(l.featuresTitle, systemImage: "sparkles")
-                    .font(.system(size: 13.5, weight: .semibold, design: .rounded))
+                    .font(BoltType.sectionTitle)
                 Spacer()
-                Button {
+                BoltCloseIconButton(helpText: l.hideThisSection) {
                     withAnimation(.easeInOut(duration: 0.16)) {
                         vm.showFeatureHighlights = false
                     }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
-                .help(l.hideThisSection)
             }
 
             FeatureRow(icon: "folder.fill.badge.plus", title: l.featBrowseTitle, detail: l.featBrowseDesc)
@@ -324,93 +325,78 @@ struct WelcomeDropZoneView: View {
             FeatureRow(icon: "character.book.closed.fill", title: l.featEncodingTitle, detail: l.featEncodingDesc)
             FeatureRow(icon: "lock.shield.fill", title: l.featCryptoTitle, detail: l.featCryptoDesc)
         }
-        .padding(12)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .boltGlassSurface(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(key: FeaturesCardHeightKey.self, value: geo.size.height)
+            }
+        )
+        .boltLayeredSurface(
+            glassEnabled: vm.effectiveWindowTranslucency,
+            tone: .regular,
+            in: RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous)
+        )
     }
 
     @ViewBuilder
-    private func recentsCard(l: L10n) -> some View {
+    private func recentsCard(l: L10n, matchedHeight: CGFloat?) -> some View {
+        let recents = vm.recentArchiveURLs
+        let fallbackMaxHeight: CGFloat? = (matchedHeight == nil && recents.count > 4) ? 260 : nil
+
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(spacing: 6) {
                 Label(l.recentsTitle, systemImage: "clock.arrow.circlepath")
-                    .font(.system(size: 13.5, weight: .semibold, design: .rounded))
+                    .font(BoltType.sectionTitle)
+                    .lineLimit(1)
                 Spacer()
-                if !vm.recentArchiveURLs.isEmpty {
-                    Text(l.itemCount(vm.recentArchiveURLs.count))
-                        .font(.system(size: 11.5))
+                if !recents.isEmpty {
+                    Text(l.itemCount(recents.count))
+                        .font(BoltType.caption)
+                        .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
-                Button {
+                BoltCloseIconButton(helpText: l.hideThisSection) {
                     withAnimation(.easeInOut(duration: 0.16)) {
                         vm.showRecentArchives = false
                     }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
-                .help(l.hideThisSection)
             }
 
-            if vm.recentArchiveURLs.isEmpty {
+            if recents.isEmpty {
                 VStack(spacing: 6) {
+                    Spacer(minLength: 0)
                     Image(systemName: "archivebox")
-                        .font(.title3)
+                        .font(BoltType.heroTitle(compact: false))
                         .foregroundStyle(.tertiary)
                     Text(l.noRecents)
-                        .font(.system(size: 12))
+                        .font(BoltType.subbody)
                         .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, minHeight: 88)
+                .frame(maxWidth: .infinity, minHeight: 88, maxHeight: matchedHeight != nil ? .infinity : nil)
             } else {
-                ForEach(vm.recentArchiveURLs.prefix(5), id: \.path) { url in
-                    Button {
-                        vm.openArchive(url: url)
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "doc.zipper")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.cyan)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(url.lastPathComponent)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                Text((url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-                            Spacer(minLength: 4)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.tertiary)
+                ScrollView(.vertical, showsIndicators: true) {
+                    LazyVStack(spacing: 4) {
+                        ForEach(recents, id: \.path) { url in
+                            RecentArchiveRow(vm: vm, url: url, l: l)
                         }
-                        .padding(.vertical, 5)
-                        .padding(.horizontal, 8)
-                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .boltGlassSurface(.clear, interactive: true, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .contextMenu {
-                        Button(l.ctxOpenBrowse) { vm.openArchive(url: url) }
-                        Divider()
-                        Button(l.ctxSmartExtractAll) { vm.quickExtract(mode: .smart, archiveURL: url) }
-                        Button(l.ctxExtractAllSubfolder) { vm.quickExtract(mode: .subfolder, archiveURL: url) }
-                        Button(l.ctxVerifyArchive) { vm.testIntegrity(archiveURL: url) }
-                        Divider()
-                        Button(l.ctxShowInFinder) { vm.showInFinder(url) }
-                        Button(l.ctxRemoveRecent, role: .destructive) { vm.removeRecent(url) }
-                    }
+                    .padding(.vertical, 1)
+                    .padding(.trailing, 2)
                 }
+                .clipShape(RoundedRectangle(cornerRadius: BoltRadius.row, style: .continuous))
+                .frame(maxWidth: .infinity, maxHeight: matchedHeight != nil ? .infinity : fallbackMaxHeight)
             }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .boltGlassSurface(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(height: matchedHeight)
+        .boltLayeredSurface(
+            glassEnabled: vm.effectiveWindowTranslucency,
+            tone: .regular,
+            in: RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous)
+        )
     }
 }
 
@@ -422,16 +408,16 @@ private struct FeatureRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 13))
+                .font(BoltType.body)
                 .foregroundStyle(.cyan)
                 .frame(width: 18)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    .font(BoltType.subbodyMedium)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(detail)
-                    .font(.system(size: 11.5))
+                    .font(BoltType.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

@@ -62,6 +62,20 @@ bolt_status_t bolt_compress_buffer_ex(
     void *ctx
 );
 
+bolt_status_t bolt_compress_buffer_mt(
+    bolt_algo_t algo,
+    bolt_container_t container,
+    int32_t level,
+    const uint8_t *input,
+    size_t input_len,
+    bolt_buffer_t *output,
+    int32_t allow_mt,
+    bolt_control_cb control_cb,
+    void *ctx
+);
+
+uint32_t bolt_active_cores(void);
+
 bolt_status_t bolt_decompress_buffer(
     bolt_algo_t algo,
     bolt_container_t container,
@@ -110,6 +124,75 @@ const char *bolt_zstd_version(void);
 const char *bolt_lzma_version(void);
 const char *bolt_bz2_version(void);
 const char *bolt_lz4_version(void);
+const char *bolt_libarchive_version(void);
+
+/* ============================================================================
+ * libarchive Bridge (RAR / RAR5 / 7z / ISO / CAB / XAR + Passphrase + Multi-Volume)
+ * ============================================================================ */
+
+#define BOLT_LA_ERR_PASSWORD_REQUIRED (-1001)
+#define BOLT_LA_ERR_WRONG_PASSWORD    (-1002)
+#define BOLT_LA_ERR_CANCELLED         (-499)
+
+typedef struct {
+    const char *path;
+    const uint8_t *raw_path_bytes;
+    size_t raw_path_len;
+    uint8_t path_is_utf8;
+    uint8_t is_directory;
+    uint8_t is_symlink;
+    uint8_t is_encrypted;
+    uint64_t size;
+    int64_t mtime;
+    uint16_t permissions;
+    const char *format_name;
+} bolt_la_entry_info_t;
+
+typedef int (*bolt_la_entry_cb)(const bolt_la_entry_info_t *info, void *ctx);
+typedef int (*bolt_la_chunk_cb)(const uint8_t *data, size_t len, void *ctx);
+typedef void (*bolt_la_test_cb)(const char *path, int status_code, const char *detail, void *ctx);
+
+int32_t bolt_la_list(
+    const char **paths,
+    size_t path_count,
+    const char *password,
+    bolt_la_entry_cb entry_cb,
+    void *ctx,
+    char *err_buf,
+    size_t err_cap
+);
+
+int32_t bolt_la_read_entry(
+    const char **paths,
+    size_t path_count,
+    const char *target_path,
+    int target_match_raw_fallback,
+    const char *password,
+    bolt_buffer_t *output,
+    char *err_buf,
+    size_t err_cap
+);
+
+int32_t bolt_la_extract_stream(
+    const char **paths,
+    size_t path_count,
+    const char *password,
+    bolt_la_entry_cb on_entry_header,
+    bolt_la_chunk_cb on_entry_chunk,
+    void *ctx,
+    char *err_buf,
+    size_t err_cap
+);
+
+int32_t bolt_la_test_integrity(
+    const char **paths,
+    size_t path_count,
+    const char *password,
+    bolt_la_test_cb on_result,
+    void *ctx,
+    char *err_buf,
+    size_t err_cap
+);
 
 #ifdef __cplusplus
 }

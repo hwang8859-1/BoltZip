@@ -8,11 +8,18 @@ private final class QuickHUDPanel: NSPanel {
 }
 
 @MainActor
-final class QuickTaskHUDWindowController {
+final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
+    private enum PositionKeys {
+        static let hasSaved = "BoltZip.QuickHUDHasSavedPosition"
+        static let originX = "BoltZip.QuickHUDLastOriginX"
+        static let maxY = "BoltZip.QuickHUDLastMaxY"
+    }
+
     private var panel: QuickHUDPanel?
     private var hostingController: NSHostingController<QuickTaskHUDRootView>?
     private var hideGeneration: Int = 0
     private var hasPositionedOnce: Bool = false
+    private var isProgrammaticFrameUpdate: Bool = false
 
     var isVisible: Bool { panel?.isVisible == true }
     var onDidHide: (() -> Void)?
@@ -64,6 +71,7 @@ final class QuickTaskHUDWindowController {
             created.hasShadow = false
             created.hidesOnDeactivate = false
             created.becomesKeyOnlyIfNeeded = true
+            created.delegate = self
             self.panel = created
             panel = created
         }
@@ -71,8 +79,15 @@ final class QuickTaskHUDWindowController {
         hostingController.view.layoutSubtreeIfNeeded()
         let fitting = hostingController.sizeThatFits(in: NSSize(width: 436, height: 420))
         if !hasPositionedOnce {
-            positionTopRight(panel: panel, size: fitting)
+            positionInitialFrame(panel: panel, size: fitting)
             hasPositionedOnce = true
+        } else {
+            let current = panel.frame
+            if abs(current.width - fitting.width) > 2 || abs(current.height - fitting.height) > 2 {
+                let topLeftOrigin = NSPoint(x: current.origin.x, y: current.maxY - fitting.height)
+                let clamped = clampedOrigin(topLeftOrigin, size: fitting, preferredScreen: panel.screen ?? activeScreen())
+                applyProgrammaticFrame(NSRect(origin: clamped, size: fitting), to: panel)
+            }
         }
 
         let wasVisible = panel.isVisible && panel.alphaValue > 0.05
@@ -123,17 +138,61 @@ final class QuickTaskHUDWindowController {
         }
     }
 
-    private func positionTopRight(panel: NSPanel, size: NSSize) {
-        let mouseScreen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
-        let screen = mouseScreen ?? NSScreen.main ?? NSScreen.screens.first
-        guard let visible = screen?.visibleFrame else { return }
+    func windowDidMove(_ notification: Notification) {
+        guard !isProgrammaticFrameUpdate, hasPositionedOnce, let panel, panel.isVisible else { return }
+        let defaults = UserDefaults.standard
+        defaults.set(Double(panel.frame.origin.x), forKey: PositionKeys.originX)
+        defaults.set(Double(panel.frame.maxY), forKey: PositionKeys.maxY)
+        defaults.set(true, forKey: PositionKeys.hasSaved)
+    }
 
-        let margin: CGFloat = 14
-        let origin = NSPoint(
-            x: visible.maxX - size.width - margin,
-            y: visible.maxY - size.height - margin
+    private func activeScreen() -> NSScreen? {
+        let mouseScreen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
+        return mouseScreen ?? NSScreen.main ?? NSScreen.screens.first
+    }
+
+    private func positionInitialFrame(panel: NSPanel, size: NSSize) {
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: PositionKeys.hasSaved) {
+            let savedX = defaults.double(forKey: PositionKeys.originX)
+            let savedMaxY = defaults.double(forKey: PositionKeys.maxY)
+            let probeCenter = NSPoint(x: savedX + size.width * 0.5, y: savedMaxY - size.height * 0.5)
+            let savedScreen = NSScreen.screens.first { NSMouseInRect(probeCenter, $0.visibleFrame, false) }
+                ?? activeScreen()
+            let origin = clampedOrigin(
+                NSPoint(x: savedX, y: savedMaxY - size.height),
+                size: size,
+                preferredScreen: savedScreen
+            )
+            applyProgrammaticFrame(NSRect(origin: origin, size: size), to: panel)
+            return
+        }
+
+        guard let visible = activeScreen()?.visibleFrame else { return }
+        let centered = NSPoint(
+            x: visible.midX - size.width * 0.5,
+            y: visible.midY - size.height * 0.5
         )
-        panel.setFrame(NSRect(origin: origin, size: size), display: true)
+        applyProgrammaticFrame(NSRect(origin: centered, size: size), to: panel)
+    }
+
+    private func clampedOrigin(_ origin: NSPoint, size: NSSize, preferredScreen: NSScreen?) -> NSPoint {
+        guard let visible = preferredScreen?.visibleFrame else { return origin }
+        let margin: CGFloat = 8
+        let minX = visible.minX + margin
+        let maxX = max(minX, visible.maxX - size.width - margin)
+        let minY = visible.minY + margin
+        let maxY = max(minY, visible.maxY - size.height - margin)
+        return NSPoint(
+            x: min(max(origin.x, minX), maxX),
+            y: min(max(origin.y, minY), maxY)
+        )
+    }
+
+    private func applyProgrammaticFrame(_ frame: NSRect, to panel: NSPanel) {
+        isProgrammaticFrameUpdate = true
+        panel.setFrame(frame, display: true)
+        isProgrammaticFrameUpdate = false
     }
 }
 

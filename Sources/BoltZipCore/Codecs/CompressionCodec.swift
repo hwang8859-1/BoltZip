@@ -33,6 +33,10 @@ private let boltCodecControlBridge: bolt_control_cb = { bytesRead, totalBytes, r
 }
 
 public enum CompressionCodec {
+    public static var activeCoreCount: Int {
+        max(1, Int(bolt_active_cores()))
+    }
+
     private static func mapAlgo(_ algo: CompressionAlgorithm) -> bolt_algo_t {
         switch algo {
         case .store: return BOLT_ALGO_STORE
@@ -56,6 +60,7 @@ public enum CompressionCodec {
         algorithm: CompressionAlgorithm,
         gzipContainer: Bool = false,
         level: Int? = nil,
+        allowMultiThread: Bool = true,
         controller: ArchiveTaskController? = nil,
         progress: ((UInt64, UInt64) -> Void)? = nil
     ) throws -> Data {
@@ -71,12 +76,13 @@ public enum CompressionCodec {
 
         let needsBridge = (controller != nil || progress != nil)
         let controlCtx = needsBridge ? CCodecControlContext(controller: controller, onProgress: progress) : nil
+        let allowMTFlag: Int32 = allowMultiThread ? 1 : 0
         let status = withExtendedLifetime(controlCtx) {
             let rawCtx = controlCtx.map { Unmanaged.passUnretained($0).toOpaque() }
             let cb: bolt_control_cb? = needsBridge ? boltCodecControlBridge : nil
             return data.withUnsafeBytes { rawBuf -> bolt_status_t in
                 let ptr = rawBuf.bindMemory(to: UInt8.self).baseAddress
-                return bolt_compress_buffer_ex(mapAlgo(algorithm), container, lvl, ptr, data.count, &outBuf, cb, rawCtx)
+                return bolt_compress_buffer_mt(mapAlgo(algorithm), container, lvl, ptr, data.count, &outBuf, allowMTFlag, cb, rawCtx)
             }
         }
         if status.code == BOLT_STATUS_CANCELLED {
@@ -187,7 +193,8 @@ public enum CompressionCodec {
             CodecEngineInfo(id: "zstd", name: "Zstandard (libzstd)", version: String(cString: bolt_zstd_version()), license: "BSD-3-Clause"),
             CodecEngineInfo(id: "xz", name: "XZ Utils (liblzma / LZMA2)", version: String(cString: bolt_lzma_version()), license: "0BSD / Public Domain"),
             CodecEngineInfo(id: "bzip2", name: "bzip2 (libbz2)", version: String(cString: bolt_bz2_version()), license: "bzip2 License"),
-            CodecEngineInfo(id: "lz4", name: "LZ4 (lz4frame)", version: String(cString: bolt_lz4_version()), license: "BSD-2-Clause")
+            CodecEngineInfo(id: "lz4", name: "LZ4 (lz4frame)", version: String(cString: bolt_lz4_version()), license: "BSD-2-Clause"),
+            CodecEngineInfo(id: "libarchive", name: "libarchive (RAR / RAR5 / 7z / ISO)", version: String(cString: bolt_libarchive_version()), license: "BSD-2-Clause")
         ]
     }
 }

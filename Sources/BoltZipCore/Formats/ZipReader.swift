@@ -1,10 +1,12 @@
 import Foundation
+import os
 
-final class ZipVolumeAccessor {
+final class ZipVolumeAccessor: @unchecked Sendable {
     let mainURL: URL
     let volumeURLs: [URL]
     private var handles: [Int: FileHandle] = [:]
     private var sizes: [Int: UInt64] = [:]
+    private let ioLock = NSLock()
 
     init(archiveURL: URL) throws {
         // If opened via .z01/.z02, locate matching .zip central file
@@ -25,6 +27,8 @@ final class ZipVolumeAccessor {
     private var allVolumes: [URL] = []
 
     func configureVolumes(totalDisks: Int) throws {
+        ioLock.lock()
+        defer { ioLock.unlock() }
         if totalDisks <= 1 {
             allVolumes = [mainURL]
             return
@@ -44,6 +48,8 @@ final class ZipVolumeAccessor {
     }
 
     func closeAll() {
+        ioLock.lock()
+        defer { ioLock.unlock() }
         for (_, fh) in handles {
             try? fh.close()
         }
@@ -54,7 +60,7 @@ final class ZipVolumeAccessor {
         closeAll()
     }
 
-    private func handle(forDisk disk: Int) throws -> (FileHandle, UInt64) {
+    private func handleLocked(forDisk disk: Int) throws -> (FileHandle, UInt64) {
         let list = allVolumes.isEmpty ? [mainURL] : allVolumes
         guard disk >= 0 && disk < list.count else {
             throw BoltZipError.missingSplitVolume("Disk #\(disk + 1)")
@@ -72,13 +78,17 @@ final class ZipVolumeAccessor {
     }
 
     func mainFileSize() throws -> UInt64 {
-        let (_, sz) = try handle(forDisk: max(0, allVolumes.count - 1))
+        ioLock.lock()
+        defer { ioLock.unlock() }
+        let (_, sz) = try handleLocked(forDisk: max(0, allVolumes.count - 1))
         return sz
     }
 
     func readFromMainTail(length: Int) throws -> Data {
+        ioLock.lock()
+        defer { ioLock.unlock() }
         let disk = max(0, allVolumes.count - 1)
-        let (fh, sz) = try handle(forDisk: disk)
+        let (fh, sz) = try handleLocked(forDisk: disk)
         let count = min(UInt64(length), sz)
         try fh.seek(toOffset: sz - count)
         return try fh.read(upToCount: Int(count)) ?? Data()
@@ -89,6 +99,8 @@ final class ZipVolumeAccessor {
         if length == 0 {
             return (Data(), startDisk, startOffset)
         }
+        ioLock.lock()
+        defer { ioLock.unlock() }
         var result = Data()
         result.reserveCapacity(length)
         var disk = startDisk
@@ -96,7 +108,7 @@ final class ZipVolumeAccessor {
         var remaining = length
 
         while remaining > 0 {
-            let (fh, diskSize) = try handle(forDisk: disk)
+            let (fh, diskSize) = try handleLocked(forDisk: disk)
             if offset >= diskSize {
                 disk += 1
                 offset = 0
@@ -120,7 +132,7 @@ final class ZipVolumeAccessor {
     }
 }
 
-public final class ZipReader {
+public final class ZipReader: @unchecked Sendable {
     struct ParsedArchive {
         let records: [ZipRecord]
         let comment: String
@@ -434,7 +446,7 @@ public final class ZipReader {
     public func testIntegrity(
         password: String? = nil,
         encoding: FilenameEncodingOption = .auto,
-        progress: ((OperationProgress) -> Void)? = nil
+        progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws -> IntegrityReport {
         let start = CFAbsoluteTimeGetCurrent()
         let parsed = try parseArchive()
@@ -442,51 +454,71 @@ public final class ZipReader {
         try accessor.configureVolumes(totalDisks: parsed.totalDisks)
         defer { accessor.closeAll() }
 
-        var results: [IntegrityEntryResult] = []
-        var passed = 0
-        var failed = 0
-        var missingPw = 0
         let total = parsed.records.count
+        struct IntegrityStats {
+            var results: [IntegrityEntryResult?]
+            var completed = 0
+            var passed = 0
+            var failed = 0
+            var missingPw = 0
+        }
+        let stateLock = OSAllocatedUnfairLock(initialState: IntegrityStats(results: [IntegrityEntryResult?](repeating: nil, count: total)))
+        let indexedRecords = Array(parsed.records.enumerated())
 
-        for (index, record) in parsed.records.enumerated() {
+        try ParallelExecutor.forEachBounded(indexedRecords) { _, pair in
+            let (index, record) = pair
             let entry = Self.makeEntry(from: record, encoding: encoding)
-            progress?(OperationProgress(
-                fractionCompleted: total > 0 ? Double(index) / Double(total) : 1.0,
-                currentItem: entry.path,
-                processedBytes: UInt64(index),
-                totalBytes: UInt64(total)
-            ))
+            let itemResult: IntegrityEntryResult
+            enum OutcomeKind { case passed, missingPw, failed }
+            let kind: OutcomeKind
 
             if entry.isDirectory {
-                passed += 1
-                results.append(IntegrityEntryResult(path: entry.path, status: .passed, detail: "目录条目正常"))
-                continue
+                kind = .passed
+                itemResult = IntegrityEntryResult(path: entry.path, status: .passed, detail: "目录条目正常")
+            } else {
+                do {
+                    _ = try self.decodePayload(record: record, entryPath: entry.path, accessor: accessor, password: password)
+                    kind = .passed
+                    let detail = entry.isEncrypted ? "解密与 HMAC/CRC 校验通过" : String(format: "CRC32 校验通过 (0x%08X)", entry.crc32)
+                    itemResult = IntegrityEntryResult(path: entry.path, status: .passed, detail: detail)
+                } catch BoltZipError.passwordRequired {
+                    kind = .missingPw
+                    itemResult = IntegrityEntryResult(path: entry.path, status: .missingPassword, detail: "已加密，需要密码")
+                } catch {
+                    kind = .failed
+                    itemResult = IntegrityEntryResult(path: entry.path, status: .failed, detail: error.localizedDescription)
+                }
             }
 
-            do {
-                _ = try decodePayload(record: record, entryPath: entry.path, accessor: accessor, password: password)
-                passed += 1
-                let detail = entry.isEncrypted ? "解密与 HMAC/CRC 校验通过" : String(format: "CRC32 校验通过 (0x%08X)", entry.crc32)
-                results.append(IntegrityEntryResult(path: entry.path, status: .passed, detail: detail))
-            } catch BoltZipError.passwordRequired {
-                missingPw += 1
-                results.append(IntegrityEntryResult(path: entry.path, status: .missingPassword, detail: "已加密，需要密码"))
-            } catch {
-                failed += 1
-                results.append(IntegrityEntryResult(path: entry.path, status: .failed, detail: error.localizedDescription))
+            let doneCount = stateLock.withLock { st -> Int in
+                st.results[index] = itemResult
+                st.completed += 1
+                switch kind {
+                case .passed: st.passed += 1
+                case .missingPw: st.missingPw += 1
+                case .failed: st.failed += 1
+                }
+                return st.completed
             }
+            progress?(OperationProgress(
+                fractionCompleted: total > 0 ? Double(doneCount) / Double(total) : 1.0,
+                currentItem: entry.path,
+                processedBytes: UInt64(doneCount),
+                totalBytes: UInt64(total)
+            ))
         }
 
         progress?(OperationProgress(fractionCompleted: 1.0, currentItem: "校验完成", processedBytes: UInt64(total), totalBytes: UInt64(total)))
 
+        let finalState = stateLock.withLock { $0 }
         return IntegrityReport(
             archiveName: url.lastPathComponent,
             totalEntries: total,
-            passedCount: passed,
-            failedCount: failed,
-            skippedEncryptedCount: missingPw,
+            passedCount: finalState.passed,
+            failedCount: finalState.failed,
+            skippedEncryptedCount: finalState.missingPw,
             elapsedSeconds: CFAbsoluteTimeGetCurrent() - start,
-            results: results
+            results: finalState.results.compactMap { $0 }
         )
     }
 }

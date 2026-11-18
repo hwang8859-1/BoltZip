@@ -143,11 +143,14 @@ final class QuickTaskHUDModel {
     var passwordInput: String = ""
     private(set) var isHovering: Bool = false
 
-    // MARK: - Window Coordination Hooks
+    // MARK: - Window Coordination & Completion Hooks
 
     var onPresentRequested: (() -> Void)?
     var onDismissRequested: (() -> Void)?
     var onKeyFocusRequested: (() -> Void)?
+    var onOperationSucceeded: ((Operation, URL) -> Void)?
+    var completionAutoDismissDelay: TimeInterval = 2.6
+    var cancelledAutoDismissDelay: TimeInterval = 1.2
 
     // MARK: - Execution & Timing Internals
 
@@ -257,7 +260,7 @@ final class QuickTaskHUDModel {
         stopUITimer()
         freezeActiveClock()
         phase = .cancelled
-        scheduleAutoDismiss(after: 1.2)
+        scheduleAutoDismiss(after: cancelledAutoDismissDelay)
     }
 
     func submitPassword() {
@@ -299,9 +302,9 @@ final class QuickTaskHUDModel {
         } else {
             switch phase {
             case .completed:
-                scheduleAutoDismiss(after: 1.2)
+                scheduleAutoDismiss(after: min(1.2, completionAutoDismissDelay))
             case .cancelled:
-                scheduleAutoDismiss(after: 0.9)
+                scheduleAutoDismiss(after: min(0.9, cancelledAutoDismissDelay))
             default:
                 break
             }
@@ -381,7 +384,7 @@ final class QuickTaskHUDModel {
                     controller: controller,
                     progress: progress
                 )
-                return urls.first ?? outputURL
+                return urls.last ?? outputURL
 
             case .extract(_, let archiveURL, let options):
                 return try BoltArchiveEngine.extract(
@@ -453,6 +456,10 @@ final class QuickTaskHUDModel {
             processedBytes = max(processedBytes, totalBytes)
         }
 
+        if let completedOp = currentOperation {
+            onOperationSucceeded?(completedOp, resultURL)
+        }
+
         if !pendingQueue.isEmpty {
             let next = pendingQueue.removeFirst()
             start(next)
@@ -460,7 +467,7 @@ final class QuickTaskHUDModel {
         }
 
         phase = .completed(resultURL: resultURL, elapsedSeconds: activeElapsedSeconds)
-        scheduleAutoDismiss(after: 2.6)
+        scheduleAutoDismiss(after: completionAutoDismissDelay)
     }
 
     private func handleError(_ error: Error, operation: Operation, generation: Int) {
@@ -475,7 +482,7 @@ final class QuickTaskHUDModel {
             case .cancelled:
                 pendingQueue.removeAll()
                 phase = .cancelled
-                scheduleAutoDismiss(after: 1.2)
+                scheduleAutoDismiss(after: cancelledAutoDismissDelay)
                 return
             case .passwordRequired:
                 if case .extract(_, let archiveURL, _) = operation {

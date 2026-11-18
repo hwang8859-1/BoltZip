@@ -5,9 +5,9 @@ import Foundation
 @objc(FinderSync)
 final class FinderSync: FIFinderSync {
     private static let archiveExtensions: Set<String> = [
-        "zip", "zipx", "z01", "7z", "tar", "gz", "tgz",
-        "zst", "zstd", "tzst", "xz", "txz", "bz2", "tbz2",
-        "lz4", "tlz4", "iso", "cab", "xar"
+        "zip", "zipx", "z01", "rar", "r00", "r01", "7z", "tar", "gz", "tgz",
+        "zst", "zstd", "tzst", "xz", "txz", "lzma", "bz2", "tbz2", "tbz",
+        "lz4", "tlz4", "iso", "cab", "xar", "pkg"
     ]
 
     override init() {
@@ -30,10 +30,7 @@ final class FinderSync: FIFinderSync {
 
         let rootMenu = NSMenu(title: "")
         let boltItem = NSMenuItem(title: "Bolt", action: nil, keyEquivalent: "")
-        if let icon = NSImage(systemSymbolName: "bolt.circle.fill", accessibilityDescription: "BoltZip") {
-            icon.isTemplate = true
-            boltItem.image = icon
-        }
+        boltItem.image = makeBoltCircleMenuImage()
 
         let submenu = NSMenu(title: "Bolt")
 
@@ -85,6 +82,62 @@ final class FinderSync: FIFinderSync {
         menu.addItem(item)
     }
 
+    /// Renders a 16×16 template circular badge punched with BoltZip's tilted Z-shaped lightning bolt.
+    private func makeBoltCircleMenuImage() -> NSImage {
+        let side: CGFloat = 16
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+
+            let combined = CGMutablePath()
+            let circleRect = CGRect(x: 1.0, y: 1.0, width: 14.0, height: 14.0)
+            combined.addEllipse(in: circleRect)
+
+            // Normalized Z-bolt coordinates matching BoltZip's AppIcon emblem, centered cleanly inside the circle.
+            let span: CGFloat = 14.2
+            let ox = (side - span) * 0.5
+            let oy = (side - span) * 0.5
+            let rawPoints: [(CGFloat, CGFloat)] = [
+                (0.33, 0.78),
+                (0.78, 0.78),
+                (0.51, 0.53),
+                (0.65, 0.53),
+                (0.42, 0.33),
+                (0.72, 0.33),
+                (0.67, 0.21),
+                (0.21, 0.21),
+                (0.48, 0.46),
+                (0.34, 0.46),
+                (0.57, 0.66),
+                (0.28, 0.66)
+            ]
+
+            let zPath = CGMutablePath()
+            for (idx, pt) in rawPoints.enumerated() {
+                let point = CGPoint(x: ox + pt.0 * span, y: oy + pt.1 * span)
+                if idx == 0 {
+                    zPath.move(to: point)
+                } else {
+                    zPath.addLine(to: point)
+                }
+            }
+            zPath.closeSubpath()
+
+            var tilt = CGAffineTransform(translationX: side * 0.5, y: side * 0.5)
+                .rotated(by: -0.11)
+                .translatedBy(x: -side * 0.5, y: -side * 0.5)
+            if let tiltedBolt = zPath.copy(using: &tilt) {
+                combined.addPath(tiltedBolt)
+            }
+
+            ctx.setFillColor(NSColor.black.cgColor)
+            ctx.addPath(combined)
+            ctx.fillPath(using: .evenOdd)
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
     private func currentTargetURLs() -> [URL] {
         let ctrl = FIFinderSyncController.default()
         if let selected = ctrl.selectedItemURLs(), !selected.isEmpty {
@@ -102,7 +155,17 @@ final class FinderSync: FIFinderSync {
             || lower.hasSuffix(".tar.bz2") || lower.hasSuffix(".tar.lz4") {
             return true
         }
-        return Self.archiveExtensions.contains(url.pathExtension.lowercased())
+        let ext = url.pathExtension.lowercased()
+        if Self.archiveExtensions.contains(ext) {
+            return true
+        }
+        if ext.count >= 2 && ext.hasPrefix("z") && Int(ext.dropFirst()) != nil {
+            return true
+        }
+        if ext.count == 3 && ext.hasPrefix("r") && Int(ext.dropFirst()) != nil {
+            return true
+        }
+        return false
     }
 
     // MARK: - Actions

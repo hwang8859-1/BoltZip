@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 public struct ArchiveListing: Sendable {
     public let archiveURL: URL
@@ -20,7 +21,8 @@ public struct ArchiveListing: Sendable {
 public enum BoltArchiveEngine {
     public static func inspect(
         archiveURL: URL,
-        encoding: FilenameEncodingOption = .auto
+        encoding: FilenameEncodingOption = .auto,
+        password: String? = nil
     ) throws -> ArchiveListing {
         guard let format = ArchiveFormat.detect(from: archiveURL) else {
             throw BoltZipError.unsupportedFormat(archiveURL.pathExtension)
@@ -39,8 +41,8 @@ public enum BoltArchiveEngine {
             comment = res.comment
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
             entries = try TarCodec.listEntries(at: archiveURL, format: format)
-        case .sevenZip, .iso, .cab, .xar:
-            entries = try ExtendedArchiveDriver.listEntries(at: archiveURL, format: format, encoding: encoding)
+        case .rar, .sevenZip, .iso, .cab, .xar:
+            entries = try ExtendedArchiveDriver.listEntries(at: archiveURL, format: format, encoding: encoding, password: password)
         }
 
         let totalUncomp = entries.reduce(UInt64(0)) { $0 + ($1.isDirectory ? 0 : $1.uncompressedSize) }
@@ -73,8 +75,14 @@ public enum BoltArchiveEngine {
             return try ZipReader(url: archiveURL).readEntryData(path: entryPath, password: password, encoding: encoding)
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
             return try TarCodec.readEntryData(at: archiveURL, format: format, path: entryPath)
-        case .sevenZip, .iso, .cab, .xar:
-            return try ExtendedArchiveDriver.readEntryData(at: archiveURL, path: entryPath)
+        case .rar, .sevenZip, .iso, .cab, .xar:
+            return try ExtendedArchiveDriver.readEntryData(
+                at: archiveURL,
+                format: format,
+                path: entryPath,
+                password: password,
+                encoding: encoding
+            )
         }
     }
 
@@ -114,12 +122,93 @@ public enum BoltArchiveEngine {
         operations: [ZipEditOperation],
         options: CreateArchiveOptions = CreateArchiveOptions(),
         encoding: FilenameEncodingOption = .auto,
-        progress: ((OperationProgress) -> Void)? = nil
+        progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
         guard ArchiveFormat.detect(from: archiveURL) == .zip else {
             throw BoltZipError.unsupportedFormat("仅 ZIP 格式支持包内原地增删改")
         }
         try ZipWriter.editArchive(at: archiveURL, operations: operations, options: options, encoding: encoding, progress: progress)
+    }
+
+    public static func detectExtractConflicts(
+        archiveURL: URL,
+        options: ExtractOptions
+    ) throws -> ExtractConflictSummary {
+        let listing = try inspect(archiveURL: archiveURL, encoding: options.encoding, password: options.password)
+        let targetRoot = resolveExtractDestination(listing: listing, options: options)
+        let fm = FileManager.default
+
+        if targetRoot.standardizedFileURL != options.destinationURL.standardizedFileURL {
+            if fm.fileExists(atPath: targetRoot.path) {
+                return ExtractConflictSummary(
+                    destinationRoot: options.destinationURL,
+                    conflictingNames: [targetRoot.lastPathComponent]
+                )
+            }
+            return ExtractConflictSummary(destinationRoot: options.destinationURL, conflictingNames: [])
+        }
+
+        let entriesToExtract = filterEntriesForExtract(listing.entries, options: options)
+        var seen: Set<String> = []
+        var conflicts: [String] = []
+
+        switch options.mode {
+        case .selected(let chosen):
+            var targetRootsToCheck: [String] = []
+            for raw in chosen {
+                let clean = raw.hasSuffix("/") ? String(raw.dropLast()) : raw
+                guard !clean.isEmpty, seen.insert(clean).inserted else { continue }
+                targetRootsToCheck.append(clean)
+            }
+            if targetRootsToCheck.isEmpty {
+                for entry in entriesToExtract {
+                    let clean = entry.path.hasSuffix("/") ? String(entry.path.dropLast()) : entry.path
+                    guard let top = clean.split(separator: "/").first.map(String.init),
+                          seen.insert(top).inserted else { continue }
+                    targetRootsToCheck.append(top)
+                }
+            }
+            for rel in targetRootsToCheck {
+                if let url = try? safeDestinationURL(for: rel, under: targetRoot),
+                   fm.fileExists(atPath: url.path) {
+                    conflicts.append(url.lastPathComponent)
+                }
+            }
+        case .smart, .here, .subfolder:
+            for entry in entriesToExtract {
+                let clean = entry.path.hasSuffix("/") ? String(entry.path.dropLast()) : entry.path
+                guard let top = clean.split(separator: "/").first.map(String.init),
+                      seen.insert(top).inserted else { continue }
+                if let url = try? safeDestinationURL(for: top, under: targetRoot),
+                   fm.fileExists(atPath: url.path) {
+                    conflicts.append(top)
+                }
+            }
+        }
+
+        return ExtractConflictSummary(destinationRoot: targetRoot, conflictingNames: conflicts)
+    }
+
+    static func pathMatchesSelection(_ entryPath: String, selectedPaths: Set<String>) -> Bool {
+        let cleanEntry = entryPath.hasSuffix("/") ? String(entryPath.dropLast()) : entryPath
+        return selectedPaths.contains { sel in
+            let cleanSel = sel.hasSuffix("/") ? String(sel.dropLast()) : sel
+            return cleanEntry == cleanSel || cleanEntry.hasPrefix(cleanSel + "/")
+        }
+    }
+
+    private static func filterEntriesForExtract(_ entries: [ArchiveEntry], options: ExtractOptions) -> [ArchiveEntry] {
+        entries.filter { entry in
+            if options.stripMacJunk && MacJunkFilter.isJunk(path: entry.path) {
+                return false
+            }
+            switch options.mode {
+            case .smart, .here, .subfolder:
+                return true
+            case .selected(let chosen):
+                return pathMatchesSelection(entry.path, selectedPaths: chosen)
+            }
+        }
     }
 
     @discardableResult
@@ -130,30 +219,42 @@ public enum BoltArchiveEngine {
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws -> URL {
         try controller?.checkpoint()
-        let listing = try inspect(archiveURL: archiveURL, encoding: options.encoding)
+        let listing = try inspect(archiveURL: archiveURL, encoding: options.encoding, password: options.password)
         try controller?.checkpoint()
-        let targetRoot = resolveExtractDestination(listing: listing, options: options)
+        var targetRoot = resolveExtractDestination(listing: listing, options: options)
         let fm = FileManager.default
+
+        if options.overwritePolicy == .rename,
+           targetRoot.standardizedFileURL != options.destinationURL.standardizedFileURL,
+           fm.fileExists(atPath: targetRoot.path) {
+            targetRoot = uniqueNonCollidingURL(for: targetRoot, isDirectoryHint: true)
+        }
         try fm.createDirectory(at: targetRoot, withIntermediateDirectories: true)
 
         // Filter entries according to mode & Mac junk filter
-        let entriesToExtract = listing.entries.filter { entry in
-            if options.stripMacJunk && MacJunkFilter.isJunk(path: entry.path) {
-                return false
-            }
-            switch options.mode {
-            case .smart, .here, .subfolder:
-                return true
-            case .selected(let chosen):
-                let cleanEntry = entry.path.hasSuffix("/") ? String(entry.path.dropLast()) : entry.path
-                return chosen.contains { sel in
-                    let cleanSel = sel.hasSuffix("/") ? String(sel.dropLast()) : sel
-                    return cleanEntry == cleanSel || cleanEntry.hasPrefix(cleanSel + "/")
+        let entriesToExtract = filterEntriesForExtract(listing.entries, options: options)
+
+        // When auto-renaming at the same root (single-folder Smart Extract or Extract Here),
+        // remap conflicting top-level directory names so old and new directories stay cleanly separated.
+        var topLevelDirRenameMap: [String: String] = [:]
+        if options.overwritePolicy == .rename,
+           targetRoot.standardizedFileURL == options.destinationURL.standardizedFileURL {
+            var checkedTops: Set<String> = []
+            for entry in entriesToExtract {
+                let parts = entry.path.split(separator: "/").map(String.init)
+                guard let top = parts.first else { continue }
+                let isFolderTop = parts.count > 1 || entry.isDirectory
+                guard isFolderTop, checkedTops.insert(top).inserted else { continue }
+                let existing = targetRoot.appendingPathComponent(top)
+                var isDirObjC: ObjCBool = false
+                if fm.fileExists(atPath: existing.path, isDirectory: &isDirObjC) {
+                    let renamed = uniqueNonCollidingURL(for: existing, isDirectoryHint: true)
+                    topLevelDirRenameMap[top] = renamed.lastPathComponent
                 }
             }
         }
 
-        if listing.format == .sevenZip || listing.format == .iso || listing.format == .cab || listing.format == .xar {
+        if listing.format == .rar || listing.format == .sevenZip || listing.format == .iso || listing.format == .cab || listing.format == .xar {
             let selectedSet: Set<String>?
             if case .selected(let s) = options.mode {
                 selectedSet = s
@@ -164,10 +265,15 @@ public enum BoltArchiveEngine {
             progress?(OperationProgress(fractionCompleted: 0.05, currentItem: archiveURL.lastPathComponent, processedBytes: 0, totalBytes: estBytes))
             try ExtendedArchiveDriver.extract(
                 at: archiveURL,
+                format: listing.format,
                 to: targetRoot,
                 selectedPaths: selectedSet,
+                overwritePolicy: options.overwritePolicy,
+                password: options.password,
+                encoding: options.encoding,
                 stripMacJunk: options.stripMacJunk,
                 expectedTotalBytes: estBytes,
+                topLevelDirRenameMap: topLevelDirRenameMap,
                 controller: controller,
                 progress: progress
             )
@@ -176,8 +282,6 @@ public enum BoltArchiveEngine {
         }
 
         let totalBytes = entriesToExtract.reduce(UInt64(0)) { $0 + ($1.isDirectory ? 0 : $1.uncompressedSize) }
-        var processedBytes: UInt64 = 0
-        let total = entriesToExtract.count
 
         if listing.format == .zip {
             let reader = ZipReader(url: archiveURL)
@@ -192,43 +296,93 @@ public enum BoltArchiveEngine {
                 recordByPath[e.path] = rec
             }
 
-            for (idx, entry) in entriesToExtract.enumerated() {
+            // Pre-create directory hierarchy and collect file jobs for multi-core parallel extraction
+            var parentDirs: Set<URL> = []
+            var fileJobs: [(entry: ArchiveEntry, record: ZipRecord, destURL: URL)] = []
+            fileJobs.reserveCapacity(entriesToExtract.count)
+
+            for entry in entriesToExtract {
                 try controller?.checkpoint()
-                let frac = totalBytes > 0
-                    ? Double(processedBytes) / Double(totalBytes)
-                    : (total > 0 ? Double(idx) / Double(total) : 1.0)
-                progress?(OperationProgress(
-                    fractionCompleted: frac,
-                    currentItem: entry.path,
-                    processedBytes: processedBytes,
-                    totalBytes: totalBytes
-                ))
-                let destURL = try safeDestinationURL(for: entry.path, under: targetRoot)
+                let outputPath = remapTopLevelFolder(in: entry.path, renameMap: topLevelDirRenameMap)
+                let destURL = try safeDestinationURL(for: outputPath, under: targetRoot)
                 if entry.isDirectory {
                     try fm.createDirectory(at: destURL, withIntermediateDirectories: true)
                     continue
                 }
                 guard let rec = recordByPath[entry.path] else { continue }
-                let plain = try reader.decodePayload(
-                    record: rec,
-                    entryPath: entry.path,
-                    accessor: accessor,
-                    password: options.password,
-                    controller: controller
-                ) { itemRead, _ in
-                    let cur = min(totalBytes, processedBytes + itemRead)
-                    let curFrac = totalBytes > 0 ? Double(cur) / Double(totalBytes) : frac
+                parentDirs.insert(destURL.deletingLastPathComponent())
+                fileJobs.append((entry: entry, record: rec, destURL: destURL))
+            }
+
+            for dir in parentDirs {
+                try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            }
+
+            if fileJobs.count <= 1 {
+                if let job = fileJobs.first {
+                    try controller?.checkpoint()
                     progress?(OperationProgress(
-                        fractionCompleted: curFrac,
-                        currentItem: entry.path,
-                        processedBytes: cur,
+                        fractionCompleted: 0,
+                        currentItem: job.entry.path,
+                        processedBytes: 0,
+                        totalBytes: totalBytes
+                    ))
+                    let plain = try reader.decodePayload(
+                        record: job.record,
+                        entryPath: job.entry.path,
+                        accessor: accessor,
+                        password: options.password,
+                        controller: controller
+                    ) { itemRead, _ in
+                        let cur = min(totalBytes, itemRead)
+                        let curFrac = totalBytes > 0 ? Double(cur) / Double(totalBytes) : 0
+                        progress?(OperationProgress(
+                            fractionCompleted: curFrac,
+                            currentItem: job.entry.path,
+                            processedBytes: cur,
+                            totalBytes: totalBytes
+                        ))
+                    }
+                    try writeExtractedFile(plain, to: job.destURL, entry: job.entry, policy: options.overwritePolicy)
+                }
+            } else {
+                let writeCollisionLock = NSLock()
+                let progressLock = OSAllocatedUnfairLock(initialState: UInt64(0))
+                let renameMapLock = writeCollisionLock
+                let policy = options.overwritePolicy
+                let pw = options.password
+
+                try ParallelExecutor.forEachBounded(fileJobs, controller: controller) { _, job in
+                    let plain = try reader.decodePayload(
+                        record: job.record,
+                        entryPath: job.entry.path,
+                        accessor: accessor,
+                        password: pw,
+                        controller: controller
+                    )
+                    if policy == .rename {
+                        renameMapLock.lock()
+                        defer { renameMapLock.unlock() }
+                        try Self.writeExtractedFile(plain, to: job.destURL, entry: job.entry, policy: policy)
+                    } else {
+                        try Self.writeExtractedFile(plain, to: job.destURL, entry: job.entry, policy: policy)
+                    }
+                    let doneNow = progressLock.withLock { total -> UInt64 in
+                        total = min(totalBytes, total + job.entry.uncompressedSize)
+                        return total
+                    }
+                    let frac = totalBytes > 0 ? Double(doneNow) / Double(totalBytes) : 1.0
+                    progress?(OperationProgress(
+                        fractionCompleted: frac,
+                        currentItem: job.entry.path,
+                        processedBytes: doneNow,
                         totalBytes: totalBytes
                     ))
                 }
-                try writeExtractedFile(plain, to: destURL, entry: entry, policy: options.overwritePolicy)
-                processedBytes += entry.uncompressedSize
             }
         } else {
+            var processedBytes: UInt64 = 0
+            let total = entriesToExtract.count
             let payloadMap = try TarCodec.readAllEntries(at: archiveURL, format: listing.format, controller: controller) { readBytes, totalCompressed in
                 let curBytes = totalBytes > 0 && totalCompressed > 0
                     ? UInt64(Double(totalBytes) * 0.4 * (Double(readBytes) / Double(totalCompressed)))
@@ -253,7 +407,8 @@ public enum BoltArchiveEngine {
                     processedBytes: reportedBytes,
                     totalBytes: totalBytes
                 ))
-                let destURL = try safeDestinationURL(for: entry.path, under: targetRoot)
+                let outputPath = remapTopLevelFolder(in: entry.path, renameMap: topLevelDirRenameMap)
+                let destURL = try safeDestinationURL(for: outputPath, under: targetRoot)
                 if entry.isDirectory {
                     try fm.createDirectory(at: destURL, withIntermediateDirectories: true)
                     continue
@@ -277,7 +432,7 @@ public enum BoltArchiveEngine {
         archiveURL: URL,
         password: String? = nil,
         encoding: FilenameEncodingOption = .auto,
-        progress: ((OperationProgress) -> Void)? = nil
+        progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws -> IntegrityReport {
         guard let format = ArchiveFormat.detect(from: archiveURL) else {
             throw BoltZipError.unsupportedFormat(archiveURL.pathExtension)
@@ -287,19 +442,8 @@ public enum BoltArchiveEngine {
             return try ZipReader(url: archiveURL).testIntegrity(password: password, encoding: encoding, progress: progress)
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
             return try TarCodec.testIntegrity(at: archiveURL, format: format)
-        case .sevenZip, .iso, .cab, .xar:
-            let start = CFAbsoluteTimeGetCurrent()
-            let entries = try ExtendedArchiveDriver.listEntries(at: archiveURL, format: format)
-            let results = entries.map { IntegrityEntryResult(path: $0.path, status: .passed, detail: "归档索引可读") }
-            return IntegrityReport(
-                archiveName: archiveURL.lastPathComponent,
-                totalEntries: results.count,
-                passedCount: results.count,
-                failedCount: 0,
-                skippedEncryptedCount: 0,
-                elapsedSeconds: CFAbsoluteTimeGetCurrent() - start,
-                results: results
-            )
+        case .rar, .sevenZip, .iso, .cab, .xar:
+            return try ExtendedArchiveDriver.testIntegrity(at: archiveURL, format: format, password: password)
         }
     }
 
@@ -332,7 +476,7 @@ public enum BoltArchiveEngine {
         return url.deletingPathExtension().lastPathComponent
     }
 
-    private static func safeDestinationURL(for entryPath: String, under rootURL: URL) throws -> URL {
+    static func safeDestinationURL(for entryPath: String, under rootURL: URL) throws -> URL {
         let components = entryPath.split(separator: "/").map(String.init)
         if components.contains("..") || entryPath.hasPrefix("/") {
             throw BoltZipError.pathTraversalDetected(entryPath)
@@ -346,7 +490,7 @@ public enum BoltArchiveEngine {
         return candidate
     }
 
-    private static func writeExtractedFile(
+    static func writeExtractedFile(
         _ data: Data,
         to initialURL: URL,
         entry: ArchiveEntry,
@@ -375,11 +519,21 @@ public enum BoltArchiveEngine {
         try? fm.setAttributes(attrs, ofItemAtPath: targetURL.path)
     }
 
-    private static func uniqueNonCollidingURL(for url: URL) -> URL {
+    static func remapTopLevelFolder(in entryPath: String, renameMap: [String: String]) -> String {
+        guard !renameMap.isEmpty else { return entryPath }
+        let parts = entryPath.split(separator: "/", omittingEmptySubsequences: false)
+        guard let first = parts.first, let replacement = renameMap[String(first)] else {
+            return entryPath
+        }
+        let suffixStart = entryPath.index(entryPath.startIndex, offsetBy: first.count)
+        return replacement + entryPath[suffixStart...]
+    }
+
+    static func uniqueNonCollidingURL(for url: URL, isDirectoryHint: Bool = false) -> URL {
         let fm = FileManager.default
         let dir = url.deletingLastPathComponent()
-        let ext = url.pathExtension
-        let stem = url.deletingPathExtension().lastPathComponent
+        let ext = isDirectoryHint ? "" : url.pathExtension
+        let stem = isDirectoryHint ? url.lastPathComponent : url.deletingPathExtension().lastPathComponent
         var n = 1
         while true {
             let candidateName = ext.isEmpty ? "\(stem) (\(n))" : "\(stem) (\(n)).\(ext)"

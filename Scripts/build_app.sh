@@ -159,17 +159,23 @@ cat <<PLIST > "$CONTENTS/Info.plist"
                 <string>zip</string>
                 <string>zipx</string>
                 <string>z01</string>
+                <string>rar</string>
+                <string>r00</string>
                 <string>7z</string>
                 <string>tar</string>
                 <string>gz</string>
                 <string>tgz</string>
                 <string>zst</string>
+                <string>zstd</string>
                 <string>tzst</string>
                 <string>xz</string>
                 <string>txz</string>
+                <string>lzma</string>
                 <string>bz2</string>
                 <string>tbz2</string>
+                <string>tbz</string>
                 <string>lz4</string>
+                <string>tlz4</string>
                 <string>iso</string>
                 <string>cab</string>
                 <string>xar</string>
@@ -178,6 +184,26 @@ cat <<PLIST > "$CONTENTS/Info.plist"
     </array>
     <key>UTImportedTypeDeclarations</key>
     <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.rarlab.rar-archive</string>
+            <key>UTTypeDescription</key>
+            <string>RAR Archive</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.archive</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>rar</string>
+                    <string>r00</string>
+                    <string>r01</string>
+                </array>
+            </dict>
+        </dict>
         <dict>
             <key>UTTypeIdentifier</key>
             <string>com.facebook.zstandard-archive</string>

@@ -2,6 +2,7 @@ import Foundation
 
 public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable {
     case zip
+    case rar
     case sevenZip = "7z"
     case tar
     case tarGz = "tar.gz"
@@ -23,6 +24,7 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
     public var displayName: String {
         switch self {
         case .zip: return "ZIP (.zip)"
+        case .rar: return "RAR (.rar)"
         case .sevenZip: return "7-Zip (.7z)"
         case .tar: return "TAR (.tar)"
         case .tarGz: return "TAR + Gzip (.tar.gz)"
@@ -96,6 +98,7 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
         let ext = url.pathExtension.lowercased()
         switch ext {
         case "zip", "zipx": return .zip
+        case "rar": return .rar
         case "7z": return .sevenZip
         case "tar": return .tar
         case "gz": return .gz
@@ -110,6 +113,10 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
             // Detect split zip volume like archive.z01, archive.z02
             if ext.count >= 2, ext.hasPrefix("z"), Int(ext.dropFirst()) != nil {
                 return .zip
+            }
+            // Detect legacy split rar volume like archive.r00, archive.r01
+            if ext.count == 3, ext.hasPrefix("r"), Int(ext.dropFirst()) != nil {
+                return .rar
             }
             return nil
         }
@@ -300,6 +307,18 @@ public enum OverwritePolicy: String, CaseIterable, Identifiable, Codable, Sendab
         case .skip: return "跳过已有文件"
         case .rename: return "自动重命名保留两者"
         }
+    }
+}
+
+public struct ExtractConflictSummary: Sendable, Equatable {
+    public let destinationRoot: URL
+    public let conflictingNames: [String]
+
+    public var hasConflicts: Bool { !conflictingNames.isEmpty }
+
+    public init(destinationRoot: URL, conflictingNames: [String]) {
+        self.destinationRoot = destinationRoot
+        self.conflictingNames = conflictingNames
     }
 }
 

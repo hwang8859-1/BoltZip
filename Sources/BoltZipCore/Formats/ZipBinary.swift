@@ -16,7 +16,7 @@ enum ZipExtraTag {
     static let winZipAES: UInt16 = 0x9901
 }
 
-struct ZipRecord {
+struct ZipRecord: Sendable {
     let rawPathBytes: Data
     let flags: UInt16
     let compressionMethod: UInt16
@@ -37,7 +37,7 @@ struct ZipRecord {
     let aesExtra: WinZipAESExtra?
 }
 
-struct WinZipAESExtra {
+struct WinZipAESExtra: Sendable {
     let vendorVersion: UInt16 // 1 = AE-1, 2 = AE-2
     let strength: ZipCrypto.AESStrength
     let actualMethod: UInt16

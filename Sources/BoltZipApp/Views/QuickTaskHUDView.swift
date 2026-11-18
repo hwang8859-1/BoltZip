@@ -4,11 +4,13 @@ import SwiftUI
 struct QuickTaskHUDView: View {
     let vm: WorkspaceViewModel
     @Bindable var hud: QuickTaskHUDModel
+    var isFloatingWindow: Bool = true
     @FocusState private var passwordFieldFocused: Bool
 
     private var l10n: L10n { vm.l10n }
 
     var body: some View {
+        let glassEnabled = isFloatingWindow ? vm.supportsLiquidGlass : vm.effectiveWindowTranslucency
         BoltGlassContainer(spacing: 12) {
             VStack(alignment: .leading, spacing: 12) {
                 headerRow
@@ -21,11 +23,12 @@ struct QuickTaskHUDView: View {
                 footerRow
             }
             .padding(16)
-            .frame(width: 404)
-            .modifier(HUDSurfaceModifier(useLiquidGlass: vm.supportsLiquidGlass))
+            .frame(width: isFloatingWindow ? 404 : nil)
+            .frame(maxWidth: isFloatingWindow ? 404 : 408)
+            .modifier(HUDSurfaceModifier(useLiquidGlass: glassEnabled, isFloatingWindow: isFloatingWindow))
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, isFloatingWindow ? 14 : 16)
         .onHover { hovering in
             hud.setHovering(hovering)
         }
@@ -34,7 +37,6 @@ struct QuickTaskHUDView: View {
                 passwordFieldFocused = true
             }
         }
-        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: hud.phase)
     }
 
     // MARK: - Header
@@ -46,13 +48,13 @@ struct QuickTaskHUDView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(primaryTitle)
-                        .font(.system(size: 13.5, weight: .semibold))
+                        .font(BoltType.sectionTitle)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
                     if let badge = hud.currentOperation?.formatBadge {
                         Text(badge)
-                            .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                            .font(BoltType.badge)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -61,7 +63,7 @@ struct QuickTaskHUDView: View {
 
                     if !hud.pendingQueue.isEmpty {
                         Text(l10n.hudQueuedBadge(hud.pendingQueue.count))
-                            .font(.system(size: 10, weight: .medium))
+                            .font(BoltType.badge)
                             .foregroundStyle(Color.accentColor)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -70,7 +72,7 @@ struct QuickTaskHUDView: View {
                 }
 
                 Text(hud.currentOperation?.targetName ?? "")
-                    .font(.system(size: 11.5))
+                    .font(BoltType.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -85,20 +87,7 @@ struct QuickTaskHUDView: View {
     @ViewBuilder
     private var statusIconBadge: some View {
         let spec = badgeSpec
-        ZStack {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(spec.tint.opacity(0.16))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .strokeBorder(spec.tint.opacity(0.28), lineWidth: 0.75)
-                )
-
-            Image(systemName: spec.symbol)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(spec.tint)
-                .symbolEffect(.pulse, isActive: isWorkingAndUnpaused)
-        }
-        .frame(width: 38, height: 38)
+        BoltHeaderIconBadge(symbol: spec.symbol, tint: spec.tint, isPulsing: isWorkingAndUnpaused)
     }
 
     @ViewBuilder
@@ -106,25 +95,25 @@ struct QuickTaskHUDView: View {
         switch hud.phase {
         case .preparing, .running, .paused:
             Text(hud.percentageText)
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .font(BoltType.metricLarge)
                 .monospacedDigit()
                 .foregroundStyle(hud.phase == .paused ? Color.orange : Color.primary)
                 .contentTransition(.numericText())
         case .completed:
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 19))
+                .font(BoltType.statusGlyph)
                 .foregroundStyle(.green)
         case .cancelled:
             Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 19))
+                .font(BoltType.statusGlyph)
                 .foregroundStyle(.secondary)
         case .failed:
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 18))
+                .font(BoltType.statusGlyph)
                 .foregroundStyle(.red)
         case .needsPassword:
             Image(systemName: "lock.circle.fill")
-                .font(.system(size: 19))
+                .font(BoltType.statusGlyph)
                 .foregroundStyle(.indigo)
         case .idle:
             EmptyView()
@@ -144,7 +133,7 @@ struct QuickTaskHUDView: View {
 
             HStack(spacing: 8) {
                 Text(subtitleItemText)
-                    .font(.system(size: 11))
+                    .font(BoltType.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -153,7 +142,7 @@ struct QuickTaskHUDView: View {
 
                 if let bytesText = hud.bytesStatusText {
                     Text(bytesText)
-                        .font(.system(size: 11, design: .rounded))
+                        .font(BoltType.caption)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
@@ -169,7 +158,7 @@ struct QuickTaskHUDView: View {
 
             if wrongAttempt {
                 Text(l10n.hudNeedsPassword)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(BoltType.captionMedium)
                     .foregroundStyle(.red)
             }
 
@@ -205,7 +194,7 @@ struct QuickTaskHUDView: View {
                 statusDot
 
                 Text(hud.footerStatusText(using: l10n))
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(BoltType.captionMedium)
                     .monospacedDigit()
                     .foregroundStyle(footerTextColor)
                     .lineLimit(1)
@@ -213,7 +202,7 @@ struct QuickTaskHUDView: View {
 
                 if let speed = hud.speedText {
                     Text("· \(speed)")
-                        .font(.system(size: 11))
+                        .font(BoltType.caption)
                         .monospacedDigit()
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
@@ -262,7 +251,7 @@ struct QuickTaskHUDView: View {
                         hud.phase == .paused ? l10n.hudResumeBtn : l10n.hudPauseBtn,
                         systemImage: hud.phase == .paused ? "play.fill" : "pause.fill"
                     )
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(BoltType.captionMedium)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                 }
@@ -281,7 +270,7 @@ struct QuickTaskHUDView: View {
                     hud.stop()
                 } label: {
                     Label(l10n.hudStopBtn, systemImage: "stop.fill")
-                        .font(.system(size: 11.5, weight: .medium))
+                        .font(BoltType.captionMedium)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
                 }
@@ -404,11 +393,12 @@ struct QuickTaskHUDView: View {
 
 private struct HUDSurfaceModifier: ViewModifier {
     let useLiquidGlass: Bool
+    let isFloatingWindow: Bool
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
-        if useLiquidGlass {
+        let shape = RoundedRectangle(cornerRadius: BoltRadius.hero, style: .continuous)
+        if useLiquidGlass && isFloatingWindow {
             content
                 .boltGlassSurface(.regular, in: shape)
                 .shadow(color: .black.opacity(0.16), radius: 14, y: 6)
@@ -417,7 +407,7 @@ private struct HUDSurfaceModifier: ViewModifier {
                 .background(.regularMaterial, in: shape)
                 .overlay(
                     shape
-                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.75)
+                        .strokeBorder(Color.primary.opacity(0.14), lineWidth: 0.75)
                 )
                 .shadow(color: .black.opacity(0.20), radius: 14, y: 6)
         }

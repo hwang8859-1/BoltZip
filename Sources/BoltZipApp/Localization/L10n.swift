@@ -74,17 +74,17 @@ struct L10n: Sendable {
     var dropZoneSubtitle: String {
         if BoltPlatformCapabilities.supportsLiquidGlass {
             return t(
-                "macOS 液态玻璃原生体验 · ZIP / 7z / TAR.ZST / XZ / LZ4 · 自动清理 .DS_Store 与 GBK 乱码修复",
-                "macOS 液態玻璃原生體驗 · ZIP / 7z / TAR.ZST / XZ / LZ4 · 自動清除 .DS_Store 與編碼自動修正",
-                "Native macOS Liquid Glass · ZIP, 7z, TAR.ZST, XZ, LZ4 · Auto-remove .DS_Store & CJK fix",
-                "macOS Liquid Glass 対応 · ZIP / 7z / TAR.ZST / XZ / LZ4 · .DS_Store 自動除外＆文字コード補正"
+                "macOS 液态玻璃原生体验 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · 自动清理 .DS_Store 与 GBK 乱码修复",
+                "macOS 液態玻璃原生體驗 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · 自動清除 .DS_Store 與編碼自動修正",
+                "Native macOS Liquid Glass · ZIP, RAR, 7z, TAR.ZST, XZ, LZ4 · Auto-remove .DS_Store & CJK fix",
+                "macOS Liquid Glass 対応 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · .DS_Store 自動除外＆文字コード補正"
             )
         }
         return t(
-            "macOS 原生极速工作台 · ZIP / 7z / TAR.ZST / XZ / LZ4 · 自动清理 .DS_Store 与 GBK 乱码修复",
-            "macOS 原生極速工作台 · ZIP / 7z / TAR.ZST / XZ / LZ4 · 自動清除 .DS_Store 與編碼自動修正",
-            "Native macOS Archive Studio · ZIP, 7z, TAR.ZST, XZ, LZ4 · Auto-remove .DS_Store & CJK fix",
-            "macOS ネイティブ書庫スタジオ · ZIP / 7z / TAR.ZST / XZ / LZ4 · .DS_Store 自動除外＆文字コード補正"
+            "macOS 原生极速工作台 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · 自动清理 .DS_Store 与 GBK 乱码修复",
+            "macOS 原生極速工作台 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · 自動清除 .DS_Store 與編碼自動修正",
+            "Native macOS Archive Studio · ZIP, RAR, 7z, TAR.ZST, XZ, LZ4 · Auto-remove .DS_Store & CJK fix",
+            "macOS ネイティブ書庫スタジオ · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · .DS_Store 自動除外＆文字コード補正"
         )
     }
 
@@ -121,7 +121,9 @@ struct L10n: Sendable {
 
     // MARK: - Explorer Toolbar & Sidebar
     var backHome: String { t("首页", "首頁", "Home", "ホーム") }
+    var backToArchiveRoot: String { t("返回根目录", "返回根目錄", "Archive Root", "ルートへ戻る") }
     var goUp: String { t("上一级", "上一層", "Up", "上へ") }
+    var goDown: String { t("下一级（返回上次目录）", "下一層（返回上次目錄）", "Next Level", "次の階層へ") }
     var newCompress: String { t("新建", "新增", "Compress", "新規圧縮") }
     var open: String { t("打开", "開啟", "Open", "開く") }
     var smartExtract: String { t("智能解压", "智慧解壓", "Smart Extract", "スマート展開") }
@@ -140,7 +142,7 @@ struct L10n: Sendable {
     var packedSize: String { t("压缩后", "壓縮後", "Packed", "圧縮後") }
     var spaceSaved: String { t("节省空间", "節省空間", "Saved", "削減率") }
     var filenameEncoding: String { t("文件名编码", "檔名編碼", "Encoding", "文字コード") }
-    var searchPlaceholder: String { t("过滤归档内文件...", "搜尋封存檔內容...", "Filter archive entries...", "書庫内を検索...") }
+    var searchPlaceholder: String { t("搜索目录...", "搜尋目錄...", "Search...", "検索...") }
 
     // MARK: - Table Columns & Drop Hint
     var colName: String { t("名称", "名稱", "Name", "名前") }
@@ -160,6 +162,7 @@ struct L10n: Sendable {
     // MARK: - Context Menus
     var ctxOpenFolder: String { t("打开文件夹", "開啟資料夾", "Open Folder", "フォルダを開く") }
     var ctxQuickLook: String { t("Quick Look 快速预览", "Quick Look 快速預覽", "Quick Look Preview", "Quick Look でプレビュー") }
+    var ctxJumpToPath: String { t("跳转到当前文件路径", "跳轉至檔案所在路徑", "Reveal in Archive Path", "このファイルのパスへ移動") }
     var ctxProperties: String { t("查看属性详情...", "檢視屬性詳細資訊...", "Get Info...", "詳細情報を見る...") }
     var ctxCopyName: String { t("复制文件名", "複製檔名", "Copy Name", "名前をコピー") }
     var ctxCopyPath: String { t("复制归档内路径", "複製封存檔內路徑", "Copy Archive Path", "書庫内パスをコピー") }
@@ -191,7 +194,18 @@ struct L10n: Sendable {
     // MARK: - View / Appearance / Settings
     var appearanceTitle: String { t("界面显示与透明度", "介面顯示與透明度", "Appearance & Translucency", "外観と透過設定") }
     var languageLabel: String { t("界面语言", "介面語言", "Language", "表示言語") }
+    var backgroundColorLabel: String { t("页面背景颜色", "頁面背景顏色", "Background color", "背景カラー") }
+    var bgColorPureWhite: String { t("纯净白", "純淨白", "Pure White", "ピュアホワイト") }
+    var bgColorIceBlue: String { t("冰川蓝", "冰川藍", "Glacier Blue", "グレイシャーブルー") }
+    var bgColorLavender: String { t("淡雅紫", "淡雅紫", "Lavender", "ラベンダー") }
+    var bgColorMint: String { t("薄荷绿", "薄荷綠", "Mint", "ミント") }
+    var bgColorWarmCream: String { t("暖柔杏", "暖柔杏", "Warm Cream", "ウォームクリーム") }
+    var bgColorCustom: String { t("自定义", "自訂", "Custom", "カスタム") }
     var enableTranslucency: String { t("启用液态玻璃半透明背景", "啟用液態玻璃半透明背景", "Enable Liquid Glass translucency", "Liquid Glass 半透明背景を有効化") }
+    var whiteAppIconToggle: String { t("应用图标使用白色背景", "App 圖示使用白色背景", "Use white app icon background", "アプリアイコンの背景を白にする") }
+    var glassIntensityLabel: String { t("液态玻璃强度", "液態玻璃強度", "Liquid Glass intensity", "Liquid Glass 強度") }
+    var glassSoftLabel: String { t("柔和", "柔和", "Soft", "控えめ") }
+    var glassStrongLabel: String { t("极强", "極強", "Intense", "最大") }
     var opacityLabel: String { t("窗口背景不透明度", "視窗背景不透明度", "Window opacity", "ウィンドウ背景の不透明度") }
     var visibleSectionsTitle: String { t("主界面模块显示开关", "主介面區塊顯示開關", "Home Screen Modules", "ホーム画面の表示項目") }
     var toggleFinderBanner: String { t("显示访达一级右键菜单提示条", "顯示 Finder 第一層右鍵提示列", "Show Finder “Bolt ›” setup banner", "Finder「Bolt ›」設定バナーを表示") }
@@ -211,6 +225,35 @@ struct L10n: Sendable {
     var reinstallOrSync: String { t("重新同步", "重新同步", "Re-sync", "再同期") }
     var installNow: String { t("一键启用", "一鍵啟用", "Enable Now", "今すぐ有効化") }
     var disableNow: String { t("停用", "停用", "Disable", "無効化") }
+
+    // MARK: - Default File Associations & Multi-Core Engine
+    var defaultAssociationsSection: String { t("默认压缩文件关联", "預設封存檔關聯", "Default File Associations", "既定のファイル関連付け") }
+    var defaultAssociationsSubtitle: String { t("将 BoltZip 设为双击压缩文件时的系统默认打开应用", "將 BoltZip 設為雙擊壓縮檔時的系統預設開啟程式", "Set BoltZip as the system default app for opening archives", "アーカイブを開く際の既定アプリとして BoltZip を設定します") }
+    func defaultAssociationsSummary(_ active: Int, _ total: Int) -> String {
+        t("已接管 \(active) / \(total) 类常见格式", "已接管 \(active) / \(total) 類常見格式", "Default for \(active) / \(total) archive groups", "\(active) / \(total) 種類の形式を担当中")
+    }
+    var setAllDefaultsBtn: String { t("设为全部默认", "設為全部預設", "Set All Default", "すべて既定にする") }
+    var restoreSystemDefaultsBtn: String { t("恢复系统默认", "恢復系統預設", "Restore Defaults", "システム既定に戻す") }
+    var defaultAppUpdatedSuccess: String { t("默认文件关联已更新", "預設檔案關聯已更新", "Default file associations updated", "ファイルの関連付けを更新しました") }
+    var alreadyDefaultBadge: String { t("BoltZip (默认)", "BoltZip (預設)", "BoltZip (Default)", "BoltZip (既定)") }
+
+    func associationGroupTitle(_ group: ArchiveAssociationGroup) -> String {
+        switch group {
+        case .zip: return t("ZIP 归档", "ZIP 封存檔", "ZIP Archives", "ZIP 書庫")
+        case .rar: return t("RAR 归档", "RAR 封存檔", "RAR Archives", "RAR 書庫")
+        case .sevenZip: return t("7-Zip 归档", "7-Zip 封存檔", "7-Zip Archives", "7-Zip 書庫")
+        case .tar: return t("TAR 组合归档", "TAR 組合封存檔", "TAR Archives", "TAR アーカイブ")
+        case .singleStreams: return t("单文件压缩流", "單檔壓縮串流", "Compressed Streams", "単一圧縮ストリーム")
+        case .cabXar: return t("CAB 与 XAR", "CAB 與 XAR", "CAB & XAR", "CAB / XAR")
+        case .iso: return t("ISO 光盘镜像", "ISO 光碟映像", "ISO Disk Images", "ISO ディスクイメージ")
+        }
+    }
+
+    var multiCoreTitle: String { t("多核并行加速引擎", "多核心平行加速引擎", "Multi-Core Parallel Engine", "マルチコア並列処理エンジン") }
+    var multiCoreSubtitle: String { t("支持多文件 ZIP 并行编解码与 Zstd / XZ 多线程流式压缩", "支援多檔案 ZIP 平行編解碼與 Zstd / XZ 多執行緒串流壓縮", "Parallel multi-file ZIP codecs & multi-threaded Zstd / XZ compression", "複数ファイル ZIP の並列処理と Zstd / XZ マルチスレッド圧縮に対応") }
+    func multiCoreBadge(_ cores: Int) -> String {
+        t("已启用 · \(cores) 核并行", "已啟用 · \(cores) 核心平行", "Active · \(cores) Cores", "有効 · \(cores) コア並列")
+    }
 
     // MARK: - Domain Enums Localized Display
     func sortColumnTitle(_ col: SortColumn) -> String {
@@ -255,7 +298,7 @@ struct L10n: Sendable {
     var runningBench: String { t("正在运行本机基准测试...", "正在執行本機基準測試...", "Running local benchmark...", "ベンチマークを実行中...") }
     var benchHardwareNote: String { t("说明：结果均为当前 Mac 硬件实际测量值", "說明：結果均為目前 Mac 硬體實測數據", "Measured live on your Mac hardware", "お使いの Mac 実機で計測された結果です") }
     var passwordPromptTitle: String { t("该压缩包已加密", "此封存檔已加密", "Archive Is Encrypted", "この書庫は暗号化されています") }
-    var passwordPromptDesc: String { t("请输入解密密码（支持 WinZip AE-2 AES-256 与 ZipCrypto）", "請輸入解密密碼（支援 WinZip AE-2 AES-256 與 ZipCrypto）", "Enter password (WinZip AE-2 AES-256 & ZipCrypto supported)", "パスワードを入力してください (AE-2 AES-256 / ZipCrypto 対応)") }
+    var passwordPromptDesc: String { t("请输入解密密码（支持 AE-2 AES-256、ZipCrypto 与 RAR / 7z）", "請輸入解密密碼（支援 AE-2 AES-256、ZipCrypto 與 RAR / 7z）", "Enter password (AE-2 AES-256, ZipCrypto, RAR & 7z supported)", "パスワードを入力してください (AES-256 / ZipCrypto / RAR / 7z 対応)") }
     var passwordPlaceholder: String { t("输入密码", "輸入密碼", "Password", "パスワード") }
     var createFolderTitle: String { t("在归档内新建文件夹", "在封存檔內新增資料夾", "New Folder in Archive", "書庫内に新規フォルダを作成") }
     var renameEntryTitle: String { t("重命名归档条目", "重新命名封存檔項目", "Rename Archive Entry", "書庫内の項目名を変更") }
@@ -278,6 +321,9 @@ struct L10n: Sendable {
     var passwordMismatch: String { t("两次输入的密码不一致", "兩次輸入的密碼不一致", "Passwords do not match", "パスワードが一致しません") }
     var advancedOptionsSection: String { t("高级选项与跨平台兼容", "進階選項與跨平台相容", "Advanced & Compatibility", "詳細・互換オプション") }
     var splitVolumeLabel: String { t("分卷大小", "分卷大小", "Split Volumes", "分割サイズ") }
+    var splitPresetNone: String { t("不分卷", "不分卷", "Single Archive", "分割しない") }
+    var splitPreset10MB: String { t("10 MB (聊天软件友好)", "10 MB (通訊軟體適用)", "10 MB (Messaging Friendly)", "10 MB (チャット送信向け)") }
+    var splitPresetCustom: String { t("自定义 (MB)", "自訂 (MB)", "Custom (MB)", "カスタム (MB)") }
     var customSplitMBField: String { t("单卷体积 (MB)", "單卷大小 (MB)", "Volume Size (MB)", "分割サイズ (MB)") }
     var willGeneratePrefix: String { t("将生成：", "將產生：", "Output: ", "作成ファイル：") }
 
@@ -292,10 +338,10 @@ struct L10n: Sendable {
     // MARK: - Slogan & About
     var slogan: String {
         t(
-            "快如闪电，通透如玻 —— 让 macOS 压缩像桌面本身一样顺手",
-            "快如閃電，通透如玻 —— 讓 macOS 壓縮像桌面本身一樣順手",
-            "Lightning-fast archives. Liquid-clear macOS craft.",
-            "稲妻の速さ、ガラスの透明感 —— macOS のための書庫スタジオ"
+            "快如闪电，通透如玻",
+            "快如閃電，通透如玻",
+            "Lightning-fast. Liquid-clear.",
+            "稲妻の速さ、ガラスの透明感"
         )
     }
     var aboutMenuTitle: String { t("关于 BoltZip", "關於 BoltZip", "About BoltZip", "BoltZip について") }
@@ -312,7 +358,51 @@ struct L10n: Sendable {
     var openSourceEnginesLine: String { "zlib · Zstandard · XZ / LZMA2 · bzip2 · LZ4 · libarchive" }
     var copyrightLine: String { "MIT License · © 2026 BoltZip Contributors" }
 
+    // MARK: - macOS Menu Bar
+    var fileMenuTitle: String { t("文件", "檔案", "File", "ファイル") }
+    var helpMenuTitle: String { t("帮助", "輔助說明", "Help", "ヘルプ") }
+    var settingsMenuTitle: String { t("设置…", "設定…", "Settings…", "設定…") }
+    var quitMenuTitle: String { t("退出 BoltZip", "結束 BoltZip", "Quit BoltZip", "BoltZip を終了") }
+    var closeWindowMenuTitle: String { t("关闭窗口", "關閉視窗", "Close Window", "ウインドウを閉じる") }
+
+    static let allAboutMenuTitles: Set<String> = [
+        "关于 BoltZip", "關於 BoltZip", "About BoltZip", "BoltZip について"
+    ]
+    static let allFileMenuTitles: Set<String> = [
+        "文件", "檔案", "File", "ファイル"
+    ]
+    static let allHelpMenuTitles: Set<String> = [
+        "帮助", "輔助說明", "Help", "ヘルプ"
+    ]
+
+    static func normalizedMenuTitle(_ title: String) -> String {
+        title.replacingOccurrences(of: "\u{200B}", with: "")
+    }
+
     var alertTitle: String { t("BoltZip 提示", "BoltZip 提示", "BoltZip", "BoltZip") }
+
+    // MARK: - Extract Conflict Prompt
+    var extractConflictTitle: String {
+        t("发现同名文件或文件夹", "發現同名檔案或資料夾", "Conflicting Files or Folders", "同名の項目が既に存在します")
+    }
+    func extractConflictMessage(folder: String, names: [String]) -> String {
+        let preview = names.prefix(2).joined(separator: "、")
+        let suffix: String
+        if names.count > 2 {
+            suffix = t(" 等 \(names.count) 项", " 等 \(names.count) 項", " (and \(names.count - 2) more)", " ほか \(names.count) 件")
+        } else {
+            suffix = ""
+        }
+        let targetName = preview + suffix
+        return t(
+            "目标路径「\(folder)」下已存在「\(targetName)」，是否覆盖？",
+            "目標路徑「\(folder)」下已存在「\(targetName)」，是否覆蓋？",
+            "“\(targetName)” already exists in “\(folder)”. Do you want to overwrite it?",
+            "「\(folder)」内に「\(targetName)」が既に存在します。上書きしますか？"
+        )
+    }
+    var overwriteExistingBtn: String { t("覆盖", "覆蓋", "Overwrite", "上書き") }
+    var keepBothRenameBtn: String { t("自动重命名保留两者", "自動重新命名保留兩者", "Keep Both", "両方とも残す") }
 
     // MARK: - Quick Task Floating HUD
     func hudCompressingTitle(_ fmt: String) -> String {

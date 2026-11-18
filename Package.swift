@@ -53,6 +53,7 @@ let package = Package(
             linkerSettings: [
                 .linkedLibrary("z"),
                 .linkedLibrary("bz2"),
+                .linkedLibrary("archive"),
                 .unsafeFlags(compressionLinkFlags)
             ]
         ),

@@ -424,6 +424,18 @@ cleanup:
     return res;
 }
 
+static uint32_t recommended_mt_workers(uint32_t max_cap) {
+    long cores = sysconf(_SC_NPROCESSORS_ONLN);
+    if (cores <= 1) return 1;
+    uint32_t c = (uint32_t)cores;
+    return c > max_cap ? max_cap : c;
+}
+
+uint32_t bolt_active_cores(void) {
+    long cores = sysconf(_SC_NPROCESSORS_ONLN);
+    return cores > 0 ? (uint32_t)cores : 1;
+}
+
 static bolt_status_t run_compress_zstd(bolt_source_t *src, bolt_sink_t *sink, int32_t level, int allow_mt) {
     int lvl = clamp_i32(level, 1, ZSTD_maxCLevel());
     ZSTD_CCtx *cctx = ZSTD_createCCtx();
@@ -432,10 +444,9 @@ static bolt_status_t run_compress_zstd(bolt_source_t *src, bolt_sink_t *sink, in
     ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, lvl);
     ZSTD_CCtx_setParameter(cctx, ZSTD_c_checksumFlag, 1);
     if (allow_mt && src->total_bytes > 512 * 1024) {
-        long cores = sysconf(_SC_NPROCESSORS_ONLN);
-        int workers = cores > 1 ? (int)(cores > 8 ? 8 : cores) : 0;
+        uint32_t workers = recommended_mt_workers(16);
         if (workers > 1) {
-            ZSTD_CCtx_setParameter(cctx, ZSTD_c_nbWorkers, workers);
+            ZSTD_CCtx_setParameter(cctx, ZSTD_c_nbWorkers, (int)workers);
         }
     }
 
@@ -544,8 +555,8 @@ static bolt_status_t run_compress_xz(bolt_source_t *src, bolt_sink_t *sink, int3
     lzma_ret lret = LZMA_OK;
 
     if (allow_mt && src->total_bytes > 512 * 1024) {
-        long cores = sysconf(_SC_NPROCESSORS_ONLN);
-        uint32_t threads = cores > 1 ? (uint32_t)(cores > 8 ? 8 : cores) : 1;
+        uint32_t max_threads = preset >= 7 ? 8 : 16;
+        uint32_t threads = recommended_mt_workers(max_threads);
         lzma_mt mt = {
             .flags = 0,
             .threads = threads,
@@ -861,6 +872,20 @@ bolt_status_t bolt_compress_buffer_ex(
     bolt_control_cb control_cb,
     void *ctx
 ) {
+    return bolt_compress_buffer_mt(algo, container, level, input, input_len, output, 1, control_cb, ctx);
+}
+
+bolt_status_t bolt_compress_buffer_mt(
+    bolt_algo_t algo,
+    bolt_container_t container,
+    int32_t level,
+    const uint8_t *input,
+    size_t input_len,
+    bolt_buffer_t *output,
+    int32_t allow_mt,
+    bolt_control_cb control_cb,
+    void *ctx
+) {
     if (!output) return status_err(EINVAL, "Output pointer is NULL", NULL);
     output->data = NULL;
     output->size = 0;
@@ -891,7 +916,7 @@ bolt_status_t bolt_compress_buffer_ex(
         return status_err(ENOMEM, "Out of memory", NULL);
     }
 
-    bolt_status_t status = dispatch_compress(algo, container, level, &src, &sink, 0);
+    bolt_status_t status = dispatch_compress(algo, container, level, &src, &sink, allow_mt ? 1 : 0);
     if (status.code != 0) {
         dyn_buf_free(&sink.buf);
         return status;

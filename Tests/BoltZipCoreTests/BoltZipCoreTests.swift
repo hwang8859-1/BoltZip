@@ -414,4 +414,226 @@ final class BoltZipCoreTests: XCTestCase {
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: zipURL.path))
     }
+
+    func testExtractConflictDetectionAndAutoRenameRootDirectory() throws {
+        let projectDir = tempDir.appendingPathComponent("ProjectAlpha", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
+        try "new version".write(to: projectDir.appendingPathComponent("readme.txt"), atomically: true, encoding: .utf8)
+
+        let zipURL = tempDir.appendingPathComponent("ProjectAlpha.zip")
+        _ = try BoltArchiveEngine.createArchive(
+            from: [projectDir],
+            to: zipURL,
+            options: CreateArchiveOptions(format: .zip, algorithm: .deflate)
+        )
+
+        // Mutate existing folder content to represent an existing path collision
+        try "existing version".write(to: projectDir.appendingPathComponent("readme.txt"), atomically: true, encoding: .utf8)
+
+        let smartOpts = ExtractOptions(destinationURL: tempDir, mode: .smart, overwritePolicy: .overwrite)
+        let conflicts = try BoltArchiveEngine.detectExtractConflicts(archiveURL: zipURL, options: smartOpts)
+        XCTAssertTrue(conflicts.hasConflicts)
+        XCTAssertEqual(conflicts.conflictingNames, ["ProjectAlpha"])
+
+        let renameOpts = ExtractOptions(destinationURL: tempDir, mode: .smart, overwritePolicy: .rename)
+        _ = try BoltArchiveEngine.extract(archiveURL: zipURL, options: renameOpts)
+
+        // Existing folder preserved untouched while auto-renamed copy received new contents
+        XCTAssertEqual(
+            try String(contentsOf: projectDir.appendingPathComponent("readme.txt"), encoding: .utf8),
+            "existing version"
+        )
+        let renamedDir = tempDir.appendingPathComponent("ProjectAlpha (1)", isDirectory: true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: renamedDir.path))
+        XCTAssertEqual(
+            try String(contentsOf: renamedDir.appendingPathComponent("readme.txt"), encoding: .utf8),
+            "new version"
+        )
+    }
+
+    func testRarFormatDetectionInspectReadExtractAndIntegrity() throws {
+        XCTAssertEqual(ArchiveFormat.detect(from: URL(fileURLWithPath: "/tmp/sample.rar")), .rar)
+        XCTAssertEqual(ArchiveFormat.detect(from: URL(fileURLWithPath: "/tmp/sample.part1.rar")), .rar)
+        XCTAssertEqual(ArchiveFormat.detect(from: URL(fileURLWithPath: "/tmp/sample.part02.rar")), .rar)
+        XCTAssertEqual(ArchiveFormat.detect(from: URL(fileURLWithPath: "/tmp/sample.r00")), .rar)
+        XCTAssertEqual(ArchiveFormat.detect(from: URL(fileURLWithPath: "/tmp/sample.r15")), .rar)
+
+        func encodeVInt(_ value: UInt64) -> Data {
+            var v = value
+            var out = Data()
+            while true {
+                var byte = UInt8(v & 0x7F)
+                v >>= 7
+                if v != 0 { byte |= 0x80 }
+                out.append(byte)
+                if v == 0 { break }
+            }
+            return out
+        }
+
+        func appendUInt32LE(_ dst: inout Data, _ val: UInt32) {
+            dst.append(UInt8(val & 0xFF))
+            dst.append(UInt8((val >> 8) & 0xFF))
+            dst.append(UInt8((val >> 16) & 0xFF))
+            dst.append(UInt8((val >> 24) & 0xFF))
+        }
+
+        func buildRar5Block(type: UInt64, flags: UInt64, body: Data, payload: Data = Data()) -> Data {
+            var core = Data()
+            core.append(encodeVInt(type))
+            core.append(encodeVInt(flags))
+            if (flags & 0x0002) != 0 {
+                core.append(encodeVInt(UInt64(payload.count)))
+            }
+            core.append(body)
+            let headerSize = encodeVInt(UInt64(core.count))
+            var crcInput = Data()
+            crcInput.append(headerSize)
+            crcInput.append(core)
+            let crc = CompressionCodec.crc32(crcInput)
+
+            var block = Data()
+            appendUInt32LE(&block, crc)
+            block.append(crcInput)
+            block.append(payload)
+            return block
+        }
+
+        func buildRar5FileHeader(path: String, payload: Data) -> Data {
+            let nameBytes = Data(path.utf8)
+            var fbody = Data()
+            fbody.append(encodeVInt(0x0004)) // Data CRC32 present
+            fbody.append(encodeVInt(UInt64(payload.count)))
+            fbody.append(encodeVInt(0o644))
+            appendUInt32LE(&fbody, CompressionCodec.crc32(payload))
+            fbody.append(encodeVInt(0)) // Store method
+            fbody.append(encodeVInt(1)) // Unix Host OS
+            fbody.append(encodeVInt(UInt64(nameBytes.count)))
+            fbody.append(nameBytes)
+            return buildRar5Block(type: 2, flags: 0x0002, body: fbody, payload: payload)
+        }
+
+        let payloadA = Data("RAR5 中文路径与文件内容测试 — BoltZip Engine!\n".utf8)
+        let payloadB = Data("Second file inside RAR5 container\n".utf8)
+
+        var rarData = Data([0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00]) // Rar!\x1a\x07\x01\x00
+        rarData.append(buildRar5Block(type: 1, flags: 0, body: encodeVInt(0))) // Main archive header
+        rarData.append(buildRar5FileHeader(path: "项目资料/说明文档.txt", payload: payloadA))
+        rarData.append(buildRar5FileHeader(path: "项目资料/second.txt", payload: payloadB))
+        rarData.append(buildRar5Block(type: 5, flags: 0, body: encodeVInt(0))) // End of archive
+
+        let rarURL = tempDir.appendingPathComponent("测试归档.rar")
+        try rarData.write(to: rarURL)
+
+        let listing = try BoltArchiveEngine.inspect(archiveURL: rarURL)
+        XCTAssertEqual(listing.format, .rar)
+        XCTAssertEqual(listing.entries.count, 2)
+        XCTAssertEqual(Set(listing.entries.map(\.path)), ["项目资料/说明文档.txt", "项目资料/second.txt"])
+
+        let preview = try BoltArchiveEngine.readEntryData(archiveURL: rarURL, entryPath: "项目资料/说明文档.txt")
+        XCTAssertEqual(preview, payloadA)
+
+        let healthyReport = try BoltArchiveEngine.testIntegrity(archiveURL: rarURL)
+        XCTAssertTrue(healthyReport.isHealthy)
+        XCTAssertEqual(healthyReport.passedCount, 2)
+        XCTAssertEqual(healthyReport.failedCount, 0)
+
+        let outDir = tempDir.appendingPathComponent("rar_out", isDirectory: true)
+        let resolvedRoot = try BoltArchiveEngine.extract(
+            archiveURL: rarURL,
+            options: ExtractOptions(destinationURL: outDir, mode: .smart)
+        )
+        XCTAssertEqual(
+            try Data(contentsOf: resolvedRoot.appendingPathComponent("项目资料/说明文档.txt")),
+            payloadA
+        )
+        XCTAssertEqual(
+            try Data(contentsOf: resolvedRoot.appendingPathComponent("项目资料/second.txt")),
+            payloadB
+        )
+
+        // Truncate archive stream and verify real integrity test reports failure
+        let truncated = Data(rarData.prefix(rarData.count - 15))
+        let badRarURL = tempDir.appendingPathComponent("bad.rar")
+        try truncated.write(to: badRarURL)
+        let badReport = try BoltArchiveEngine.testIntegrity(archiveURL: badRarURL)
+        XCTAssertFalse(badReport.isHealthy)
+        XCTAssertGreaterThan(badReport.failedCount, 0)
+
+        // Verify multi-volume RAR volume resolution (.part1.rar + .part2.rar and .rar + .r00)
+        let part1 = tempDir.appendingPathComponent("movie.part1.rar")
+        let part2 = tempDir.appendingPathComponent("movie.part2.rar")
+        try Data().write(to: part1)
+        try Data().write(to: part2)
+        XCTAssertEqual(
+            ExtendedArchiveDriver.resolveVolumePaths(for: part2, format: .rar).map { URL(fileURLWithPath: $0).lastPathComponent },
+            ["movie.part1.rar", "movie.part2.rar"]
+        )
+
+        let legacyMain = tempDir.appendingPathComponent("legacy.rar")
+        let legacyR00 = tempDir.appendingPathComponent("legacy.r00")
+        let legacyR01 = tempDir.appendingPathComponent("legacy.r01")
+        try Data().write(to: legacyMain)
+        try Data().write(to: legacyR00)
+        try Data().write(to: legacyR01)
+        XCTAssertEqual(
+            ExtendedArchiveDriver.resolveVolumePaths(for: legacyR00, format: .rar).map { URL(fileURLWithPath: $0).lastPathComponent },
+            ["legacy.rar", "legacy.r00", "legacy.r01"]
+        )
+    }
+
+    func testMultiCoreParallelZipCreateExtractAndIntegrity() throws {
+        XCTAssertGreaterThanOrEqual(CompressionCodec.activeCoreCount, 1)
+
+        let batchDir = tempDir.appendingPathComponent("ParallelBatch", isDirectory: true)
+        try FileManager.default.createDirectory(at: batchDir, withIntermediateDirectories: true)
+
+        var expectedByName: [String: Data] = [:]
+        for i in 0..<24 {
+            let fileName = String(format: "part_%02d_数据.bin", i)
+            let data = BenchmarkRunner.generateMixedSampleData(sizeBytes: 32 * 1024 + i * 777)
+            expectedByName[fileName] = data
+            try data.write(to: batchDir.appendingPathComponent(fileName))
+        }
+
+        let zipURL = tempDir.appendingPathComponent("ParallelBatch.zip")
+        try BoltArchiveEngine.createArchive(
+            from: [batchDir],
+            to: zipURL,
+            options: CreateArchiveOptions(
+                format: .zip,
+                algorithm: .zstd,
+                encryption: .aes256,
+                password: "ParallelPassword!2026"
+            )
+        )
+
+        let report = try BoltArchiveEngine.testIntegrity(archiveURL: zipURL, password: "ParallelPassword!2026")
+        XCTAssertTrue(report.isHealthy)
+        XCTAssertEqual(report.passedCount, 25) // 1 root folder + 24 files
+        XCTAssertEqual(report.failedCount, 0)
+
+        let extractDir = tempDir.appendingPathComponent("ParallelOut", isDirectory: true)
+        _ = try BoltArchiveEngine.extract(
+            archiveURL: zipURL,
+            options: ExtractOptions(
+                destinationURL: extractDir,
+                mode: .smart,
+                password: "ParallelPassword!2026"
+            )
+        )
+
+        for (name, expectedData) in expectedByName {
+            let restored = try Data(contentsOf: extractDir.appendingPathComponent("ParallelBatch").appendingPathComponent(name))
+            XCTAssertEqual(restored, expectedData, "Mismatch for \(name)")
+        }
+
+        // Verify multi-core buffer compression (> 512 KB triggers Zstd/XZ worker threads)
+        let largeResults = try BenchmarkRunner.run(on: BenchmarkRunner.generateMixedSampleData(sizeBytes: 768 * 1024))
+        XCTAssertEqual(largeResults.count, 5)
+        for r in largeResults {
+            XCTAssertGreaterThan(r.compressMBps, 0)
+            XCTAssertGreaterThan(r.decompressMBps, 0)
+        }
+    }
 }

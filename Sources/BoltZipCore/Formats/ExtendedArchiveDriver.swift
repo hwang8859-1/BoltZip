@@ -1,101 +1,580 @@
+import CBoltCompression
 import Foundation
 
 public enum ExtendedArchiveDriver {
+    public static func resolveVolumePaths(for url: URL, format: ArchiveFormat) -> [String] {
+        guard format == .rar else { return [url.path] }
+        let fm = FileManager.default
+        let dir = url.deletingLastPathComponent()
+        let fileName = url.lastPathComponent
+        let lower = fileName.lowercased()
+
+        // Modern multi-volume RAR: archive.part1.rar, archive.part2.rar, ...
+        if lower.hasSuffix(".rar"),
+           let range = fileName.range(of: #"\.part\d+\.rar$"#, options: [.regularExpression, .caseInsensitive]) {
+            let stemPrefix = String(fileName[..<range.lowerBound])
+            if let contents = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
+                let matched: [(Int, String)] = contents.compactMap { candidate in
+                    let cname = candidate.lastPathComponent
+                    guard let cr = cname.range(of: #"\.part(\d+)\.rar$"#, options: [.regularExpression, .caseInsensitive]) else {
+                        return nil
+                    }
+                    guard String(cname[..<cr.lowerBound]).caseInsensitiveCompare(stemPrefix) == .orderedSame else {
+                        return nil
+                    }
+                    let tail = cname[cr]
+                    let digits = tail.dropFirst(5).dropLast(4)
+                    guard let num = Int(digits) else { return nil }
+                    return (num, candidate.path)
+                }.sorted { $0.0 < $1.0 }
+                if !matched.isEmpty {
+                    return matched.map(\.1)
+                }
+            }
+        }
+
+        // Legacy multi-volume RAR: archive.rar, archive.r00, archive.r01, ...
+        let ext = url.pathExtension.lowercased()
+        let isLegacySplitPart = (ext.count == 3 && ext.hasPrefix("r") && Int(ext.dropFirst()) != nil)
+        if ext == "rar" || isLegacySplitPart {
+            let stemURL = url.deletingPathExtension()
+            let primaryURL = stemURL.appendingPathExtension("rar")
+            if fm.fileExists(atPath: primaryURL.path) {
+                var volumes = [primaryURL.path]
+                for idx in 0...99 {
+                    let partExt = String(format: "r%02d", idx)
+                    let partURL = stemURL.appendingPathExtension(partExt)
+                    guard fm.fileExists(atPath: partURL.path) else { break }
+                    volumes.append(partURL.path)
+                }
+                if volumes.count > 1 {
+                    return volumes
+                }
+            }
+        }
+
+        return [url.path]
+    }
+
     public static func listEntries(
         at url: URL,
         format: ArchiveFormat,
-        encoding: FilenameEncodingOption = .auto
+        encoding: FilenameEncodingOption = .auto,
+        password: String? = nil
     ) throws -> [ArchiveEntry] {
-        let pathsOutput = try runTar(arguments: ["-tf", url.path])
-        let verboseOutput = try runTar(arguments: ["-tvf", url.path])
+        final class ListState {
+            let format: ArchiveFormat
+            let encoding: FilenameEncodingOption
+            var entries: [ArchiveEntry] = []
 
-        let rawPaths = pathsOutput.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
-        let verboseLines = verboseOutput.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+            init(format: ArchiveFormat, encoding: FilenameEncodingOption) {
+                self.format = format
+                self.encoding = encoding
+            }
+        }
 
-        var entries: [ArchiveEntry] = []
-        entries.reserveCapacity(rawPaths.count)
+        let state = ListState(format: format, encoding: encoding)
+        let volumePaths = resolveVolumePaths(for: url, format: format)
+        var errBuf = [CChar](repeating: 0, count: 512)
 
-        for (idx, rawPath) in rawPaths.enumerated() {
-            let vLine = idx < verboseLines.count ? verboseLines[idx] : ""
-            var isDir = rawPath.hasSuffix("/")
-            var size: UInt64 = 0
-            if !vLine.isEmpty {
-                if vLine.hasPrefix("d") { isDir = true }
-                // Strip the known path suffix to isolate permission/owner/size/date columns safely
-                let prefixPart: String
-                if vLine.hasSuffix(rawPath) {
-                    prefixPart = String(vLine.dropLast(rawPath.count))
-                } else {
-                    prefixPart = vLine
-                }
-                let tokens = prefixPart.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-                // bsdtar -tvf columns: perms links owner group size month day time_or_year
-                if tokens.count >= 5, let parsedSize = UInt64(tokens[4]) {
-                    size = parsedSize
+        let rc: Int32 = withCStringArray(volumePaths) { cPaths, count in
+            withExtendedLifetime(state) {
+                let rawCtx = Unmanaged.passUnretained(state).toOpaque()
+                return withOptionalCString(password) { cPw in
+                    bolt_la_list(
+                        cPaths,
+                        count,
+                        cPw,
+                        { infoPtr, rawCtx in
+                            guard let infoPtr, let rawCtx else { return 0 }
+                            let st = Unmanaged<ListState>.fromOpaque(rawCtx).takeUnretainedValue()
+                            let info = infoPtr.pointee
+                            let rawBytes: Data
+                            if let ptr = info.raw_path_bytes, info.raw_path_len > 0 {
+                                rawBytes = Data(bytes: ptr, count: info.raw_path_len)
+                            } else if let p = info.path {
+                                rawBytes = Data(String(cString: p).utf8)
+                            } else {
+                                return 0
+                            }
+                            let isUTF8 = info.path_is_utf8 != 0
+                            let decodedPath = FilenameEncoding.decode(rawBytes, hasUTF8Flag: isUTF8, preferred: st.encoding)
+                            let isDir = info.is_directory != 0
+                            let normalized = ArchiveEntry.normalizePath(decodedPath, isDirectory: isDir)
+                            guard !normalized.isEmpty else { return 0 }
+
+                            let isSymlink = info.is_symlink != 0
+                            let isEnc = info.is_encrypted != 0
+                            let modDate = info.mtime > 0 ? Date(timeIntervalSince1970: TimeInterval(info.mtime)) : Date()
+                            let fmtName: String
+                            if st.format == .rar {
+                                fmtName = info.format_name.map { String(cString: $0) } ?? "RAR"
+                            } else if st.format == .sevenZip {
+                                fmtName = "LZMA (libarchive)"
+                            } else {
+                                fmtName = st.format.fileExtension.uppercased()
+                            }
+
+                            st.entries.append(
+                                ArchiveEntry(
+                                    path: normalized,
+                                    isDirectory: isDir,
+                                    isSymbolicLink: isSymlink,
+                                    uncompressedSize: isDir ? 0 : info.size,
+                                    compressedSize: 0,
+                                    compressionMethodName: fmtName,
+                                    crc32: 0,
+                                    modifiedDate: modDate,
+                                    permissions: info.permissions,
+                                    isEncrypted: isEnc,
+                                    encryptionLabel: isEnc ? (st.format == .rar ? "RAR AES" : "AES-256") : "",
+                                    rawPathBytes: rawBytes,
+                                    hasUTF8Flag: isUTF8
+                                )
+                            )
+                            return 0
+                        },
+                        rawCtx,
+                        &errBuf,
+                        errBuf.count
+                    )
                 }
             }
-
-            let decodedPath = unescapeBsdtarPath(rawPath, encoding: encoding)
-            entries.append(
-                ArchiveEntry(
-                    path: decodedPath,
-                    isDirectory: isDir,
-                    uncompressedSize: isDir ? 0 : size,
-                    compressedSize: 0,
-                    compressionMethodName: format == .sevenZip ? "LZMA (libarchive)" : format.fileExtension.uppercased(),
-                    crc32: 0,
-                    modifiedDate: Date()
-                )
-            )
         }
-        return entries
+
+        try throwIfLibarchiveError(rc, errBuf: errBuf, contextName: url.lastPathComponent)
+        return state.entries
     }
 
-    public static func readEntryData(at url: URL, path: String) throws -> Data {
-        let target = ArchiveEntry.normalizePath(path, isDirectory: false)
-        return try runTarData(arguments: ["-xOf", url.path, target])
+    public static func readEntryData(
+        at url: URL,
+        format: ArchiveFormat? = nil,
+        path: String,
+        password: String? = nil,
+        encoding: FilenameEncodingOption = .auto
+    ) throws -> Data {
+        final class ReadState {
+            let targetPath: String
+            let encoding: FilenameEncodingOption
+            var matched = false
+            var data = Data()
+
+            init(targetPath: String, encoding: FilenameEncodingOption) {
+                self.targetPath = ArchiveEntry.normalizePath(targetPath, isDirectory: false)
+                self.encoding = encoding
+            }
+        }
+
+        let resolvedFormat = format ?? ArchiveFormat.detect(from: url) ?? .sevenZip
+        let state = ReadState(targetPath: path, encoding: encoding)
+        let volumePaths = resolveVolumePaths(for: url, format: resolvedFormat)
+        var errBuf = [CChar](repeating: 0, count: 512)
+
+        let rc: Int32 = withCStringArray(volumePaths) { cPaths, count in
+            withExtendedLifetime(state) {
+                let rawCtx = Unmanaged.passUnretained(state).toOpaque()
+                return withOptionalCString(password) { cPw in
+                    bolt_la_extract_stream(
+                        cPaths,
+                        count,
+                        cPw,
+                        { infoPtr, rawCtx in
+                            guard let infoPtr, let rawCtx else { return 0 }
+                            let st = Unmanaged<ReadState>.fromOpaque(rawCtx).takeUnretainedValue()
+                            let info = infoPtr.pointee
+                            let rawBytes = Self.extractRawPathData(from: info)
+                            let decoded = FilenameEncoding.decode(rawBytes, hasUTF8Flag: info.path_is_utf8 != 0, preferred: st.encoding)
+                            let normalized = ArchiveEntry.normalizePath(decoded, isDirectory: info.is_directory != 0)
+                            if normalized == st.targetPath {
+                                st.matched = true
+                                if info.size > 0 && info.size < 32 * 1024 * 1024 {
+                                    st.data.reserveCapacity(Int(info.size))
+                                }
+                                return 1
+                            }
+                            return 0
+                        },
+                        { chunkPtr, chunkLen, rawCtx in
+                            guard let rawCtx else { return -1 }
+                            let st = Unmanaged<ReadState>.fromOpaque(rawCtx).takeUnretainedValue()
+                            if let chunkPtr, chunkLen > 0 {
+                                st.data.append(chunkPtr, count: chunkLen)
+                                return 0
+                            }
+                            return 1 // End of matched entry: stop scanning archive early
+                        },
+                        rawCtx,
+                        &errBuf,
+                        errBuf.count
+                    )
+                }
+            }
+        }
+
+        try throwIfLibarchiveError(rc, errBuf: errBuf, contextName: path)
+        guard state.matched else {
+            throw BoltZipError.entryNotFound(path)
+        }
+        return state.data
     }
 
     public static func extract(
         at url: URL,
+        format: ArchiveFormat? = nil,
         to destinationURL: URL,
         selectedPaths: Set<String>? = nil,
+        overwritePolicy: OverwritePolicy = .overwrite,
+        password: String? = nil,
+        encoding: FilenameEncodingOption = .auto,
         stripMacJunk: Bool = true,
         expectedTotalBytes: UInt64 = 0,
+        topLevelDirRenameMap: [String: String] = [:],
         controller: ArchiveTaskController? = nil,
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
         try controller?.checkpoint()
-        try FileManager.default.createDirectory(at: destinationURL, withIntermediateDirectories: true)
-        var args: [String] = []
-        if stripMacJunk {
-            for pattern in [".DS_Store", "*/.DS_Store", "__MACOSX", "*/__MACOSX", "._*", "*/._*"] {
-                args.append(contentsOf: ["--exclude", pattern])
+        let fm = FileManager.default
+        try fm.createDirectory(at: destinationURL, withIntermediateDirectories: true)
+
+        final class ExtractState {
+            let destinationURL: URL
+            let selectedPaths: Set<String>?
+            let overwritePolicy: OverwritePolicy
+            let encoding: FilenameEncodingOption
+            let stripMacJunk: Bool
+            let expectedTotalBytes: UInt64
+            let renameMap: [String: String]
+            let controller: ArchiveTaskController?
+            let progress: (@Sendable (OperationProgress) -> Void)?
+
+            var activeTargetURL: URL?
+            var activeFileHandle: FileHandle?
+            var activeModDate: Date = Date()
+            var activePermissions: UInt16 = 0o644
+            var activeEntryCreated = false
+            var activePathName: String = ""
+            var processedBytes: UInt64 = 0
+            var lastProgressEmitTime: CFAbsoluteTime = 0
+            var thrownError: Error?
+
+            init(
+                destinationURL: URL,
+                selectedPaths: Set<String>?,
+                overwritePolicy: OverwritePolicy,
+                encoding: FilenameEncodingOption,
+                stripMacJunk: Bool,
+                expectedTotalBytes: UInt64,
+                renameMap: [String: String],
+                controller: ArchiveTaskController?,
+                progress: (@Sendable (OperationProgress) -> Void)?
+            ) {
+                self.destinationURL = destinationURL
+                self.selectedPaths = selectedPaths
+                self.overwritePolicy = overwritePolicy
+                self.encoding = encoding
+                self.stripMacJunk = stripMacJunk
+                self.expectedTotalBytes = expectedTotalBytes
+                self.renameMap = renameMap
+                self.controller = controller
+                self.progress = progress
+            }
+
+            func cleanupActivePartialFile() {
+                try? activeFileHandle?.close()
+                activeFileHandle = nil
+                if activeEntryCreated, let url = activeTargetURL {
+                    try? FileManager.default.removeItem(at: url)
+                }
+                activeTargetURL = nil
+                activeEntryCreated = false
             }
         }
-        args.append(contentsOf: ["-xf", url.path, "-C", destinationURL.path])
-        if let selectedPaths, !selectedPaths.isEmpty {
-            args.append(contentsOf: selectedPaths.sorted())
+
+        let resolvedFormat = format ?? ArchiveFormat.detect(from: url) ?? .sevenZip
+        let state = ExtractState(
+            destinationURL: destinationURL,
+            selectedPaths: selectedPaths,
+            overwritePolicy: overwritePolicy,
+            encoding: encoding,
+            stripMacJunk: stripMacJunk,
+            expectedTotalBytes: expectedTotalBytes,
+            renameMap: topLevelDirRenameMap,
+            controller: controller,
+            progress: progress
+        )
+        let volumePaths = resolveVolumePaths(for: url, format: resolvedFormat)
+        var errBuf = [CChar](repeating: 0, count: 512)
+
+        defer {
+            state.cleanupActivePartialFile()
         }
-        let archiveName = url.lastPathComponent
-        let startTime = CFAbsoluteTimeGetCurrent()
-        _ = try runTar(arguments: args, controller: controller) {
-            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-            let approxFrac = min(0.92, 1.0 - exp(-elapsed * 0.65))
-            let approxBytes = expectedTotalBytes > 0 ? UInt64(Double(expectedTotalBytes) * approxFrac) : 0
-            progress?(OperationProgress(
-                fractionCompleted: approxFrac,
-                currentItem: archiveName,
-                processedBytes: approxBytes,
-                totalBytes: expectedTotalBytes
-            ))
+
+        let rc: Int32 = withCStringArray(volumePaths) { cPaths, count in
+            withExtendedLifetime(state) {
+                let rawCtx = Unmanaged.passUnretained(state).toOpaque()
+                return withOptionalCString(password) { cPw in
+                    bolt_la_extract_stream(
+                        cPaths,
+                        count,
+                        cPw,
+                        { infoPtr, rawCtx in
+                            guard let infoPtr, let rawCtx else { return -1 }
+                            let st = Unmanaged<ExtractState>.fromOpaque(rawCtx).takeUnretainedValue()
+                            do {
+                                try st.controller?.checkpoint()
+                                let info = infoPtr.pointee
+                                let rawBytes = Self.extractRawPathData(from: info)
+                                let decoded = FilenameEncoding.decode(rawBytes, hasUTF8Flag: info.path_is_utf8 != 0, preferred: st.encoding)
+                                let isDir = info.is_directory != 0
+                                let normalized = ArchiveEntry.normalizePath(decoded, isDirectory: isDir)
+                                guard !normalized.isEmpty else { return 0 }
+
+                                if st.stripMacJunk && MacJunkFilter.isJunk(path: normalized) {
+                                    return 0
+                                }
+                                if let sel = st.selectedPaths, !sel.isEmpty,
+                                   !BoltArchiveEngine.pathMatchesSelection(normalized, selectedPaths: sel) {
+                                    return 0
+                                }
+
+                                let outputPath = BoltArchiveEngine.remapTopLevelFolder(in: normalized, renameMap: st.renameMap)
+                                let initialDest = try BoltArchiveEngine.safeDestinationURL(for: outputPath, under: st.destinationURL)
+                                let fm = FileManager.default
+
+                                if isDir {
+                                    try fm.createDirectory(at: initialDest, withIntermediateDirectories: true)
+                                    return 0
+                                }
+                                if info.is_symlink != 0 {
+                                    return 0
+                                }
+
+                                var finalDest = initialDest
+                                if fm.fileExists(atPath: finalDest.path) {
+                                    switch st.overwritePolicy {
+                                    case .skip:
+                                        return 0
+                                    case .overwrite:
+                                        try fm.removeItem(at: finalDest)
+                                    case .rename:
+                                        finalDest = BoltArchiveEngine.uniqueNonCollidingURL(for: initialDest)
+                                    }
+                                }
+
+                                try fm.createDirectory(at: finalDest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                                st.activeTargetURL = finalDest
+                                st.activeFileHandle = nil
+                                st.activeEntryCreated = false
+                                st.activeModDate = info.mtime > 0 ? Date(timeIntervalSince1970: TimeInterval(info.mtime)) : Date()
+                                st.activePermissions = info.permissions
+                                st.activePathName = normalized
+
+                                let now = CFAbsoluteTimeGetCurrent()
+                                if now - st.lastProgressEmitTime >= 0.05 {
+                                    st.lastProgressEmitTime = now
+                                    let frac = st.expectedTotalBytes > 0
+                                        ? min(0.99, Double(st.processedBytes) / Double(st.expectedTotalBytes))
+                                        : 0.1
+                                    st.progress?(OperationProgress(
+                                        fractionCompleted: frac,
+                                        currentItem: normalized,
+                                        processedBytes: st.processedBytes,
+                                        totalBytes: st.expectedTotalBytes
+                                    ))
+                                }
+                                return 1
+                            } catch {
+                                st.thrownError = error
+                                return -1
+                            }
+                        },
+                        { chunkPtr, chunkLen, rawCtx in
+                            guard let rawCtx else { return -1 }
+                            let st = Unmanaged<ExtractState>.fromOpaque(rawCtx).takeUnretainedValue()
+                            do {
+                                try st.controller?.checkpoint()
+                                guard let targetURL = st.activeTargetURL else { return -1 }
+                                let fm = FileManager.default
+
+                                if let chunkPtr, chunkLen > 0 {
+                                    if st.activeFileHandle == nil {
+                                        guard fm.createFile(atPath: targetURL.path, contents: nil) else {
+                                            throw BoltZipError.ioError("无法创建解压目标文件：\(targetURL.lastPathComponent)")
+                                        }
+                                        st.activeEntryCreated = true
+                                        st.activeFileHandle = try FileHandle(forWritingTo: targetURL)
+                                    }
+                                    let buffer = UnsafeBufferPointer(start: chunkPtr, count: chunkLen)
+                                    try st.activeFileHandle?.write(contentsOf: buffer)
+                                    st.processedBytes += UInt64(chunkLen)
+
+                                    let now = CFAbsoluteTimeGetCurrent()
+                                    if now - st.lastProgressEmitTime >= 0.08 {
+                                        st.lastProgressEmitTime = now
+                                        let frac = st.expectedTotalBytes > 0
+                                            ? min(0.99, Double(st.processedBytes) / Double(st.expectedTotalBytes))
+                                            : 0.5
+                                        st.progress?(OperationProgress(
+                                            fractionCompleted: frac,
+                                            currentItem: st.activePathName,
+                                            processedBytes: st.processedBytes,
+                                            totalBytes: st.expectedTotalBytes
+                                        ))
+                                    }
+                                    return 0
+                                } else {
+                                    // End of entry: ensure zero-byte regular files are created, then close & set metadata
+                                    if !st.activeEntryCreated {
+                                        guard fm.createFile(atPath: targetURL.path, contents: nil) else {
+                                            throw BoltZipError.ioError("无法创建解压目标文件：\(targetURL.lastPathComponent)")
+                                        }
+                                        st.activeEntryCreated = true
+                                    }
+                                    try st.activeFileHandle?.close()
+                                    st.activeFileHandle = nil
+
+                                    let attrs: [FileAttributeKey: Any] = [
+                                        .modificationDate: st.activeModDate,
+                                        .posixPermissions: NSNumber(value: st.activePermissions)
+                                    ]
+                                    try? fm.setAttributes(attrs, ofItemAtPath: targetURL.path)
+
+                                    st.activeTargetURL = nil
+                                    st.activeEntryCreated = false
+                                    return 0
+                                }
+                            } catch {
+                                st.thrownError = error
+                                return -1
+                            }
+                        },
+                        rawCtx,
+                        &errBuf,
+                        errBuf.count
+                    )
+                }
+            }
         }
+
+        if let err = state.thrownError {
+            throw err
+        }
+        try throwIfLibarchiveError(rc, errBuf: errBuf, contextName: state.activePathName.isEmpty ? url.lastPathComponent : state.activePathName)
+
+        let doneBytes = expectedTotalBytes > 0 ? expectedTotalBytes : state.processedBytes
         progress?(OperationProgress(
             fractionCompleted: 1.0,
-            currentItem: archiveName,
-            processedBytes: expectedTotalBytes,
-            totalBytes: expectedTotalBytes
+            currentItem: url.lastPathComponent,
+            processedBytes: doneBytes,
+            totalBytes: doneBytes
         ))
+    }
+
+    public static func testIntegrity(
+        at url: URL,
+        format: ArchiveFormat,
+        password: String? = nil
+    ) throws -> IntegrityReport {
+        final class TestState {
+            var results: [IntegrityEntryResult] = []
+            var passed = 0
+            var failed = 0
+            var missingPw = 0
+        }
+
+        let start = CFAbsoluteTimeGetCurrent()
+        let state = TestState()
+        let volumePaths = resolveVolumePaths(for: url, format: format)
+        var errBuf = [CChar](repeating: 0, count: 512)
+
+        let rc: Int32 = withCStringArray(volumePaths) { cPaths, count in
+            withExtendedLifetime(state) {
+                let rawCtx = Unmanaged.passUnretained(state).toOpaque()
+                return withOptionalCString(password) { cPw in
+                    bolt_la_test_integrity(
+                        cPaths,
+                        count,
+                        cPw,
+                        { cPath, statusCode, cDetail, rawCtx in
+                            guard let rawCtx else { return }
+                            let st = Unmanaged<TestState>.fromOpaque(rawCtx).takeUnretainedValue()
+                            let pathStr = cPath.map { String(cString: $0) } ?? ""
+                            let detailStr = cDetail.map { String(cString: $0) } ?? ""
+                            if statusCode == 0 {
+                                st.passed += 1
+                                st.results.append(IntegrityEntryResult(path: pathStr, status: .passed, detail: "流解码与校验通过"))
+                            } else if statusCode == BOLT_LA_ERR_PASSWORD_REQUIRED {
+                                st.missingPw += 1
+                                st.results.append(IntegrityEntryResult(path: pathStr, status: .missingPassword, detail: "需要密码"))
+                            } else if statusCode == BOLT_LA_ERR_WRONG_PASSWORD {
+                                st.failed += 1
+                                st.results.append(IntegrityEntryResult(path: pathStr, status: .failed, detail: "密码错误，无法解密"))
+                            } else {
+                                st.failed += 1
+                                st.results.append(IntegrityEntryResult(path: pathStr, status: .failed, detail: detailStr))
+                            }
+                        },
+                        rawCtx,
+                        &errBuf,
+                        errBuf.count
+                    )
+                }
+            }
+        }
+
+        if rc == BOLT_LA_ERR_PASSWORD_REQUIRED && state.results.isEmpty {
+            return IntegrityReport(
+                archiveName: url.lastPathComponent,
+                totalEntries: 1,
+                passedCount: 0,
+                failedCount: 0,
+                skippedEncryptedCount: 1,
+                elapsedSeconds: CFAbsoluteTimeGetCurrent() - start,
+                results: [IntegrityEntryResult(path: url.lastPathComponent, status: .missingPassword, detail: "归档文件头已加密，需要密码")]
+            )
+        }
+        if rc != 0 && state.failed > 0 {
+            return IntegrityReport(
+                archiveName: url.lastPathComponent,
+                totalEntries: state.results.count,
+                passedCount: state.passed,
+                failedCount: state.failed,
+                skippedEncryptedCount: state.missingPw,
+                elapsedSeconds: CFAbsoluteTimeGetCurrent() - start,
+                results: state.results
+            )
+        }
+        if rc != 0 {
+            let errDetail = errBuf.withUnsafeBufferPointer { buf -> String in
+                guard let base = buf.baseAddress else { return "" }
+                return String(cString: base).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if rc == BOLT_LA_ERR_WRONG_PASSWORD {
+                throw BoltZipError.wrongPassword(url.lastPathComponent)
+            }
+            let detail = errDetail.isEmpty ? "归档流读取或校验失败 (code \(rc))" : errDetail
+            state.failed += 1
+            state.results.append(IntegrityEntryResult(path: url.lastPathComponent, status: .failed, detail: detail))
+            return IntegrityReport(
+                archiveName: url.lastPathComponent,
+                totalEntries: state.results.count,
+                passedCount: state.passed,
+                failedCount: state.failed,
+                skippedEncryptedCount: state.missingPw,
+                elapsedSeconds: CFAbsoluteTimeGetCurrent() - start,
+                results: state.results
+            )
+        }
+
+        return IntegrityReport(
+            archiveName: url.lastPathComponent,
+            totalEntries: state.results.count,
+            passedCount: state.passed,
+            failedCount: state.failed,
+            skippedEncryptedCount: state.missingPw,
+            elapsedSeconds: CFAbsoluteTimeGetCurrent() - start,
+            results: state.results
+        )
     }
 
     public static func create7z(
@@ -180,7 +659,6 @@ public enum ExtendedArchiveDriver {
         let bytes = Array(raw.utf8)
         let isOctalDigit: (UInt8) -> Bool = { $0 >= 0x30 && $0 <= 0x37 } // '0'...'7'
 
-        // Only treat backslash sequences as bsdtar escapes if at least one \OOO octal byte sequence appears.
         var hasOctalEscape = false
         var scanIdx = 0
         while scanIdx + 3 < bytes.count {
@@ -220,14 +698,14 @@ public enum ExtendedArchiveDriver {
                 }
                 if i + 1 < bytes.count {
                     switch bytes[i + 1] {
-                    case 0x5C: decoded.append(0x5C); i += 2; continue // '\\'
-                    case 0x61: decoded.append(0x07); i += 2; continue // '\a'
-                    case 0x62: decoded.append(0x08); i += 2; continue // '\b'
-                    case 0x66: decoded.append(0x0C); i += 2; continue // '\f'
-                    case 0x6E: decoded.append(0x0A); i += 2; continue // '\n'
-                    case 0x72: decoded.append(0x0D); i += 2; continue // '\r'
-                    case 0x74: decoded.append(0x09); i += 2; continue // '\t'
-                    case 0x76: decoded.append(0x0B); i += 2; continue // '\v'
+                    case 0x5C: decoded.append(0x5C); i += 2; continue
+                    case 0x61: decoded.append(0x07); i += 2; continue
+                    case 0x62: decoded.append(0x08); i += 2; continue
+                    case 0x66: decoded.append(0x0C); i += 2; continue
+                    case 0x6E: decoded.append(0x0A); i += 2; continue
+                    case 0x72: decoded.append(0x0D); i += 2; continue
+                    case 0x74: decoded.append(0x09); i += 2; continue
+                    case 0x76: decoded.append(0x0B); i += 2; continue
                     default: break
                     }
                 }
@@ -240,6 +718,56 @@ public enum ExtendedArchiveDriver {
             return utf8
         }
         return FilenameEncoding.decode(Data(decoded), hasUTF8Flag: false, preferred: encoding)
+    }
+
+    // MARK: - Private C / Subprocess Helpers
+
+    private static func extractRawPathData(from info: bolt_la_entry_info_t) -> Data {
+        if let ptr = info.raw_path_bytes, info.raw_path_len > 0 {
+            return Data(bytes: ptr, count: info.raw_path_len)
+        }
+        if let p = info.path {
+            return Data(String(cString: p).utf8)
+        }
+        return Data()
+    }
+
+    private static func withCStringArray<T>(_ strings: [String], _ body: (UnsafeMutablePointer<UnsafePointer<CChar>?>, Int) -> T) -> T {
+        let duped: [UnsafeMutablePointer<CChar>?] = strings.map { strdup($0) }
+        defer {
+            for ptr in duped {
+                if let ptr { free(ptr) }
+            }
+        }
+        var constPtrs: [UnsafePointer<CChar>?] = duped.map { $0.map { UnsafePointer($0) } }
+        return constPtrs.withUnsafeMutableBufferPointer { buf in
+            body(buf.baseAddress!, buf.count)
+        }
+    }
+
+    private static func withOptionalCString<T>(_ string: String?, _ body: (UnsafePointer<CChar>?) -> T) -> T {
+        guard let string, !string.isEmpty else {
+            return body(nil)
+        }
+        return string.withCString { body($0) }
+    }
+
+    private static func throwIfLibarchiveError(_ code: Int32, errBuf: [CChar], contextName: String) throws {
+        guard code != 0 else { return }
+        switch code {
+        case BOLT_LA_ERR_CANCELLED:
+            throw BoltZipError.cancelled
+        case BOLT_LA_ERR_PASSWORD_REQUIRED:
+            throw BoltZipError.passwordRequired(contextName)
+        case BOLT_LA_ERR_WRONG_PASSWORD:
+            throw BoltZipError.wrongPassword(contextName)
+        default:
+            let msg = errBuf.withUnsafeBufferPointer { buf -> String in
+                guard let base = buf.baseAddress else { return "" }
+                return String(cString: base).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            throw BoltZipError.externalToolFailed(msg.isEmpty ? "归档处理失败 (code \(code))" : msg)
+        }
     }
 
     private static func runTar(
@@ -261,7 +789,6 @@ public enum ExtendedArchiveDriver {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
         proc.arguments = arguments
-        // GUI macOS apps launch without LANG/LC_CTYPE, causing bsdtar to octal-escape UTF-8 paths as \350\213\217...
         var env = ProcessInfo.processInfo.environment
         env["LANG"] = "en_US.UTF-8"
         env["LC_CTYPE"] = "UTF-8"

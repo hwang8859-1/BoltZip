@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 public enum ZipEditOperation: Sendable {
     case addItems(urls: [URL], targetFolder: String)
@@ -113,13 +114,27 @@ private final class SplitVolumeSink {
 }
 
 public enum ZipWriter {
-    struct InputItem {
+    struct InputItem: Sendable {
         let archivePath: String
         let fileURL: URL? // nil if synthetic directory
         let isDirectory: Bool
         let modifiedDate: Date
         let permissions: UInt16
         let fileSize: UInt64
+    }
+
+    private struct PreparedZipItem: Sendable {
+        let rawPathBytes: Data
+        let flags: UInt16
+        let method: UInt16
+        let dosTime: UInt16
+        let dosDate: UInt16
+        let crc32: UInt32
+        let compressedPayload: Data
+        let uncompressedSize: UInt64
+        let externalAttrs: UInt32
+        let extraWithoutZip64: Data
+        let commentData: Data
     }
 
     struct CentralDirEntry {
@@ -144,43 +159,25 @@ public enum ZipWriter {
         to outputURL: URL,
         options: CreateArchiveOptions,
         controller: ArchiveTaskController? = nil,
-        progress: ((OperationProgress) -> Void)? = nil
+        progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws -> [URL] {
         try controller?.checkpoint()
         let items = try collectInputItems(from: inputURLs, excludeMacJunk: options.excludeMacJunk)
         let sink = try SplitVolumeSink(outputURL: outputURL, splitLimit: options.splitVolumeSizeBytes)
         do {
             let totalBytes = items.reduce(UInt64(0)) { $0 + $1.fileSize }
-            var processedBytes: UInt64 = 0
             var cdEntries: [CentralDirEntry] = []
             cdEntries.reserveCapacity(items.count)
 
-            for item in items {
-                try controller?.checkpoint()
-                progress?(OperationProgress(
-                    fractionCompleted: totalBytes > 0 ? Double(processedBytes) / Double(totalBytes) : 0,
-                    currentItem: item.archivePath,
-                    processedBytes: processedBytes,
-                    totalBytes: totalBytes
-                ))
-
-                let entry = try writeNewItem(
-                    item,
-                    options: options,
-                    sink: sink,
-                    controller: controller
-                ) { itemRead, _ in
-                    let currentTotal = min(totalBytes, processedBytes + itemRead)
-                    progress?(OperationProgress(
-                        fractionCompleted: totalBytes > 0 ? Double(currentTotal) / Double(totalBytes) : 0,
-                        currentItem: item.archivePath,
-                        processedBytes: currentTotal,
-                        totalBytes: totalBytes
-                    ))
-                }
-                cdEntries.append(entry)
-                processedBytes += item.fileSize
-            }
+            try writeNewItems(
+                items,
+                options: options,
+                sink: sink,
+                controller: controller,
+                totalBytes: totalBytes,
+                cdEntries: &cdEntries,
+                progress: progress
+            )
 
             try controller?.checkpoint()
             try finishCentralDirectory(entries: cdEntries, comment: options.archiveComment, sink: sink)
@@ -198,7 +195,7 @@ public enum ZipWriter {
         operations: [ZipEditOperation],
         options: CreateArchiveOptions = CreateArchiveOptions(),
         encoding: FilenameEncodingOption = .auto,
-        progress: ((OperationProgress) -> Void)? = nil
+        progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
         let reader = ZipReader(url: archiveURL)
         let parsed = try reader.parseArchive()
@@ -331,14 +328,40 @@ public enum ZipWriter {
                 idx += 1
             }
 
-            for newItem in newInputs {
-                progress?(OperationProgress(
-                    fractionCompleted: totalCount > 0 ? Double(idx) / Double(totalCount) : 0,
-                    currentItem: newItem.archivePath
-                ))
-                let entry = try writeNewItem(newItem, options: options, sink: sink)
-                cdEntries.append(entry)
-                idx += 1
+            if !newInputs.isEmpty {
+                let baseCount = idx
+                let newTotalBytes = newInputs.reduce(UInt64(0)) { $0 + $1.fileSize }
+                let maxWorkers = newInputs.filter { !$0.isDirectory }.count >= 2 ? ParallelExecutor.defaultWorkerCount : 1
+                try ParallelExecutor.orderedMap(
+                    newInputs,
+                    maxWorkers: maxWorkers,
+                    byteCost: { $0.fileSize }
+                ) { _, newItem in
+                    try prepareItem(newItem, options: options, allowCodecMT: maxWorkers == 1)
+                } consumeInOrder: { offsetIdx, newItem, prepared in
+                    let overallIdx = baseCount + offsetIdx
+                    progress?(OperationProgress(
+                        fractionCompleted: totalCount > 0 ? Double(overallIdx) / Double(totalCount) : 0,
+                        currentItem: newItem.archivePath,
+                        processedBytes: 0,
+                        totalBytes: newTotalBytes
+                    ))
+                    let entry = try writeRawEntry(
+                        rawPathBytes: prepared.rawPathBytes,
+                        flags: prepared.flags,
+                        method: prepared.method,
+                        dosTime: prepared.dosTime,
+                        dosDate: prepared.dosDate,
+                        crc32: prepared.crc32,
+                        compressedPayload: prepared.compressedPayload,
+                        uncompressedSize: prepared.uncompressedSize,
+                        externalAttrs: prepared.externalAttrs,
+                        extraWithoutZip64: prepared.extraWithoutZip64,
+                        commentData: prepared.commentData,
+                        sink: sink
+                    )
+                    cdEntries.append(entry)
+                }
             }
 
             try finishCentralDirectory(entries: cdEntries, comment: parsed.comment, sink: sink)
@@ -434,13 +457,111 @@ public enum ZipWriter {
         return items
     }
 
-    private static func writeNewItem(
-        _ item: InputItem,
+    private static func writeNewItems(
+        _ items: [InputItem],
         options: CreateArchiveOptions,
         sink: SplitVolumeSink,
+        controller: ArchiveTaskController?,
+        totalBytes: UInt64,
+        cdEntries: inout [CentralDirEntry],
+        progress: (@Sendable (OperationProgress) -> Void)?
+    ) throws {
+        let nonDirCount = items.reduce(0) { $0 + ($1.isDirectory ? 0 : 1) }
+        if nonDirCount <= 1 {
+            var processedBytes: UInt64 = 0
+            for item in items {
+                try controller?.checkpoint()
+                progress?(OperationProgress(
+                    fractionCompleted: totalBytes > 0 ? Double(processedBytes) / Double(totalBytes) : 0,
+                    currentItem: item.archivePath,
+                    processedBytes: processedBytes,
+                    totalBytes: totalBytes
+                ))
+                let base = processedBytes
+                let prepared = try prepareItem(
+                    item,
+                    options: options,
+                    allowCodecMT: true,
+                    controller: controller
+                ) { itemRead, _ in
+                    let currentTotal = min(totalBytes, base + itemRead)
+                    progress?(OperationProgress(
+                        fractionCompleted: totalBytes > 0 ? Double(currentTotal) / Double(totalBytes) : 0,
+                        currentItem: item.archivePath,
+                        processedBytes: currentTotal,
+                        totalBytes: totalBytes
+                    ))
+                }
+                let entry = try writeRawEntry(
+                    rawPathBytes: prepared.rawPathBytes,
+                    flags: prepared.flags,
+                    method: prepared.method,
+                    dosTime: prepared.dosTime,
+                    dosDate: prepared.dosDate,
+                    crc32: prepared.crc32,
+                    compressedPayload: prepared.compressedPayload,
+                    uncompressedSize: prepared.uncompressedSize,
+                    externalAttrs: prepared.externalAttrs,
+                    extraWithoutZip64: prepared.extraWithoutZip64,
+                    commentData: prepared.commentData,
+                    sink: sink
+                )
+                cdEntries.append(entry)
+                processedBytes += item.fileSize
+            }
+            return
+        }
+
+        let completedBytesLock = OSAllocatedUnfairLock(initialState: UInt64(0))
+        try ParallelExecutor.orderedMap(
+            items,
+            maxWorkers: ParallelExecutor.defaultWorkerCount,
+            byteCost: { max(1, $0.fileSize) },
+            controller: controller
+        ) { _, item in
+            let prepared = try prepareItem(
+                item,
+                options: options,
+                allowCodecMT: false,
+                controller: controller
+            )
+            let completedNow = completedBytesLock.withLock { total -> UInt64 in
+                total = min(totalBytes, total + item.fileSize)
+                return total
+            }
+            progress?(OperationProgress(
+                fractionCompleted: totalBytes > 0 ? Double(completedNow) / Double(totalBytes) : 1.0,
+                currentItem: item.archivePath,
+                processedBytes: completedNow,
+                totalBytes: totalBytes
+            ))
+            return prepared
+        } consumeInOrder: { _, _, prepared in
+            let entry = try writeRawEntry(
+                rawPathBytes: prepared.rawPathBytes,
+                flags: prepared.flags,
+                method: prepared.method,
+                dosTime: prepared.dosTime,
+                dosDate: prepared.dosDate,
+                crc32: prepared.crc32,
+                compressedPayload: prepared.compressedPayload,
+                uncompressedSize: prepared.uncompressedSize,
+                externalAttrs: prepared.externalAttrs,
+                extraWithoutZip64: prepared.extraWithoutZip64,
+                commentData: prepared.commentData,
+                sink: sink
+            )
+            cdEntries.append(entry)
+        }
+    }
+
+    private static func prepareItem(
+        _ item: InputItem,
+        options: CreateArchiveOptions,
+        allowCodecMT: Bool,
         controller: ArchiveTaskController? = nil,
         progress: ((UInt64, UInt64) -> Void)? = nil
-    ) throws -> CentralDirEntry {
+    ) throws -> PreparedZipItem {
         let pathEnc = FilenameEncoding.encode(item.archivePath, option: options.encoding)
         let (dosTime, dosDate) = ZipBinary.dosDateTime(from: item.modifiedDate)
         let unixMode = UInt32(item.isDirectory ? (0o040000 | item.permissions) : (0o100000 | item.permissions))
@@ -450,7 +571,7 @@ public enum ZipWriter {
 
         // Directory entries have zero payload and are stored unencrypted
         if item.isDirectory {
-            return try writeRawEntry(
+            return PreparedZipItem(
                 rawPathBytes: pathEnc.data,
                 flags: flags,
                 method: 0,
@@ -461,8 +582,7 @@ public enum ZipWriter {
                 uncompressedSize: 0,
                 externalAttrs: extAttrs,
                 extraWithoutZip64: buildExtendedTimestampExtra(date: item.modifiedDate),
-                commentData: Data(),
-                sink: sink
+                commentData: Data()
             )
         }
 
@@ -480,10 +600,11 @@ public enum ZipWriter {
             algorithm: options.algorithm,
             gzipContainer: false,
             level: options.level,
+            allowMultiThread: allowCodecMT,
             controller: controller,
             progress: progress
         )
-        // Store fallback if DEFLATE/Bzip2/Zstd expanded a tiny/incompressible file (only when unencrypted or desired)
+        // Store fallback if DEFLATE/Bzip2/Zstd expanded a tiny/incompressible file
         if options.algorithm != .store && compressed.count >= plainData.count && plainData.count < 64 {
             method = 0
             compressed = plainData
@@ -509,7 +630,7 @@ public enum ZipWriter {
             }
         }
 
-        return try writeRawEntry(
+        return PreparedZipItem(
             rawPathBytes: pathEnc.data,
             flags: flags,
             method: headerMethod,
@@ -520,8 +641,7 @@ public enum ZipWriter {
             uncompressedSize: UInt64(plainData.count),
             externalAttrs: extAttrs,
             extraWithoutZip64: extra,
-            commentData: Data(),
-            sink: sink
+            commentData: Data()
         )
     }
 
