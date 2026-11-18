@@ -1,6 +1,9 @@
 @testable import BoltZipCore
 import Foundation
 import os
+#if canImport(UniformTypeIdentifiers)
+import UniformTypeIdentifiers
+#endif
 import XCTest
 
 final class BoltZipCoreTests: XCTestCase {
@@ -658,9 +661,13 @@ final class BoltZipCoreTests: XCTestCase {
         XCTAssertFalse(ArchiveAssociationGroup.commonArchiveGroups.contains(.iso))
         XCTAssertTrue(ArchiveAssociationGroup.commonArchiveGroups.contains(.zip))
         XCTAssertTrue(ArchiveAssociationGroup.commonArchiveGroups.contains(.sevenZip))
+        XCTAssertNotNil(UTType("public.zip-archive"))
+        XCTAssertNotNil(UTType("public.tar-archive"))
+        XCTAssertNotNil(UTType("public.iso-image"))
         for group in ArchiveAssociationGroup.allCases {
             XCTAssertFalse(group.utTypeIdentifiers.isEmpty, "Expected UTI identifiers for \(group.rawValue)")
-            XCTAssertNotNil(group.primaryUTType, "Expected resolved UTType for \(group.rawValue)")
+            XCTAssertFalse(group.fallbackExtensions.isEmpty, "Expected fallback extensions for \(group.rawValue)")
+            XCTAssertNotNil(group.primaryUTType, "Expected resolved or dynamic UTType for \(group.rawValue)")
         }
         #endif
     }
