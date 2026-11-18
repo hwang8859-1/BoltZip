@@ -47,7 +47,9 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
-        NSApp.setActivationPolicy(.regular)
+        let app = (notification.object as? NSApplication) ?? (NSApp as NSApplication?)
+        app?.setActivationPolicy(.regular)
+        app?.appearance = viewModel.appTheme.nsAppearance
         BoltAppIconRenderer.apply(whiteBackground: viewModel.useWhiteAppIcon)
         wireLifecycleCallbacks()
         viewModel.configureHUD()
@@ -61,8 +63,11 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        let app = (notification.object as? NSApplication) ?? (NSApp as NSApplication?)
+        app?.setActivationPolicy(.regular)
+        app?.appearance = viewModel.appTheme.nsAppearance
         BoltAppIconRenderer.apply(whiteBackground: viewModel.useWhiteAppIcon)
+        viewModel.refreshQuickActionsStatus()
         wireLifecycleCallbacks()
         viewModel.configureHUD()
         installWindowObservers()
