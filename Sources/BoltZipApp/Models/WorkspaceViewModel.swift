@@ -108,6 +108,8 @@ final class WorkspaceViewModel {
     var recentArchivePaths: [String] = []
     var defaultStripMacJunk: Bool = true
     var quickActionsInstalled: Bool = QuickActionInstaller.isExtensionEnabled()
+    var allFormatsAssociated: Bool = false
+    var formatAssociationStatus: [String: Bool] = [:]
 
     // Localization, Translucency & Modular Panel Visibility Preferences
     var appLanguage: AppLanguage = .system {
@@ -214,6 +216,7 @@ final class WorkspaceViewModel {
             self.showStatusBar = defaults.bool(forKey: Keys.showStatusBar)
         }
         self.statusMessage = L10n(language: self.appLanguage).readyStatus
+        self.refreshFileAssociations()
     }
 
     var recentArchiveURLs: [URL] {
@@ -229,6 +232,22 @@ final class WorkspaceViewModel {
 
     func refreshQuickActionsStatus() {
         quickActionsInstalled = QuickActionInstaller.isExtensionEnabled()
+    }
+
+    func refreshFileAssociations() {
+        allFormatsAssociated = FileAssociationManager.areAllCommonFormatsAssociated()
+        var st: [String: Bool] = [:]
+        for f in FileAssociationManager.supportedFormats {
+            st[f.id] = FileAssociationManager.isDefaultHandlerForFormat(f)
+        }
+        formatAssociationStatus = st
+    }
+
+    func associateAllFormats() -> String {
+        _ = FileAssociationManager.associateAllCommonFormats()
+        refreshFileAssociations()
+        statusMessage = l10n.associateAllSuccessToast
+        return l10n.associateAllSuccessToast
     }
 
     func installFinderQuickActions() -> String {

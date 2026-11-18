@@ -11,6 +11,7 @@ func printUsage() {
       boltzip t <archive> [--password PW]
       boltzip bench
       boltzip engines
+      boltzip associate [--status]
       boltzip version
     """)
 }
@@ -60,6 +61,20 @@ func parseArgs() -> Int32 {
         case "engines":
             for eng in CompressionCodec.engineVersions() {
                 print("• \(eng.name) v\(eng.version) [\(eng.license)]")
+            }
+            return 0
+
+        case "associate", "default":
+            let checkOnly = flags.contains("status") || positional.contains("--status")
+            if !checkOnly {
+                _ = FileAssociationManager.associateAllCommonFormats()
+            }
+            print("BoltZip File Associations (dev.boltzip.macos):")
+            for format in FileAssociationManager.supportedFormats {
+                let isDef = FileAssociationManager.isDefaultHandlerForFormat(format)
+                let mark = isDef ? "✓ [Default]" : "✗ [Not Default]"
+                let exts = format.extensions.map { ".\($0)" }.joined(separator: ", ")
+                print("  \(mark) \(format.name) (\(exts))")
             }
             return 0
 

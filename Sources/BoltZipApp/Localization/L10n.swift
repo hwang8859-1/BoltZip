@@ -212,6 +212,12 @@ struct L10n: Sendable {
     var installNow: String { t("一键启用", "一鍵啟用", "Enable Now", "今すぐ有効化") }
     var disableNow: String { t("停用", "停用", "Disable", "無効化") }
 
+    var fileAssociationSection: String { t("默认压缩软件与格式关联", "預設壓縮軟體與格式關聯", "Default App & File Associations", "既定の圧縮ソフトと関連付け") }
+    var fileAssociationAllDone: String { t("已将常用格式 (ZIP, 7Z, RAR, TAR, GZ, BZ2, XZ, ZST 等) 默认关联至 BoltZip", "已將常用格式 (ZIP, 7Z, RAR, TAR, GZ, BZ2, XZ, ZST 等) 預設關聯至 BoltZip", "All common formats (ZIP, 7Z, RAR, TAR, GZ, etc.) are associated with BoltZip", "常用形式は BoltZip に関連付けられています") }
+    var fileAssociationPartial: String { t("部分常用格式尚未关联至 BoltZip", "部分常用格式尚未關聯至 BoltZip", "Some common formats are not associated with BoltZip", "一部の形式が未関連付けです") }
+    var associateAllFormatsButton: String { t("一键关联全部常用格式", "一鍵關聯全部常用格式", "Associate All Common Formats", "すべての常用形式を一括関連付け") }
+    var associateAllSuccessToast: String { t("已成功将常用压缩格式默认关联至 BoltZip！", "已成功將常用壓縮格式預設關聯至 BoltZip！", "Successfully associated common archive formats with BoltZip!", "すべての常用圧縮形式を BoltZip に関連付けました！") }
+
     // MARK: - Domain Enums Localized Display
     func sortColumnTitle(_ col: SortColumn) -> String {
         switch col {

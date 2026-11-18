@@ -802,6 +802,7 @@ struct SettingsView: View {
         .preferredColorScheme(vm.appTheme.colorScheme)
         .onAppear {
             vm.refreshQuickActionsStatus()
+            vm.refreshFileAssociations()
         }
     }
 
@@ -857,6 +858,55 @@ struct SettingsView: View {
                 }
                 .labelsHidden()
                 .frame(maxWidth: 230)
+            }
+        }
+
+        BoltGlassSectionCard(l.fileAssociationSection, icon: "doc.badge.gearshape", glassEnabled: glassEnabled, tint: .cyan.opacity(0.05)) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(vm.allFormatsAssociated ? l.fileAssociationAllDone : l.fileAssociationPartial)
+                            .font(.subheadline.weight(.medium))
+                        Text(l.associateAllFormatsButton)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button(l.associateAllFormatsButton) {
+                        feedbackMessage = vm.associateAllFormats()
+                    }
+                    .controlSize(.small)
+                    .boltGlassProminentButton()
+                }
+
+                Divider().opacity(glassEnabled ? 0.28 : 0.6)
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 105, maximum: 135), spacing: 6)], spacing: 6) {
+                    ForEach(FileAssociationManager.supportedFormats) { format in
+                        let isAssociated = vm.formatAssociationStatus[format.id] ?? false
+                        HStack(spacing: 5) {
+                            Image(systemName: isAssociated ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 11))
+                                .foregroundStyle(isAssociated ? Color.green : Color.secondary)
+                            Text(format.name)
+                                .font(.system(size: 11.5, weight: .medium))
+                            Spacer(minLength: 0)
+                            Text(format.extensions.first.map { ".\($0)" } ?? "")
+                                .font(.system(size: 9.5, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4.5)
+                        .background {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(isAssociated ? Color.green.opacity(0.12) : Color.primary.opacity(0.04))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .strokeBorder(isAssociated ? Color.green.opacity(0.28) : Color.secondary.opacity(0.15), lineWidth: 0.5)
+                                )
+                        }
+                    }
+                }
             }
         }
 
