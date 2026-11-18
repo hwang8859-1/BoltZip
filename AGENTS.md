@@ -8,7 +8,7 @@ Welcome! This file gives human contributors and AI coding agents an accurate map
 
 - **Repository**: `https://github.com/hwang8859-1/BoltZip.git`
 - **Branch Governance (Option A — One `dev-X.Y.Z` branch per release)**:
-  - **Active `dev-*` branch** (`dev-1.0.1` currently, set as GitHub **default branch**): All new feature work and contributor PRs must target this branch. Protected via repository ruleset against force-pushes and accidental deletion.
+  - **Active `dev-*` branch** (`dev-1.0.2` currently, set as GitHub **default branch**): All new feature work and contributor PRs must target this branch. Protected via repository ruleset against force-pushes and accidental deletion.
   - **`main` (Protected Release Branch)**: Release-only. Direct pushes are blocked (`enforce_admins: true`); merges require a PR from the active `dev-*` branch using **Merge Commit** and passing `.github/workflows/pr-target-guard.yml`.
   - **`legacy/macos-12` (`v0.9.3` LTS)**: Critical Intel / macOS 12–26 fixes only; protected against force-pushes and deletion.
   - **Version Cutover**: After releasing `dev-X.Y.Z -> main` + tagging `vX.Y.Z`, run `./Scripts/cut_next_dev_branch.sh dev-X.Y.(Z+1) --cleanup-old dev-X.Y.Z` to branch from `main`, advance GitHub's default branch, and retire the merged dev branch.
