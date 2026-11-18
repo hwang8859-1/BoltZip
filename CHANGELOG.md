@@ -5,6 +5,8 @@ All notable changes to **BoltZip** will be documented in this file.
 ## [0.9.1] - 2026-11-18
 
 ### Added & Improved (`legacy/macos-12` Universal Compatibility Release)
+- **DMG Drag-to-Applications Installer**:
+  - Added [`Scripts/create_dmg.sh`](Scripts/create_dmg.sh) and [`Scripts/generate_dmg_bg.swift`](Scripts/generate_dmg_bg.swift) to package `BoltZip-0.9.1-macOS-universal.dmg` with a high-DPI Finder drag-to-Applications window and custom volume icon alongside the `.zip` archive.
 - **macOS 12.0 Monterey ~ macOS 26+ Universal (`arm64` + `x86_64`)**:
   - Lowered minimum deployment target to **macOS 12.0** across `Package.swift`, `Scripts/build_app.sh`, `BoltZip.app`, `boltzip` CLI, and `BoltZipFinderSync.appex`, preserving native **Intel (`x86_64`)** and **Apple Silicon (`arm64`)** Universal binaries.
   - Cross-compiled Universal `minOS 12.0` static **`libarchive 3.7.7`** alongside `libzstd`, `liblzma`, and `liblz4` inside `Vendor/Compression/` so `.rar` / RAR5 / `.7z` / `.iso` / `.cab` / `.xar` work identically on older macOS systems without outdated system libraries.

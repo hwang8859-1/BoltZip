@@ -264,13 +264,17 @@ if [ -d "$HOME/Library/Services" ]; then
     /System/Library/CoreServices/pbs -update || true
 fi
 
+RELEASE_DMG="$DIST_DIR/BoltZip-${APP_VERSION}-macOS-universal.dmg"
 RELEASE_ZIP="$DIST_DIR/BoltZip-${APP_VERSION}-macOS-universal.zip"
 SOURCE_TAR="$DIST_DIR/BoltZip-${APP_VERSION}-source.tar.gz"
 SOURCE_ZIP="$DIST_DIR/BoltZip-${APP_VERSION}-source.zip"
 SUMS_FILE="$DIST_DIR/BoltZip-${APP_VERSION}-SHA256SUMS.txt"
 
-rm -f "$RELEASE_ZIP" "$SOURCE_TAR" "$SOURCE_ZIP" "$SUMS_FILE"
+rm -f "$RELEASE_DMG" "$RELEASE_ZIP" "$SOURCE_TAR" "$SOURCE_ZIP" "$SUMS_FILE"
 ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$RELEASE_ZIP"
+
+echo "==> Creating drag-to-Applications installer DMG ($RELEASE_DMG)..."
+"$ROOT_DIR/Scripts/create_dmg.sh" "$APP_DIR" "$RELEASE_DMG" "BoltZip" "v${APP_VERSION} · Universal"
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && [ -z "$(git status --porcelain)" ]; then
     echo "==> Creating clean source archives from git HEAD ($APP_VERSION)..."
@@ -296,10 +300,11 @@ fi
 
 (
     cd "$DIST_DIR"
-    shasum -a 256 "$(basename "$RELEASE_ZIP")" "$(basename "$SOURCE_TAR")" "$(basename "$SOURCE_ZIP")" > "$SUMS_FILE"
+    shasum -a 256 "$(basename "$RELEASE_DMG")" "$(basename "$RELEASE_ZIP")" "$(basename "$SOURCE_TAR")" "$(basename "$SOURCE_ZIP")" > "$SUMS_FILE"
 )
 
 echo "==> Done! App bundle created at: $APP_DIR"
+echo "==> DMG installer created at: $RELEASE_DMG"
 echo "==> App archive created at: $RELEASE_ZIP"
 echo "==> Source archives created at: $SOURCE_TAR , $SOURCE_ZIP"
-echo "==> Checksums written to: $SUMS_FILE" 
+echo "==> Checksums written to: $SUMS_FILE"
