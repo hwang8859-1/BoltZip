@@ -17,7 +17,7 @@
 
 **BoltZip** is an open-source archive manager crafted exclusively for **macOS 26.0+ on Apple Silicon (`arm64` / M-series)**. It pairs the productive, desktop-class archive workflows popularized by Windows tools (7-Zip, WinZip, Bandizip) with native **Liquid Glass** craft—so you never have to extract an entire archive just to inspect or edit one file.
 
-> 💡 **Using Intel Mac or macOS 12–15?** Download **v0.9.1 Universal (`arm64` + `x86_64`)** from the [`legacy/macos-12`](../../tree/legacy/macos-12) branch / `v0.9.1` release tag.
+> 💡 **Using Intel Mac or macOS 12–15?** Download **v0.9.2 Universal (`arm64` + `x86_64`)** from the [`legacy/macos-12`](../../tree/legacy/macos-12) branch / `v0.9.2` release tag.
 
 > [!IMPORTANT]
 > **Active Development: [Repository Default `dev-*` Branch](../../)** · `main` is a protected release-only branch. Please target the active default `dev-*` branch for all pull requests — see [CONTRIBUTING.md](CONTRIBUTING.md).

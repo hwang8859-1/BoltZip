@@ -17,7 +17,7 @@
 
 **BoltZip** 是一款專為 **macOS 26.0+（Apple Silicon M 系列 `arm64` 專屬最佳化）** 打造的開源壓縮與解壓縮工作台。它將 Windows 經典封存工具（7-Zip / WinZip / Bandizip）的高效操作邏輯融入 macOS 26 原生 **Liquid Glass 液態玻璃** 體驗，徹底告別雙擊就將檔案全數釋放一地的困擾。
 
-> 💡 **Intel Mac 或 macOS 12–15 使用者**：長期相容版本 **v0.9.1 Universal (`arm64 + x86_64`)** 維護於 [`legacy/macos-12`](../../tree/legacy/macos-12) 分支與 `v0.9.1` 標籤。
+> 💡 **Intel Mac 或 macOS 12–15 使用者**：長期相容版本 **v0.9.2 Universal (`arm64 + x86_64`)** 維護於 [`legacy/macos-12`](../../tree/legacy/macos-12) 分支與 `v0.9.2` 標籤。
 
 > [!IMPORTANT]
 > **目前活躍開發分支：[GitHub 預設 `dev-*` 分支](../../)** · `main` 分支僅供穩定版發佈使用且已受保護。提交程式碼或 PR 請務必保持指向目前預設開發分支，詳見 [CONTRIBUTING.md](CONTRIBUTING.md)。
