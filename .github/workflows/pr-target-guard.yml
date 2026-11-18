@@ -1,0 +1,69 @@
+name: Guard Main Branch PR Target
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types: [opened, reopened, edited]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  pr-target-guard:
+    name: Enforce active dev branch target
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR targeting main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_PATH: ${{ github.event_path }}
+        run: |
+          set -euo pipefail
+
+          REPO=$(jq -r '.repository.full_name' "$EVENT_PATH")
+          OWNER=$(jq -r '.repository.owner.login' "$EVENT_PATH")
+          DEFAULT_BRANCH=$(jq -r '.repository.default_branch' "$EVENT_PATH")
+          PR_NUMBER=$(jq -r '.pull_request.number' "$EVENT_PATH")
+          HEAD_REPO=$(jq -r '.pull_request.head.repo.full_name // ""' "$EVENT_PATH")
+          HEAD_REF=$(jq -r '.pull_request.head.ref' "$EVENT_PATH")
+          AUTHOR=$(jq -r '.pull_request.user.login' "$EVENT_PATH")
+
+          echo "PR #${PR_NUMBER}: ${HEAD_REPO}:${HEAD_REF} by @${AUTHOR} -> main (default dev branch: ${DEFAULT_BRANCH})"
+
+          if [[ "$HEAD_REPO" == "$REPO" ]] && { [[ "$HEAD_REF" == "$DEFAULT_BRANCH" ]] || [[ "$HEAD_REF" == dev-* ]] || [[ "$HEAD_REF" == release/* ]]; }; then
+            echo "Allowed: release/dev PR from same repository."
+            exit 0
+          fi
+
+          if [[ "$AUTHOR" == "$OWNER" ]]; then
+            echo "Allowed: PR opened by repository owner (@${OWNER})."
+            exit 0
+          fi
+
+          MARKER="<!-- boltzip-pr-target-guard -->"
+          EXISTING_COMMENTS=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --jq '.[].body' || true)
+          if [[ "$EXISTING_COMMENTS" != *"$MARKER"* ]]; then
+            BODY=$(cat <<EOF
+          ${MARKER}
+          ⚠️ **请将此 PR 的目标分支调整为当前活跃开发分支 \`${DEFAULT_BRANCH}\`**
+
+          \`main\` 是 **BoltZip** 的受保护稳定发布分支，不直接接收外部功能或修复 PR。请切换到当前活跃开发分支 **\`${DEFAULT_BRANCH}\`**（仓库默认分支）重新提交 PR，详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+          ---
+
+          ⚠️ **Please target \`${DEFAULT_BRANCH}\` instead of \`main\`**
+
+          \`main\` is BoltZip's protected release-only branch. Active development happens on **\`${DEFAULT_BRANCH}\`** (the repository's default branch). Please reopen your PR targeting **\`${DEFAULT_BRANCH}\`** — thank you!
+          EOF
+          )
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$BODY"
+          fi
+
+          PR_STATE=$(jq -r '.pull_request.state' "$EVENT_PATH")
+          if [[ "$PR_STATE" == "open" ]]; then
+            gh pr close "$PR_NUMBER" --repo "$REPO"
+          fi
+
+          echo "::error::PRs targeting main are restricted to release merges from ${DEFAULT_BRANCH}. Please target ${DEFAULT_BRANCH}."
+          exit 1

@@ -19,6 +19,9 @@
 
 > 💡 **Using Intel Mac or macOS 12–15?** Download **v0.9.1 Universal (`arm64` + `x86_64`)** from the [`legacy/macos-12`](../../tree/legacy/macos-12) branch / `v0.9.1` release tag.
 
+> [!IMPORTANT]
+> **Active Development Branch: `dev-1.0.1`** (default branch) · `main` is a protected release-only branch. Please target **`dev-1.0.1`** for all pull requests — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## ✨ Highlights
 
 - **Auto-Remove `.DS_Store` & macOS Junk**: Automatically strips `.DS_Store`, `__MACOSX`, `._*`, `.Spotlight-V100`, and `.Trashes` during archive creation, in-place ZIP additions, and extraction—keeping archives clean for Windows/Linux recipients and preventing `__MACOSX` from breaking Smart Extract (opt out via `--keep-junk` in CLI or the toggle in UI).
