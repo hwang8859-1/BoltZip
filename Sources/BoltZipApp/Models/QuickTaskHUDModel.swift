@@ -615,7 +615,8 @@ final class QuickTaskHUDModel {
             let isDir = (try? first.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
             baseName = isDir ? first.lastPathComponent : first.deletingPathExtension().lastPathComponent
         } else {
-            baseName = "\(parentDir.lastPathComponent)_归档"
+            let suffix = BoltCoreLocalization.t("归档", "封存檔", "Archive", "アーカイブ")
+            baseName = "\(parentDir.lastPathComponent)_\(suffix)"
         }
         let ext = format.fileExtension
         var candidate = parentDir.appendingPathComponent("\(baseName).\(ext)")

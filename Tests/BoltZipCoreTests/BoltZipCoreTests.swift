@@ -671,4 +671,29 @@ final class BoltZipCoreTests: XCTestCase {
         }
         #endif
     }
+
+    func testCoreLocalizationAcrossSupportedLanguages() throws {
+        defer { BoltCoreLocalization.overrideLanguage = nil }
+
+        XCTAssertEqual(BoltCoreLanguage.resolve(preferredLanguages: ["ja-JP"]), .ja)
+        XCTAssertEqual(BoltCoreLanguage.resolve(preferredLanguages: ["zh-Hant-TW"]), .zhHant)
+        XCTAssertEqual(BoltCoreLanguage.resolve(preferredLanguages: ["zh-HK"]), .zhHant)
+        XCTAssertEqual(BoltCoreLanguage.resolve(preferredLanguages: ["zh-Hans-CN"]), .zhHans)
+        XCTAssertEqual(BoltCoreLanguage.resolve(preferredLanguages: ["en-US"]), .en)
+
+        BoltCoreLocalization.overrideLanguage = .en
+        XCTAssertEqual(BoltZipError.cancelled.localizedDescription, "Operation cancelled")
+        XCTAssertTrue(EncryptionMethod.aes256.displayName.contains("AES-256"))
+        XCTAssertEqual(OverwritePolicy.skip.displayName, "Skip Existing")
+
+        BoltCoreLocalization.overrideLanguage = .ja
+        XCTAssertEqual(BoltZipError.cancelled.localizedDescription, "操作がキャンセルされました")
+        XCTAssertEqual(OverwritePolicy.overwrite.displayName, "既存ファイルを上書き")
+
+        BoltCoreLocalization.overrideLanguage = .zhHant
+        XCTAssertTrue(BoltZipError.wrongPassword("secret.zip").localizedDescription.contains("密碼錯誤"))
+
+        BoltCoreLocalization.overrideLanguage = .zhHans
+        XCTAssertEqual(BoltZipError.cancelled.localizedDescription, "操作已取消")
+    }
 }

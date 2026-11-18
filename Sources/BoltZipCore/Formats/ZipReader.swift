@@ -151,7 +151,7 @@ public final class ZipReader: @unchecked Sendable {
 
         let mainSize = try accessor.mainFileSize()
         guard mainSize >= 22 else {
-            throw BoltZipError.invalidArchive("文件过小，不是有效的 ZIP 压缩包")
+            throw BoltZipError.invalidArchive(BoltCoreLocalization.t("文件过小，不是有效的 ZIP 压缩包", "檔案過小，不是有效的 ZIP 封存檔", "File is too small to be a valid ZIP archive", "ファイルサイズが小さすぎるため有効な ZIP 書庫ではありません"))
         }
 
         let tailLen = Int(min(mainSize, UInt64(22 + 65535)))
@@ -172,7 +172,7 @@ public final class ZipReader: @unchecked Sendable {
         }
 
         guard let eocdPos = eocdPosInTail else {
-            throw BoltZipError.invalidArchive("未找到 ZIP 中央目录结束标记 (EOCD)")
+            throw BoltZipError.invalidArchive(BoltCoreLocalization.t("未找到 ZIP 中央目录结束标记 (EOCD)", "找不到 ZIP 中央目錄結尾標記 (EOCD)", "ZIP End of Central Directory (EOCD) record not found", "ZIP セントラルディレクトリ終端 (EOCD) が見つかりません"))
         }
 
         let diskNumber = Int(ZipBinary.readUInt16LE(tail, at: eocdPos + 4))
@@ -197,7 +197,7 @@ public final class ZipReader: @unchecked Sendable {
                 let z64Offset = ZipBinary.readUInt64LE(locData, at: 8)
                 let (z64Header, _, _) = try accessor.readSpanning(disk: z64Disk, offset: z64Offset, length: 56)
                 guard ZipBinary.readUInt32LE(z64Header, at: 0) == ZipSignature.zip64EOCD else {
-                    throw BoltZipError.invalidArchive("ZIP64 EOCD 签名无效")
+                    throw BoltZipError.invalidArchive(BoltCoreLocalization.t("ZIP64 EOCD 签名无效", "ZIP64 EOCD 簽章無效", "Invalid ZIP64 EOCD signature", "ZIP64 EOCD シグネチャが無効です"))
                 }
                 cdStartDisk = Int(ZipBinary.readUInt32LE(z64Header, at: 20))
                 totalEntries = ZipBinary.readUInt64LE(z64Header, at: 32)
@@ -214,7 +214,7 @@ public final class ZipReader: @unchecked Sendable {
         while pos + 46 <= cdBytes.count {
             let sig = ZipBinary.readUInt32LE(cdBytes, at: pos)
             guard sig == ZipSignature.centralDirectoryHeader else {
-                throw BoltZipError.invalidArchive("ZIP 中央目录记录签名无效")
+                throw BoltZipError.invalidArchive(BoltCoreLocalization.t("ZIP 中央目录记录签名无效", "ZIP 中央目錄紀錄簽章無效", "Invalid ZIP central directory signature", "ZIP セントラルディレクトリ記録のシグネチャが無効です"))
             }
 
             let flags = ZipBinary.readUInt16LE(cdBytes, at: pos + 8)
@@ -233,7 +233,7 @@ public final class ZipReader: @unchecked Sendable {
 
             pos += 46
             guard pos + nameLen + extraLen + commentFieldLen <= cdBytes.count else {
-                throw BoltZipError.invalidArchive("ZIP 中央目录长度越界")
+                throw BoltZipError.invalidArchive(BoltCoreLocalization.t("ZIP 中央目录长度越界", "ZIP 中央目錄長度越界", "ZIP central directory entry exceeds bounds", "ZIP セントラルディレクトリ長が範囲外です"))
             }
 
             let rawPath = cdBytes.subdata(in: pos..<(pos + nameLen))
@@ -339,7 +339,7 @@ public final class ZipReader: @unchecked Sendable {
             length: 30
         )
         guard ZipBinary.readUInt32LE(lh, at: 0) == ZipSignature.localFileHeader else {
-            throw BoltZipError.invalidArchive("ZIP 本地文件头签名损坏")
+            throw BoltZipError.invalidArchive(BoltCoreLocalization.t("ZIP 本地文件头签名损坏", "ZIP 本機檔案標頭簽章損毀", "Corrupted ZIP local file header signature", "ZIP ローカルファイルヘッダのシグネチャが破損しています"))
         }
         let localNameLen = Int(ZipBinary.readUInt16LE(lh, at: 26))
         let localExtraLen = Int(ZipBinary.readUInt16LE(lh, at: 28))
@@ -434,9 +434,15 @@ public final class ZipReader: @unchecked Sendable {
         if !skipCRC32 {
             let computed = CompressionCodec.crc32(plaintext)
             if computed != record.crc32 {
+                let fmt = BoltCoreLocalization.t(
+                    "CRC32 不匹配 (期望 0x%08X，实际 0x%08X)",
+                    "CRC32 不符 (預期 0x%08X，實際 0x%08X)",
+                    "CRC32 mismatch (expected 0x%08X, actual 0x%08X)",
+                    "CRC32 が一致しません (期待値 0x%08X, 実測値 0x%08X)"
+                )
                 throw BoltZipError.corruptedEntry(
                     entry: entryPath,
-                    detail: String(format: "CRC32 不匹配 (期望 0x%08X，实际 0x%08X)", record.crc32, computed)
+                    detail: String(format: fmt, record.crc32, computed)
                 )
             }
         }
@@ -474,16 +480,29 @@ public final class ZipReader: @unchecked Sendable {
 
             if entry.isDirectory {
                 kind = .passed
-                itemResult = IntegrityEntryResult(path: entry.path, status: .passed, detail: "目录条目正常")
+                itemResult = IntegrityEntryResult(
+                    path: entry.path,
+                    status: .passed,
+                    detail: BoltCoreLocalization.t("目录条目正常", "目錄項目正常", "Directory entry OK", "フォルダ項目正常")
+                )
             } else {
                 do {
                     _ = try self.decodePayload(record: record, entryPath: entry.path, accessor: accessor, password: password)
                     kind = .passed
-                    let detail = entry.isEncrypted ? "解密与 HMAC/CRC 校验通过" : String(format: "CRC32 校验通过 (0x%08X)", entry.crc32)
+                    let detail = entry.isEncrypted
+                        ? BoltCoreLocalization.t("解密与 HMAC/CRC 校验通过", "解密與 HMAC/CRC 驗證通過", "Decryption & HMAC/CRC verified", "復号および HMAC/CRC 検証に合格")
+                        : String(
+                            format: BoltCoreLocalization.t("CRC32 校验通过 (0x%08X)", "CRC32 驗證通過 (0x%08X)", "CRC32 OK (0x%08X)", "CRC32 正常 (0x%08X)"),
+                            entry.crc32
+                        )
                     itemResult = IntegrityEntryResult(path: entry.path, status: .passed, detail: detail)
                 } catch BoltZipError.passwordRequired {
                     kind = .missingPw
-                    itemResult = IntegrityEntryResult(path: entry.path, status: .missingPassword, detail: "已加密，需要密码")
+                    itemResult = IntegrityEntryResult(
+                        path: entry.path,
+                        status: .missingPassword,
+                        detail: BoltCoreLocalization.t("已加密，需要密码", "已加密，需要密碼", "Encrypted, password required", "暗号化されています（パスワードが必要）")
+                    )
                 } catch {
                     kind = .failed
                     itemResult = IntegrityEntryResult(path: entry.path, status: .failed, detail: error.localizedDescription)
@@ -508,7 +527,12 @@ public final class ZipReader: @unchecked Sendable {
             ))
         }
 
-        progress?(OperationProgress(fractionCompleted: 1.0, currentItem: "校验完成", processedBytes: UInt64(total), totalBytes: UInt64(total)))
+        progress?(OperationProgress(
+            fractionCompleted: 1.0,
+            currentItem: BoltCoreLocalization.t("校验完成", "驗證完成", "Verification complete", "検証完了"),
+            processedBytes: UInt64(total),
+            totalBytes: UInt64(total)
+        ))
 
         let finalState = stateLock.withLock { $0 }
         return IntegrityReport(

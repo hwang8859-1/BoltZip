@@ -382,7 +382,12 @@ public enum ZipWriter {
         for rootURL in inputURLs {
             var isDirObj: ObjCBool = false
             guard fm.fileExists(atPath: rootURL.path, isDirectory: &isDirObj) else {
-                throw BoltZipError.ioError("找不到文件或文件夹：\(rootURL.path)")
+                throw BoltZipError.ioError(BoltCoreLocalization.t(
+                    "找不到文件或文件夹：\(rootURL.path)",
+                    "找不到檔案或資料夾：\(rootURL.path)",
+                    "File or folder not found: \(rootURL.path)",
+                    "ファイルまたはフォルダが見つかりません: \(rootURL.path)"
+                ))
             }
 
             let rootName = rootURL.lastPathComponent

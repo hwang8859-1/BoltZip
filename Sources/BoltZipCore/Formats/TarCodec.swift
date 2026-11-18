@@ -143,8 +143,9 @@ public enum TarCodec {
     public static func testIntegrity(at url: URL, format: ArchiveFormat) throws -> IntegrityReport {
         let start = CFAbsoluteTimeGetCurrent()
         let entries = try listEntries(at: url, format: format)
+        let okDetail = BoltCoreLocalization.t("流解码与校验和通过", "串流解碼與校驗和通過", "Stream decode & checksum passed", "ストリームデコード・チェックサム正常")
         let results = entries.map {
-            IntegrityEntryResult(path: $0.path, status: .passed, detail: "流解码与校验和通过")
+            IntegrityEntryResult(path: $0.path, status: .passed, detail: okDetail)
         }
         return IntegrityReport(
             archiveName: url.lastPathComponent,
@@ -270,7 +271,7 @@ public enum TarCodec {
             let payloadLen = Int(sizeVal)
             let paddedLen = ((payloadLen + blockSize - 1) / blockSize) * blockSize
             guard offset + payloadLen <= data.count else {
-                throw BoltZipError.invalidArchive("TAR 数据块提前结束")
+                throw BoltZipError.invalidArchive(BoltCoreLocalization.t("TAR 数据块提前结束", "TAR 資料區塊提前結束", "Unexpected EOF in TAR data block", "TAR データブロックが途中で終了しました"))
             }
             let payload = data.subdata(in: offset..<(offset + payloadLen))
             offset = min(data.count, offset + paddedLen)

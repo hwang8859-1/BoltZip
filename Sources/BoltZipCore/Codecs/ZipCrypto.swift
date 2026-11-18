@@ -35,7 +35,7 @@ public enum ZipCrypto {
             SecRandomCopyBytes(kSecRandomDefault, strength.saltLength, buf.baseAddress!)
         }
         guard secStatus == errSecSuccess else {
-            throw BoltZipError.compressionFailed("无法生成加密随机盐")
+            throw BoltZipError.compressionFailed(BoltCoreLocalization.t("无法生成加密随机盐", "無法產生加密隨機鹽", "Failed to generate random encryption salt", "暗号化ソルトの生成に失敗しました"))
         }
 
         let (encKey, authKey, pwVerify) = try deriveWinZipAESKeys(
@@ -63,7 +63,7 @@ public enum ZipCrypto {
     ) throws -> Data {
         let minOverhead = strength.saltLength + 2 + 10
         guard payload.count >= minOverhead else {
-            throw BoltZipError.corruptedEntry(entry: entryName, detail: "AES 加密数据长度不足")
+            throw BoltZipError.corruptedEntry(entry: entryName, detail: BoltCoreLocalization.t("AES 加密数据长度不足", "AES 加密資料長度不足", "AES encrypted payload is truncated", "AES 暗号化データの長さが不足しています"))
         }
 
         let salt = payload.prefix(strength.saltLength)
@@ -83,7 +83,7 @@ public enum ZipCrypto {
 
         let computedTag = Data(HMAC<Insecure.SHA1>.authenticationCode(for: ciphertext, using: SymmetricKey(data: authKey))).prefix(10)
         guard constantTimeEqual(authTag, computedTag) else {
-            throw BoltZipError.corruptedEntry(entry: entryName, detail: "AES HMAC-SHA1 完整性校验未通过")
+            throw BoltZipError.corruptedEntry(entry: entryName, detail: BoltCoreLocalization.t("AES HMAC-SHA1 完整性校验未通过", "AES HMAC-SHA1 完整性驗證未通過", "AES HMAC-SHA1 integrity verification failed", "AES HMAC-SHA1 の整合性検証に失敗しました"))
         }
 
         return try aesCTRTransform(data: ciphertext, key: encKey)
@@ -119,7 +119,7 @@ public enum ZipCrypto {
             }
         }
         guard rc == kCCSuccess else {
-            throw BoltZipError.compressionFailed("PBKDF2 密钥派生失败 (\(rc))")
+            throw BoltZipError.compressionFailed(BoltCoreLocalization.t("PBKDF2 密钥派生失败 (\(rc))", "PBKDF2 金鑰衍生失敗 (\(rc))", "PBKDF2 key derivation failed (\(rc))", "PBKDF2 鍵導出に失敗しました (\(rc))"))
         }
 
         let encKey = derived.subdata(in: 0..<keyLength)
@@ -145,7 +145,7 @@ public enum ZipCrypto {
             )
         }
         guard status == kCCSuccess, let cryptorRef = cryptor else {
-            throw BoltZipError.compressionFailed("无法初始化 AES-CTR 加密器")
+            throw BoltZipError.compressionFailed(BoltCoreLocalization.t("无法初始化 AES-CTR 加密器", "無法初始化 AES-CTR 加密器", "Failed to initialize AES-CTR cipher", "AES-CTR 暗号化器の初期化に失敗しました"))
         }
         defer { CCCryptorRelease(cryptorRef) }
 
@@ -244,7 +244,7 @@ public enum ZipCrypto {
         var header = [UInt8](repeating: 0, count: 12)
         let sec = SecRandomCopyBytes(kSecRandomDefault, 11, &header)
         guard sec == errSecSuccess else {
-            throw BoltZipError.compressionFailed("无法生成 ZipCrypto 随机数")
+            throw BoltZipError.compressionFailed(BoltCoreLocalization.t("无法生成 ZipCrypto 随机数", "無法產生 ZipCrypto 隨機數", "Failed to generate ZipCrypto random header", "ZipCrypto 乱数ヘッダの生成に失敗しました"))
         }
         header[11] = UInt8((crc32 >> 24) & 0xFF)
 
@@ -271,7 +271,7 @@ public enum ZipCrypto {
         entryName: String
     ) throws -> Data {
         guard payload.count >= 12 else {
-            throw BoltZipError.corruptedEntry(entry: entryName, detail: "ZipCrypto 数据头部不完整")
+            throw BoltZipError.corruptedEntry(entry: entryName, detail: BoltCoreLocalization.t("ZipCrypto 数据头部不完整", "ZipCrypto 資料標頭不完整", "Incomplete ZipCrypto encryption header", "ZipCrypto データヘッダが不完全です"))
         }
 
         var state = ZipCryptoState(password: password)

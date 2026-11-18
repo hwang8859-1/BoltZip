@@ -125,7 +125,7 @@ public enum BoltArchiveEngine {
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
         guard ArchiveFormat.detect(from: archiveURL) == .zip else {
-            throw BoltZipError.unsupportedFormat("仅 ZIP 格式支持包内原地增删改")
+            throw BoltZipError.unsupportedFormat(BoltCoreLocalization.t("仅 ZIP 格式支持包内原地增删改", "僅 ZIP 格式支援封存檔內原地編輯", "In-place editing is only supported for ZIP archives", "書庫内での直接編集は ZIP 形式のみ対応しています"))
         }
         try ZipWriter.editArchive(at: archiveURL, operations: operations, options: options, encoding: encoding, progress: progress)
     }

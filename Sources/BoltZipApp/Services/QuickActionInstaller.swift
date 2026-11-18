@@ -1,3 +1,4 @@
+import BoltZipCore
 import FinderSync
 import Foundation
 
@@ -63,7 +64,12 @@ enum QuickActionInstaller {
             throw NSError(
                 domain: "BoltZip",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "未找到 BoltZipFinderSync.appex，请先运行 ./Scripts/build_app.sh 构建应用包"]
+                userInfo: [NSLocalizedDescriptionKey: BoltCoreLocalization.t(
+                    "未找到 BoltZipFinderSync.appex，请先运行 ./Scripts/build_app.sh 构建应用包",
+                    "找不到 BoltZipFinderSync.appex，請先執行 ./Scripts/build_app.sh 建置應用程式套件",
+                    "BoltZipFinderSync.appex not found. Please run ./Scripts/build_app.sh first.",
+                    "BoltZipFinderSync.appex が見つかりません。先に ./Scripts/build_app.sh を実行してください。"
+                )]
             )
         }
 
