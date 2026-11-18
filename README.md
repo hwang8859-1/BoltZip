@@ -8,14 +8,14 @@
 
 ![macOS 12.0+](https://img.shields.io/badge/macOS-12.0%E2%80%9326%20(Universal)-0ea5e9?style=flat-square)
 ![Swift 6](https://img.shields.io/badge/Swift-6.0-6366f1?style=flat-square)
-![Release v0.9.1](https://img.shields.io/badge/release-v0.9.1-facc15?style=flat-square)
+![Release v0.9.2](https://img.shields.io/badge/release-v0.9.2-facc15?style=flat-square)
 ![License MIT](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)
 
 </div>
 
 ---
 
-**BoltZip v0.9.1** 是面向 **macOS 12 Monterey ~ macOS 26+（Universal：`arm64` + Intel `x86_64`）** 的开源长期兼容性分支（新特性主线 `main` 自 `v1.0.0` 起专攻 Apple Silicon + macOS 26+）。它融合了 Windows 经典压缩工具（7-Zip / WinZip / Bandizip）的高效交互与 macOS 原生体验（macOS 26+ 启用 **Liquid Glass 液态玻璃**，macOS 12–15 自动禁用玻璃效果并回退为原生纯色卡片），告别双击即全量解压一地的传统体验。
+**BoltZip v0.9.2** 是面向 **macOS 12 Monterey ~ macOS 26+（Universal：`arm64` + Intel `x86_64`）** 的开源长期兼容性分支（新特性主线 `main` 自 `v1.0.0` 起专攻 Apple Silicon + macOS 26+）。它融合了 Windows 经典压缩工具（7-Zip / WinZip / Bandizip）的高效交互与 macOS 原生体验（macOS 26+ 启用 **Liquid Glass 液态玻璃**，macOS 12–15 自动禁用玻璃效果并回退为原生纯色卡片），告别双击即全量解压一地的传统体验。
 
 ## ✨ 核心特性
 
@@ -61,7 +61,7 @@ swift run -c release boltzip x release.zip ./out --mode smart
 
 ## 🧩 展示页面与开发者指引
 
-- **在线产品展示与下载页**：访问公网展示站 [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/)，即可在线体验交互式界面模拟器、多语言切换、算法对比面板，并直接下载 `BoltZip v0.9.1 Universal` 安装包、源代码归档与 SHA-256 校验清单（仓库源码位于 [showcase/](showcase/)）。
+- **在线产品展示与下载页**：访问公网展示站 [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/)，即可在线体验交互式界面模拟器、多语言切换、算法对比面板，并直接下载 `BoltZip v0.9.2 Universal` 安装包、源代码归档与 SHA-256 校验清单（仓库源码位于 [showcase/](showcase/)）。
 - **AI Agent 与二次开发指引**：请参阅 [AGENTS.md](AGENTS.md)，了解模块划分、加密/分卷协议不变量及代码贡献规范。
 - **版本更新记录**：请参阅 [CHANGELOG.md](CHANGELOG.md)。
 

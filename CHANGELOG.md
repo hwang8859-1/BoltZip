@@ -2,6 +2,16 @@
 
 All notable changes to **BoltZip** will be documented in this file.
 
+## [0.9.2] - 2026-11-18
+
+### Fixed (`legacy/macos-12` Universal Compatibility Hotfix)
+- **macOS 12 / 13 Startup `SIGTRAP` Fix**:
+  - Deferred `NSApp` / `BoltAppIconRenderer.apply` / `pluginkit` status queries out of `WorkspaceViewModel.init()` (which runs during SwiftUI's `@NSApplicationDelegateAdaptor` creation before `NSApp` is populated on macOS 12/13) into `BoltZipAppDelegate.applicationWillFinishLaunching` / `applicationDidFinishLaunching`.
+  - Replaced unguarded `NSApp` accesses in [`WorkspaceViewModel.swift`](Sources/BoltZipApp/Models/WorkspaceViewModel.swift), [`MainMenuManager.swift`](Sources/BoltZipApp/App/MainMenuManager.swift), [`AppIconRenderer.swift`](Sources/BoltZipApp/Services/AppIconRenderer.swift), [`ArchiveExplorerView.swift`](Sources/BoltZipApp/Views/Explorer/ArchiveExplorerView.swift), [`AboutView.swift`](Sources/BoltZipApp/Views/Sheets/AboutView.swift), and [`SettingsView.swift`](Sources/BoltZipApp/Views/Sheets/SettingsView.swift) with safe optional casts `(NSApp as NSApplication?)`.
+- **macOS 12–15 Compatibility Hardening**:
+  - Added `UTImportedTypeDeclarations` for `.7z`, `.zst`/`.tar.zst`, `.xz`/`.tar.xz`, and `.lz4`/`.tar.lz4` in [`Scripts/build_app.sh`](Scripts/build_app.sh) alongside dynamic `UTType(filenameExtension:)` fallback in [`DefaultArchiveAssociationService.swift`](Sources/BoltZipApp/Services/DefaultArchiveAssociationService.swift) so clean macOS 12–15 installations resolve default archive associations cleanly.
+  - Added bounds guarding to `QuickLookPreviewController.previewPanel(_:previewItemAt:)`, modifier-key filtering on the `< macOS 14` keyboard monitor in [`ArchiveExplorerView.swift`](Sources/BoltZipApp/Views/Explorer/ArchiveExplorerView.swift), and split SwiftUI `CommandGroup` declarations in [`BoltZipApp.swift`](Sources/BoltZipApp/App/BoltZipApp.swift) for Swift 6 `CommandsBuilder` compatibility.
+
 ## [0.9.1] - 2026-11-18
 
 ### Added & Improved (`legacy/macos-12` Universal Compatibility Release)

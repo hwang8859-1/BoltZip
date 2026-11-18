@@ -8,14 +8,14 @@
 
 ![macOS 12.0+](https://img.shields.io/badge/macOS-12.0%E2%80%9326%20(Universal)-0ea5e9?style=flat-square)
 ![Swift 6](https://img.shields.io/badge/Swift-6.0-6366f1?style=flat-square)
-![Release v0.9.1](https://img.shields.io/badge/release-v0.9.1-facc15?style=flat-square)
+![Release v0.9.2](https://img.shields.io/badge/release-v0.9.2-facc15?style=flat-square)
 ![License MIT](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)
 
 </div>
 
 ---
 
-**BoltZip v0.9.1** は **macOS 12 Monterey 〜 macOS 26+（Universal：Apple Silicon `arm64` + Intel `x86_64`）** に対応した長期互換リリースです（新機能開発ブランチ `main` は macOS 26+ / Apple Silicon 専用となります）。7-Zip / WinZip / Bandizip など Windows 定番圧縮ソフトの軽快な操作性を取り入れ、macOS 26+ ではネイティブの **Liquid Glass** を有効化し、macOS 12–15 ではガラス効果を自動的に無効化してクリーンな標準 UI で動作します。
+**BoltZip v0.9.2** は **macOS 12 Monterey 〜 macOS 26+（Universal：Apple Silicon `arm64` + Intel `x86_64`）** に対応した長期互換リリースです（新機能開発ブランチ `main` は macOS 26+ / Apple Silicon 専用となります）。7-Zip / WinZip / Bandizip など Windows 定番圧縮ソフトの軽快な操作性を取り入れ、macOS 26+ ではネイティブの **Liquid Glass** を有効化し、macOS 12–15 ではガラス効果を自動的に無効化してクリーンな標準 UI で動作します。
 
 ## ✨ 主な特長
 
@@ -61,7 +61,7 @@ swift run -c release boltzip x release.zip ./out --mode smart
 
 ## 🧩 紹介ページ ＆ 開発者向けドキュメント
 
-- **オンライン紹介・ダウンロードページ**：公開サイト [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/) にて UI シミュレーター、圧縮エンジン比較、および `BoltZip v0.9.1 Universal` とソースコードアーカイブのダウンロードをご確認いただけます（ソースは [showcase/](showcase/) に同梱）。
+- **オンライン紹介・ダウンロードページ**：公開サイト [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/) にて UI シミュレーター、圧縮エンジン比較、および `BoltZip v0.9.2 Universal` とソースコードアーカイブのダウンロードをご確認いただけます（ソースは [showcase/](showcase/) に同梱）。
 - **AI Agent / コントリビューターガイド**：[AGENTS.md](AGENTS.md) をご覧ください。
 - **変更履歴**：[CHANGELOG.md](CHANGELOG.md) をご覧ください。
 
