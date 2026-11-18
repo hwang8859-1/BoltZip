@@ -263,7 +263,7 @@ ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$RELEASE_ZIP"
 echo "==> Creating drag-to-Applications installer DMG ($RELEASE_DMG)..."
 "$ROOT_DIR/Scripts/create_dmg.sh" "$APP_DIR" "$RELEASE_DMG" "BoltZip" "v${APP_VERSION} · Apple Silicon"
 
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && [ -z "$(git status --porcelain)" ]; then
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && [ -z "$(git status --porcelain --untracked-files=no)" ]; then
     echo "==> Creating clean source archives from git HEAD ($APP_VERSION)..."
     git archive --format=tar.gz --prefix="BoltZip-${APP_VERSION}/" -o "$SOURCE_TAR" HEAD
     git archive --format=zip --prefix="BoltZip-${APP_VERSION}/" -o "$SOURCE_ZIP" HEAD
@@ -278,6 +278,8 @@ else
         --exclude='.swiftpm' \
         --exclude='DerivedData' \
         --exclude='dist' \
+        --exclude='.workbuddy' \
+        --exclude='marketing' \
         --exclude='.DS_Store' \
         --exclude='._*' \
         "$ROOT_DIR/" "$STAGE_SRC/BoltZip-${APP_VERSION}/"
