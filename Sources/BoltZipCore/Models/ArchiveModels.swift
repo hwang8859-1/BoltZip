@@ -97,9 +97,9 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
 
         let ext = url.pathExtension.lowercased()
         switch ext {
-        case "zip", "zipx": return .zip
-        case "rar": return .rar
-        case "7z": return .sevenZip
+        case "zip", "zipx", "cbz": return .zip
+        case "rar", "cbr": return .rar
+        case "7z", "cb7": return .sevenZip
         case "tar": return .tar
         case "gz": return .gz
         case "zst", "zstd": return .zst

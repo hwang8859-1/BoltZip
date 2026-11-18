@@ -9,7 +9,7 @@ struct MainWindowView: View {
 
     var body: some View {
         let l = vm.l10n
-        let minW: CGFloat = vm.listing == nil ? 350 : 540
+        let minW: CGFloat = vm.listing == nil ? 350 : 560
         let minH: CGFloat = vm.listing == nil ? 270 : 320
 
         Group {
@@ -184,10 +184,11 @@ struct MainWindowView: View {
                         ToolbarPillIconButton(
                             systemImage: "arrow.down.doc.fill",
                             label: l.smartExtract,
-                            helpText: l.smartExtract
+                            helpText: l.smartExtractShortcutHint
                         ) {
                             vm.triggerSmartExtractNow()
                         }
+                        .keyboardShortcut("e", modifiers: .command)
 
                         ToolbarPillIconButton(
                             systemImage: "square.and.arrow.down.on.square",
@@ -215,6 +216,26 @@ struct MainWindowView: View {
                                 vm.activeSheet = .createFolder(parentFolder: vm.currentFolder)
                             }
                         }
+
+                        toolbarDivider
+
+                        ToolbarPillIconButton(
+                            systemImage: "checkmark.shield",
+                            label: l.verify,
+                            helpText: l.verify
+                        ) {
+                            vm.testIntegrity()
+                        }
+
+                        ToolbarPillIconButton(
+                            systemImage: "info.circle",
+                            label: l.inspectorButton,
+                            helpText: l.inspectorButton,
+                            isActive: vm.showSidebarInspector && vm.columnVisibility != .detailOnly
+                        ) {
+                            toggleExplorerInspector()
+                        }
+                        .keyboardShortcut("i", modifiers: .command)
                     }
                     .padding(.horizontal, 5)
                     .frame(height: 30)
@@ -279,6 +300,17 @@ struct MainWindowView: View {
             .fill(Color.primary.opacity(0.14))
             .frame(width: 1, height: 14)
             .padding(.horizontal, 3)
+    }
+
+    private func toggleExplorerInspector() {
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.88)) {
+            if vm.columnVisibility == .detailOnly {
+                vm.columnVisibility = .all
+                vm.showSidebarInspector = true
+            } else {
+                vm.showSidebarInspector.toggle()
+            }
+        }
     }
 
     private func closeActiveArchiveOrWindow() {

@@ -119,21 +119,36 @@ struct L10n: Sendable {
     var newCompress: String { t("新建", "新增", "Compress", "新規圧縮") }
     var open: String { t("打开", "開啟", "Open", "開く") }
     var smartExtract: String { t("智能解压", "智慧解壓", "Smart Extract", "スマート展開") }
+    var smartExtractShortcutHint: String { t("智能解压 (⌘E)", "智慧解壓 (⌘E)", "Smart Extract (⌘E)", "スマート展開 (⌘E)") }
     var extractTo: String { t("解压到...", "解壓至...", "Extract...", "展開先を指定...") }
     var addInside: String { t("添加", "加入", "Add", "追加") }
     var newFolder: String { t("新建目录", "新增資料夾", "New Folder", "新規フォルダ") }
     var delete: String { t("删除", "刪除", "Delete", "削除") }
     var verify: String { t("校验", "驗證", "Verify", "整合性検証") }
+    var inspectorButton: String { t("显示/隐藏简介 (⌘I)", "顯示/隱藏簡介 (⌘I)", "Toggle Inspector (⌘I)", "インスペクタ表示切替 (⌘I)") }
     var layoutMenuTitle: String { t("界面与透明度", "介面與透明度", "Appearance", "表示・透過設定") }
 
     var folderTreeSection: String { t("目录结构", "目錄結構", "Folders", "フォルダ構成") }
     var rootLabel: String { t("根目录", "根目錄", "Root", "ルート") }
     var encryptedBadge: String { t("已加密", "已加密", "Encrypted", "暗号化") }
+    var unencryptedLabel: String { t("未加密", "未加密", "Unencrypted", "暗号化なし") }
     var totalEntries: String { t("条目总数", "項目總數", "Entries", "総項目数") }
     var originalSize: String { t("原始大小", "原始大小", "Original", "元のサイズ") }
     var packedSize: String { t("压缩后", "壓縮後", "Packed", "圧縮後") }
     var spaceSaved: String { t("节省空间", "節省空間", "Saved", "削減率") }
     var filenameEncoding: String { t("文件名编码", "檔名編碼", "Encoding", "文字コード") }
+    var selectedItemTitle: String { t("选中条目", "選取項目", "Selected Item", "選択中の項目") }
+    func selectedMultiTitle(_ count: Int) -> String {
+        t("已选 \(count) 项", "已選 \(count) 項", "\(count) Selected", "\(count) 項目選択中")
+    }
+    var inspectorFolderType: String { t("文件夹", "資料夾", "Folder", "フォルダ") }
+    var inspectorGenericFile: String { t("文件", "檔案", "File", "ファイル") }
+    func inspectorFileExt(_ ext: String) -> String {
+        t("\(ext) 文件", "\(ext) 檔案", "\(ext) File", "\(ext) ファイル")
+    }
+    var quickLookShort: String { t("预览", "預覽", "Quick Look", "プレビュー") }
+    var extractSelectedShort: String { t("解压选中项", "解壓選取項目", "Extract Selected", "選択を展開") }
+    var moreDetailsShort: String { t("详情…", "詳細資訊…", "Details…", "詳細…") }
     var searchPlaceholder: String { t("搜索目录...", "搜尋目錄...", "Search...", "検索...") }
 
     // MARK: - Table Columns & Drop Hint

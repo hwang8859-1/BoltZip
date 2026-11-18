@@ -636,4 +636,32 @@ final class BoltZipCoreTests: XCTestCase {
             XCTAssertGreaterThan(r.decompressMBps, 0)
         }
     }
+
+    func testComicArchiveDetectionAndAssociationGroupMetadata() throws {
+        XCTAssertEqual(ArchiveFormat.detect(from: URL(fileURLWithPath: "/tmp/issue1.cbz")), .zip)
+        XCTAssertEqual(ArchiveFormat.detect(from: URL(fileURLWithPath: "/tmp/issue2.cbr")), .rar)
+        XCTAssertEqual(ArchiveFormat.detect(from: URL(fileURLWithPath: "/tmp/issue3.cb7")), .sevenZip)
+
+        let pageURL = tempDir.appendingPathComponent("page01.txt")
+        try Data("Comic page 1".utf8).write(to: pageURL)
+        let cbzURL = tempDir.appendingPathComponent("comic.cbz")
+        try BoltArchiveEngine.createArchive(
+            from: [pageURL],
+            to: cbzURL,
+            options: CreateArchiveOptions(format: .zip, algorithm: .deflate)
+        )
+        let listing = try BoltArchiveEngine.inspect(archiveURL: cbzURL)
+        XCTAssertEqual(listing.format, .zip)
+        XCTAssertEqual(listing.entries.map(\.name), ["page01.txt"])
+
+        #if canImport(AppKit) && canImport(UniformTypeIdentifiers)
+        XCTAssertFalse(ArchiveAssociationGroup.commonArchiveGroups.contains(.iso))
+        XCTAssertTrue(ArchiveAssociationGroup.commonArchiveGroups.contains(.zip))
+        XCTAssertTrue(ArchiveAssociationGroup.commonArchiveGroups.contains(.sevenZip))
+        for group in ArchiveAssociationGroup.allCases {
+            XCTAssertFalse(group.utTypeIdentifiers.isEmpty, "Expected UTI identifiers for \(group.rawValue)")
+            XCTAssertNotNil(group.primaryUTType, "Expected resolved UTType for \(group.rawValue)")
+        }
+        #endif
+    }
 }

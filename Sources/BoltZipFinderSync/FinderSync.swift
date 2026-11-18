@@ -5,9 +5,9 @@ import Foundation
 @objc(FinderSync)
 final class FinderSync: FIFinderSync {
     private static let archiveExtensions: Set<String> = [
-        "zip", "zipx", "z01", "rar", "r00", "r01", "7z", "tar", "gz", "tgz",
-        "zst", "zstd", "tzst", "xz", "txz", "lzma", "bz2", "tbz2", "tbz",
-        "lz4", "tlz4", "iso", "cab", "xar", "pkg"
+        "zip", "zipx", "z01", "cbz", "rar", "r00", "r01", "cbr", "7z", "cb7",
+        "tar", "gz", "gzip", "tgz", "zst", "zstd", "tzst", "xz", "txz", "lzma",
+        "bz2", "bzip2", "tbz2", "tbz", "lz4", "tlz4", "iso", "cab", "xar", "pkg"
     ]
 
     override init() {

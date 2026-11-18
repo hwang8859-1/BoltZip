@@ -136,36 +136,136 @@ cat <<PLIST > "$CONTENTS/Info.plist"
     <array>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Archive File</string>
+            <string>ZIP Archive</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
             <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.zip-archive</string>
+                <string>com.pkware.zip-archive</string>
+            </array>
             <key>CFBundleTypeExtensions</key>
             <array>
                 <string>zip</string>
                 <string>zipx</string>
                 <string>z01</string>
+                <string>cbz</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>RAR Archive</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.rarlab.rar-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>rar</string>
                 <string>r00</string>
+                <string>r01</string>
+                <string>cbr</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>7-Zip Archive</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>org.7-zip.7-zip-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>7z</string>
+                <string>cb7</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>TAR Archive</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.tar-archive</string>
+                <string>org.gnu.gnu-zip-tar-archive</string>
+                <string>com.facebook.zstandard-tar-archive</string>
+                <string>org.tukaani.tar-xz-archive</string>
+                <string>public.tar-bzip2-archive</string>
+                <string>public.lz4-tar-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>tar</string>
-                <string>gz</string>
                 <string>tgz</string>
-                <string>zst</string>
-                <string>zstd</string>
                 <string>tzst</string>
-                <string>xz</string>
                 <string>txz</string>
-                <string>lzma</string>
-                <string>bz2</string>
                 <string>tbz2</string>
                 <string>tbz</string>
-                <string>lz4</string>
                 <string>tlz4</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Compressed Stream Archive</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>org.gnu.gnu-zip-archive</string>
+                <string>com.facebook.zstandard-archive</string>
+                <string>org.tukaani.xz-archive</string>
+                <string>public.bzip2-archive</string>
+                <string>org.lz4.lz4-archive</string>
+                <string>public.lz4-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>gz</string>
+                <string>gzip</string>
+                <string>zst</string>
+                <string>zstd</string>
+                <string>xz</string>
+                <string>lzma</string>
+                <string>bz2</string>
+                <string>bzip2</string>
+                <string>lz4</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Disk Image &amp; Package Archive</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.iso-image</string>
+                <string>com.microsoft.cab</string>
+                <string>com.microsoft.cab-archive</string>
+                <string>com.apple.xar-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>iso</string>
                 <string>cab</string>
                 <string>xar</string>
+                <string>pkg</string>
             </array>
         </dict>
     </array>
@@ -188,6 +288,26 @@ cat <<PLIST > "$CONTENTS/Info.plist"
                     <string>rar</string>
                     <string>r00</string>
                     <string>r01</string>
+                    <string>cbr</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>org.7-zip.7-zip-archive</string>
+            <key>UTTypeDescription</key>
+            <string>7-Zip Archive</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.archive</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>7z</string>
+                    <string>cb7</string>
                 </array>
             </dict>
         </dict>
@@ -207,7 +327,63 @@ cat <<PLIST > "$CONTENTS/Info.plist"
                 <array>
                     <string>zst</string>
                     <string>zstd</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.facebook.zstandard-tar-archive</string>
+            <key>UTTypeDescription</key>
+            <string>TAR + Zstandard Archive</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.archive</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
                     <string>tzst</string>
+                    <string>tar.zst</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>org.tukaani.xz-archive</string>
+            <key>UTTypeDescription</key>
+            <string>XZ / LZMA Archive</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.archive</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>xz</string>
+                    <string>lzma</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>org.tukaani.tar-xz-archive</string>
+            <key>UTTypeDescription</key>
+            <string>TAR + XZ Archive</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.archive</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>txz</string>
+                    <string>tar.xz</string>
                 </array>
             </dict>
         </dict>
@@ -226,7 +402,25 @@ cat <<PLIST > "$CONTENTS/Info.plist"
                 <key>public.filename-extension</key>
                 <array>
                     <string>lz4</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>public.lz4-tar-archive</string>
+            <key>UTTypeDescription</key>
+            <string>TAR + LZ4 Archive</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.archive</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
                     <string>tlz4</string>
+                    <string>tar.lz4</string>
                 </array>
             </dict>
         </dict>

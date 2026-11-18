@@ -130,30 +130,15 @@ struct ArchiveExplorerView: View {
 
     @ViewBuilder
     private func sidebarSummaryCard(l: L10n, glassEnabled: Bool) -> some View {
+        let selected = vm.selectedEntries
         VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text(listing.format.displayName)
-                    .font(BoltType.badge)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
-                    .boltLayeredSurface(
-                        glassEnabled: glassEnabled,
-                        tone: .regular,
-                        tint: .cyan.opacity(0.16),
-                        in: Capsule()
-                    )
-                Spacer()
-                if listing.hasEncryptedEntries {
-                    Label(l.encryptedBadge, systemImage: "lock.fill")
-                        .font(BoltType.badge)
-                        .foregroundStyle(.orange)
-                }
+            if selected.count == 1, let entry = selected.first {
+                singleEntryInspectorSection(entry: entry, l: l, glassEnabled: glassEnabled)
+            } else if selected.count > 1 {
+                multiSelectionInspectorSection(count: selected.count, l: l, glassEnabled: glassEnabled)
+            } else {
+                archiveOverviewInspectorSection(l: l, glassEnabled: glassEnabled)
             }
-
-            InfoMetricRow(label: l.totalEntries, value: l.itemCount(listing.entries.count))
-            InfoMetricRow(label: l.originalSize, value: DropHelper.formatBytes(listing.totalUncompressedBytes))
-            InfoMetricRow(label: l.packedSize, value: DropHelper.formatBytes(listing.totalCompressedBytes))
-            InfoMetricRow(label: l.spaceSaved, value: String(format: "%.1f%%", listing.overallCompressionRatioPercent))
 
             BoltSectionDivider(glassEnabled: glassEnabled)
 
@@ -180,6 +165,140 @@ struct ArchiveExplorerView: View {
             tone: .regular,
             in: RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous)
         )
+    }
+
+    @ViewBuilder
+    private func archiveOverviewInspectorSection(l: L10n, glassEnabled: Bool) -> some View {
+        HStack {
+            Text(listing.format.displayName)
+                .font(BoltType.badge)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .boltLayeredSurface(
+                    glassEnabled: glassEnabled,
+                    tone: .regular,
+                    tint: .cyan.opacity(0.16),
+                    in: Capsule()
+                )
+            Spacer()
+            if listing.hasEncryptedEntries {
+                Label(l.encryptedBadge, systemImage: "lock.fill")
+                    .font(BoltType.badge)
+                    .foregroundStyle(.orange)
+            }
+        }
+
+        InfoMetricRow(label: l.totalEntries, value: l.itemCount(listing.entries.count))
+        InfoMetricRow(label: l.originalSize, value: DropHelper.formatBytes(listing.totalUncompressedBytes))
+        InfoMetricRow(label: l.packedSize, value: DropHelper.formatBytes(listing.totalCompressedBytes))
+        InfoMetricRow(
+            label: l.spaceSaved,
+            value: String(format: "%.1f%%", listing.overallCompressionRatioPercent),
+            valueColor: .green
+        )
+    }
+
+    @ViewBuilder
+    private func singleEntryInspectorSection(entry: ArchiveEntry, l: L10n, glassEnabled: Bool) -> some View {
+        let ext = (entry.name as NSString).pathExtension.uppercased()
+        let kindLabel = entry.isDirectory
+            ? l.inspectorFolderType
+            : (ext.isEmpty ? l.inspectorGenericFile : l.inspectorFileExt(ext))
+
+        HStack(spacing: 6) {
+            Image(systemName: entry.isDirectory ? "folder.fill" : iconForFile(entry.name))
+                .font(BoltType.subbody)
+                .foregroundStyle(entry.isDirectory ? Color.accentColor : Color.cyan)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.name)
+                    .font(BoltType.captionMedium)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(kindLabel)
+                    .font(BoltType.badge)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            if entry.isEncrypted {
+                Image(systemName: "lock.fill")
+                    .font(BoltType.badge)
+                    .foregroundStyle(.orange)
+                    .help(entry.encryptionLabel)
+            }
+        }
+
+        InfoMetricRow(label: l.colOriginalSize, value: entry.isDirectory ? "—" : DropHelper.formatBytes(entry.uncompressedSize))
+        InfoMetricRow(label: l.colPackedSize, value: entry.isDirectory ? "—" : DropHelper.formatBytes(entry.compressedSize))
+        InfoMetricRow(
+            label: l.spaceSaved,
+            value: (entry.isDirectory || entry.uncompressedSize == 0) ? "—" : String(format: "%.1f%%", entry.compressionRatioPercent),
+            valueColor: (entry.isDirectory || entry.uncompressedSize == 0) ? nil : .green
+        )
+        InfoMetricRow(label: l.colMethod, value: entry.isEncrypted ? "\(entry.compressionMethodName) · \(entry.encryptionLabel)" : entry.compressionMethodName)
+        if !entry.isDirectory {
+            InfoMetricRow(label: "CRC32", value: entry.crc32 == 0 ? "0x00000000" : String(format: "0x%08X", entry.crc32))
+        }
+        InfoMetricRow(label: l.colModified, value: Self.dateFormatter.string(from: entry.modifiedDate))
+
+        HStack(spacing: 5) {
+            Button(entry.isDirectory ? l.ctxOpenFolder : l.quickLookShort) {
+                vm.previewOrOpenEntry(entry)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+
+            Button(l.extractSelectedShort) {
+                vm.quickExtract(mode: .selected([entry.id]))
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.mini)
+
+            Spacer(minLength: 0)
+
+            Button(l.moreDetailsShort) {
+                vm.activeSheet = .entryProperties(entry)
+            }
+            .buttonStyle(.plain)
+            .font(BoltType.caption)
+            .foregroundStyle(Color.accentColor)
+        }
+        .padding(.top, 2)
+    }
+
+    @ViewBuilder
+    private func multiSelectionInspectorSection(count: Int, l: L10n, glassEnabled: Bool) -> some View {
+        HStack {
+            Text(l.selectedMultiTitle(count))
+                .font(BoltType.badge)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .boltLayeredSurface(
+                    glassEnabled: glassEnabled,
+                    tone: .regular,
+                    tint: .cyan.opacity(0.18),
+                    in: Capsule()
+                )
+            Spacer()
+        }
+
+        InfoMetricRow(label: l.colOriginalSize, value: DropHelper.formatBytes(vm.selectedTotalUncompressedBytes))
+        InfoMetricRow(label: l.totalEntries, value: l.itemCount(listing.entries.count))
+
+        HStack(spacing: 6) {
+            Button(l.extractSelectedShort) {
+                vm.quickExtract(mode: .selected(vm.selectedEntryIDs))
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.mini)
+
+            Button(l.ctxExportNewZip) {
+                vm.exportSelectedAsNewZip(entryIDs: vm.selectedEntryIDs)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+            .lineLimit(1)
+        }
+        .padding(.top, 2)
     }
 
     private func sidebarResizeDivider(currentWidth: CGFloat, maxWidth: CGFloat) -> some View {

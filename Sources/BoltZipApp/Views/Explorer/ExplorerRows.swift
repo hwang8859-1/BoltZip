@@ -135,6 +135,7 @@ struct ToolbarPillIconButton: View {
     let label: String
     let helpText: String
     var isDisabled: Bool = false
+    var isActive: Bool = false
     let action: () -> Void
     @State private var isHovered = false
 
@@ -142,11 +143,19 @@ struct ToolbarPillIconButton: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(BoltType.controlIcon)
-                .foregroundStyle(isDisabled ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
-                .frame(width: 32, height: 24)
+                .foregroundStyle(
+                    isDisabled
+                        ? AnyShapeStyle(.tertiary)
+                        : (isActive ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.primary))
+                )
+                .frame(width: 29, height: 24)
                 .background(
                     Capsule()
-                        .fill(Color.primary.opacity(!isDisabled && isHovered ? 0.10 : 0.0))
+                        .fill(
+                            !isDisabled && isActive
+                                ? Color.accentColor.opacity(0.14)
+                                : Color.primary.opacity(!isDisabled && isHovered ? 0.10 : 0.0)
+                        )
                 )
                 .contentShape(Capsule())
         }
@@ -161,16 +170,20 @@ struct ToolbarPillIconButton: View {
 struct InfoMetricRow: View {
     let label: String
     let value: String
+    var valueColor: Color? = nil
 
     var body: some View {
         HStack {
             Text(label)
                 .font(BoltType.caption)
                 .foregroundStyle(.secondary)
-            Spacer()
+            Spacer(minLength: 6)
             Text(value)
                 .font(BoltType.captionMedium)
+                .foregroundStyle(valueColor ?? .primary)
                 .monospacedDigit()
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
     }
 }
