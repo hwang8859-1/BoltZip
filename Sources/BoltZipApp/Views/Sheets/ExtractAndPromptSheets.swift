@@ -3,7 +3,7 @@ import BoltZipCore
 import SwiftUI
 
 struct ExtractOptionsSheet: View {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     @Environment(\.dismiss) private var dismiss
 
     enum Choice: String, CaseIterable, Identifiable {
@@ -185,7 +185,7 @@ struct ExtractOptionsSheet: View {
 }
 
 struct PasswordPromptSheet: View {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     let purpose: PasswordPurpose
     @Environment(\.dismiss) private var dismiss
     @State private var password: String = ""
@@ -247,7 +247,7 @@ struct PasswordPromptSheet: View {
 }
 
 struct SimpleNamePromptSheet: View {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     let title: String
     let placeholder: String
     let confirmLabel: String

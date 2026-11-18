@@ -1,8 +1,7 @@
 import AppKit
 import BoltZipCore
+import Combine
 import Foundation
-import Observation
-import os
 
 private final class WeakHUDRef: @unchecked Sendable {
     weak var model: QuickTaskHUDModel?
@@ -13,7 +12,7 @@ private final class WeakHUDRef: @unchecked Sendable {
 
 /// Throttles high-frequency background `OperationProgress` updates before hopping to `@MainActor`.
 private final class ProgressThrottleGate: @unchecked Sendable {
-    private let lock = OSAllocatedUnfairLock(initialState: TimeInterval(0))
+    private let lock = BoltLockedBox(initialState: TimeInterval(0))
     private let minInterval: TimeInterval
 
     init(minInterval: TimeInterval = 1.0 / 20.0) {
@@ -33,9 +32,8 @@ private final class ProgressThrottleGate: @unchecked Sendable {
     }
 }
 
-@Observable
 @MainActor
-final class QuickTaskHUDModel {
+final class QuickTaskHUDModel: ObservableObject {
     enum Phase: Equatable {
         case idle
         case preparing
@@ -128,20 +126,20 @@ final class QuickTaskHUDModel {
 
     // MARK: - Observable UI State
 
-    private(set) var currentOperation: Operation?
-    private(set) var pendingQueue: [Operation] = []
-    private(set) var phase: Phase = .idle
+    @Published private(set) var currentOperation: Operation?
+    @Published private(set) var pendingQueue: [Operation] = []
+    @Published private(set) var phase: Phase = .idle
 
-    private(set) var fractionCompleted: Double = 0
-    private(set) var currentItem: String = ""
-    private(set) var processedBytes: UInt64 = 0
-    private(set) var totalBytes: UInt64 = 0
-    private(set) var smoothedBytesPerSec: Double = 0
-    private(set) var activeElapsedSeconds: Double = 0
-    private(set) var estimatedRemainingSeconds: Double?
+    @Published private(set) var fractionCompleted: Double = 0
+    @Published private(set) var currentItem: String = ""
+    @Published private(set) var processedBytes: UInt64 = 0
+    @Published private(set) var totalBytes: UInt64 = 0
+    @Published private(set) var smoothedBytesPerSec: Double = 0
+    @Published private(set) var activeElapsedSeconds: Double = 0
+    @Published private(set) var estimatedRemainingSeconds: Double?
 
-    var passwordInput: String = ""
-    private(set) var isHovering: Bool = false
+    @Published var passwordInput: String = ""
+    @Published private(set) var isHovering: Bool = false
 
     // MARK: - Window Coordination & Completion Hooks
 
@@ -513,7 +511,7 @@ final class QuickTaskHUDModel {
         uiTimerTask?.cancel()
         uiTimerTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(250))
+                try? await Task.sleep(nanoseconds: 250_000_000)
                 guard let self, !Task.isCancelled, self.activeGeneration == generation else { return }
                 if case .running = self.phase {
                     self.updateActiveElapsed()
@@ -583,7 +581,8 @@ final class QuickTaskHUDModel {
     private func scheduleAutoDismiss(after seconds: TimeInterval) {
         autoDismissTask?.cancel()
         autoDismissTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(Int(seconds * 1000)))
+            let ns = UInt64(max(0.05, seconds) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: ns)
             guard let self, !Task.isCancelled else { return }
             guard !self.isHovering else { return }
             switch self.phase {

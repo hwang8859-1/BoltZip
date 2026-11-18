@@ -40,11 +40,12 @@ final class ForwardingMenuDelegateProxy: NSObject, NSMenuDelegate {
     }
 }
 
-/// Target handling merged top menu bar actions (`新建压缩包`, `打开压缩包`, `关于 BoltZip`).
+/// Target handling merged top menu bar actions (`新建压缩包`, `打开压缩包`, `设置…`, `关于 BoltZip`).
 @MainActor
 final class MergedMenuActionTarget: NSObject {
     var onNewArchive: (() -> Void)?
     var onOpenArchive: (() -> Void)?
+    var onOpenSettings: (() -> Void)?
     var onOpenAbout: (() -> Void)?
 
     @objc func performNewArchive(_ sender: Any?) {
@@ -53,6 +54,10 @@ final class MergedMenuActionTarget: NSObject {
 
     @objc func performOpenArchive(_ sender: Any?) {
         onOpenArchive?()
+    }
+
+    @objc func performOpenSettings(_ sender: Any?) {
+        onOpenSettings?()
     }
 
     @objc func performOpenAbout(_ sender: Any?) {
@@ -86,6 +91,12 @@ final class MainMenuManager {
         item.target = actionTarget
         return item
     }()
+    private lazy var settingsMenuItem: NSMenuItem = {
+        let item = NSMenuItem(title: "", action: #selector(MergedMenuActionTarget.performOpenSettings(_:)), keyEquivalent: ",")
+        item.keyEquivalentModifierMask = .command
+        item.target = actionTarget
+        return item
+    }()
     private lazy var aboutItem: NSMenuItem = {
         let item = NSMenuItem(title: "", action: #selector(MergedMenuActionTarget.performOpenAbout(_:)), keyEquivalent: "")
         item.target = actionTarget
@@ -97,10 +108,12 @@ final class MainMenuManager {
     func configureActions(
         onNewArchive: @escaping () -> Void,
         onOpenArchive: @escaping () -> Void,
+        onOpenSettings: @escaping () -> Void,
         onOpenAbout: @escaping () -> Void
     ) {
         actionTarget.onNewArchive = onNewArchive
         actionTarget.onOpenArchive = onOpenArchive
+        actionTarget.onOpenSettings = onOpenSettings
         actionTarget.onOpenAbout = onOpenAbout
     }
 
@@ -167,17 +180,9 @@ final class MainMenuManager {
     private func syncMergedAppMenu(_ submenu: NSMenu, l: L10n) {
         if newArchiveItem.title != l.newArchive { newArchiveItem.title = l.newArchive }
         if openArchiveItem.title != l.openArchive { openArchiveItem.title = l.openArchive }
+        if settingsMenuItem.title != l.settingsMenuTitle { settingsMenuItem.title = l.settingsMenuTitle }
         if aboutItem.title != l.aboutMenuTitle { aboutItem.title = l.aboutMenuTitle }
 
-        let settingsItem = submenu.items.first { item in
-            !item.isAlternate && !item.isSeparatorItem && (
-                item.keyEquivalent == ","
-                    || item.title.contains("设置")
-                    || item.title.contains("設定")
-                    || item.title.contains("Settings")
-                    || item.title.contains("Preferences")
-            )
-        }
         let quitItem = submenu.items.first { item in
             !item.isAlternate && !item.isSeparatorItem && (
                 item.action == #selector(NSApplication.terminate(_:))
@@ -185,9 +190,6 @@ final class MainMenuManager {
             )
         }
 
-        if let settingsItem, settingsItem.title != l.settingsMenuTitle {
-            settingsItem.title = l.settingsMenuTitle
-        }
         if let quitItem, quitItem.title != l.quitMenuTitle {
             quitItem.title = l.quitMenuTitle
         }
@@ -196,10 +198,10 @@ final class MainMenuManager {
         var desired: [NSMenuItem] = [
             newArchiveItem,
             openArchiveItem,
-            actionsSeparator
+            actionsSeparator,
+            settingsMenuItem,
+            aboutItem
         ]
-        if let settingsItem { desired.append(settingsItem) }
-        desired.append(aboutItem)
         if let quitItem {
             desired.append(quitSeparator)
             desired.append(quitItem)

@@ -3,7 +3,7 @@ import BoltZipCore
 import SwiftUI
 
 struct EntryPropertiesSheet: View {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     let entry: ArchiveEntry
     @Environment(\.dismiss) private var dismiss
 
@@ -95,7 +95,7 @@ private struct PropRow: View {
 }
 
 struct IntegrityReportSheet: View {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     let report: IntegrityReport
     @Environment(\.dismiss) private var dismiss
 
@@ -173,7 +173,7 @@ struct IntegrityReportSheet: View {
 }
 
 struct BenchmarkSheet: View {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var results: [BenchmarkEntryResult] = []
     @State private var isRunning = false
@@ -302,7 +302,7 @@ struct BenchmarkSheet: View {
                                 }
                                 .padding(8)
                             }
-                            .contentMargins(.top, BoltMetrics.headerHeight, for: .scrollContent)
+                            .boltScrollTopMargin(BoltMetrics.headerHeight)
                             .boltSoftTopScrollEdgeEffect()
 
                             HStack(spacing: 8) {

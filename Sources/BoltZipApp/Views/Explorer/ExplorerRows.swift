@@ -4,7 +4,7 @@ import SwiftUI
 struct GlassFolderTreeRow: View {
     let node: FolderTreeNode
     let depth: Int
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     let canEditZip: Bool
     let glassEnabled: Bool
     @Binding var expandedPaths: Set<String>

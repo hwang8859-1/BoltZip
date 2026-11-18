@@ -33,10 +33,11 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
     let viewModel = WorkspaceViewModel()
     private let menuManager = MainMenuManager()
     private let mainWindowDelegateProxy = MainWindowDelegateProxy()
+    private let aboutWindowController = AuxiliaryWindowController()
+    private let settingsWindowController = AuxiliaryWindowController()
 
     weak var mainWindow: NSWindow?
     var openMainWindowHandler: (() -> Void)?
-    var openAboutWindowHandler: (() -> Void)?
 
     private var pendingURLs: [URL] = []
     private var suppressMainWindowOnLaunch = false
@@ -145,12 +146,24 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.activate(ignoringOtherApps: true)
                 self?.viewModel.openArchivePanel()
             },
+            onOpenSettings: { [weak self] in
+                self?.openSettingsWindow()
+            },
             onOpenAbout: { [weak self] in
                 self?.openAboutWindow()
             }
         )
         viewModel.onRequestShowMainWindow = { [weak self] in
             self?.showMainWindow()
+        }
+        viewModel.onRequestOpenSettings = { [weak self] in
+            self?.openSettingsWindow()
+        }
+        aboutWindowController.onDidClose = { [weak self] in
+            self?.terminateIfIdleAndNoVisibleWindows()
+        }
+        settingsWindowController.onDidClose = { [weak self] in
+            self?.terminateIfIdleAndNoVisibleWindows()
         }
         viewModel.onHUDDidHide = { [weak self] in
             self?.terminateIfIdleAndNoVisibleWindows()
@@ -194,7 +207,7 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] note in
             let closingID = (note.object as AnyObject?).map { ObjectIdentifier($0) }
             Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .milliseconds(60))
+                try? await Task.sleep(nanoseconds: 60_000_000)
                 self?.terminateIfIdleAndNoVisibleWindows(excludingWindowID: closingID)
             }
         }
@@ -226,7 +239,7 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
             if let excludingWindowID, ObjectIdentifier(window) == excludingWindowID { continue }
             guard window.isVisible, window.alphaValue > 0.05 else { continue }
             let id = window.identifier?.rawValue ?? ""
-            if id == "boltzip.quickhud" || id == "boltzip.compress" || id == "boltzip.main" || id == "boltzip.about" {
+            if id == "boltzip.quickhud" || id == "boltzip.compress" || id == "boltzip.main" || id == "boltzip.about" || id == "boltzip.settings" {
                 return true
             }
             if window.level == .normal && window.styleMask.contains(.titled) && window.frame.height > 60 {
@@ -246,9 +259,12 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func registerMainWindow(_ window: NSWindow, openMainAction: @escaping () -> Void) {
-        if window.identifier?.rawValue != "boltzip.main" {
+        let isFirstRegistration = (window.identifier?.rawValue != "boltzip.main")
+        if isFirstRegistration {
             window.identifier = NSUserInterfaceItemIdentifier("boltzip.main")
+            window.setContentSize(NSSize(width: 680, height: 430))
         }
+        window.isReleasedWhenClosed = false
         if window.isRestorable { window.isRestorable = false }
         self.mainWindow = window
         self.openMainWindowHandler = openMainAction
@@ -300,19 +316,27 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func openAboutWindow() {
-        NSApp.activate(ignoringOtherApps: true)
-        if let existing = NSApp.windows.first(where: { $0.identifier?.rawValue == "boltzip.about" }) {
-            existing.alphaValue = 1
-            existing.makeKeyAndOrderFront(nil)
-            return
-        }
-        openAboutWindowHandler?()
+        aboutWindowController.show(
+            identifier: "boltzip.about",
+            title: viewModel.l10n.aboutMenuTitle,
+            contentSize: NSSize(width: 390, height: 356),
+            rootView: AboutView(vm: viewModel)
+        )
+    }
+
+    func openSettingsWindow() {
+        settingsWindowController.show(
+            identifier: "boltzip.settings",
+            title: viewModel.l10n.settingsMenuTitle,
+            contentSize: NSSize(width: 500, height: 500),
+            rootView: SettingsView(vm: viewModel)
+        )
     }
 
     private func hideAutoCreatedMainWindow() {
         for window in NSApp.windows {
             let id = window.identifier?.rawValue ?? ""
-            if id == "boltzip.quickhud" || id == "boltzip.compress" { continue }
+            if id == "boltzip.quickhud" || id == "boltzip.compress" || id == "boltzip.settings" { continue }
             let isAppWindow = id == "boltzip.main" || id == "boltzip.about"
                 || (window.level == .normal && window.styleMask.contains(.titled) && window.title.localizedCaseInsensitiveContains("BoltZip"))
             if isAppWindow {

@@ -2,6 +2,18 @@
 
 All notable changes to **BoltZip** will be documented in this file.
 
+## [0.9.1] - 2026-11-18
+
+### Added & Improved (`legacy/macos-12` Universal Compatibility Release)
+- **macOS 12.0 Monterey ~ macOS 26+ Universal (`arm64` + `x86_64`)**:
+  - Lowered minimum deployment target to **macOS 12.0** across `Package.swift`, `Scripts/build_app.sh`, `BoltZip.app`, `boltzip` CLI, and `BoltZipFinderSync.appex`, preserving native **Intel (`x86_64`)** and **Apple Silicon (`arm64`)** Universal binaries.
+  - Cross-compiled Universal `minOS 12.0` static **`libarchive 3.7.7`** alongside `libzstd`, `liblzma`, and `liblz4` inside `Vendor/Compression/` so `.rar` / RAR5 / `.7z` / `.iso` / `.cab` / `.xar` work identically on older macOS systems without outdated system libraries.
+  - Replaced macOS 13+/14+ Swift/SwiftUI APIs (`OSAllocatedUnfairLock`, `@Observable`, dual-arg `.onChange`, `Window` scenes, `openWindow`) with `BoltLockedBox`, `ObservableObject`, `AuxiliaryWindowController`, and clean `#available` UI fallbacks while keeping macOS 26+ Liquid Glass intact.
+- **RAR / RAR5, Multi-Core Parallelism & Default File Associations**:
+  - Added full inspection, integrity test, password unlock, and extraction support for `.rar`, `.r00/.r01`, `.part1.rar`, and RAR5 archives.
+  - Added parallel chunked extraction and ZIP/tar preparation (`ParallelExecutor`) across multi-core CPUs.
+  - Added default archive file association manager in Settings and streamlined welcome return-on-close & unified system menu bar behavior.
+
 ## [0.9.0] - 2026-11-17
 
 ### Added & Improved

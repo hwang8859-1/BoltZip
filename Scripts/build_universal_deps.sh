@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$ROOT_DIR/Vendor/Compression"
 INC_DIR="$OUT_DIR/include"
 LIB_DIR="$OUT_DIR/lib"
-MIN_MACOS="14.0"
+MIN_MACOS="12.0"
 SDK_PATH="$(xcrun --show-sdk-path)"
 JOBS="$(sysctl -n hw.ncpu)"
 
@@ -20,6 +20,10 @@ XZ_SHA256="0014c7886930454fe8bd4228665b51af55eeae560ea135c9c4cd33f55b2591d9"
 LZ4_VER="1.11.1"
 LZ4_URL="https://github.com/lz4/lz4/archive/refs/tags/v1.11.1.tar.gz"
 LZ4_SHA256="683fed08a844ad012196381e40badf80c0bbe4962959761416d41c9e67d77ec7"
+
+LIBARCHIVE_VER="3.7.7"
+LIBARCHIVE_URL="https://github.com/libarchive/libarchive/releases/download/v3.7.7/libarchive-3.7.7.tar.gz"
+LIBARCHIVE_SHA256="4cc540a3e9a1eebdefa1045d2e4184831100667e6d7d5b315bb1cbc951f8ddff"
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/boltzip-deps.XXXXXX")"
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -122,6 +126,51 @@ lipo -create \
     -output "$LIB_DIR/liblz4.a"
 cp "$LZ4_SRC/lib/lz4.h" "$LZ4_SRC/lib/lz4frame.h" "$LZ4_SRC/lib/lz4hc.h" "$INC_DIR/"
 
+# 4. libarchive (static Universal lib with RAR/RAR5/7z/ISO/CAB/XAR + CommonCrypto AES)
+fetch_and_verify "libarchive-$LIBARCHIVE_VER" "$LIBARCHIVE_URL" "$LIBARCHIVE_SHA256" "$WORK_DIR/libarchive.tar.gz"
+tar -xzf "$WORK_DIR/libarchive.tar.gz" -C "$WORK_DIR/src"
+LIBARCHIVE_SRC="$WORK_DIR/src/libarchive-$LIBARCHIVE_VER"
+
+for arch in arm64 x86_64; do
+    echo "==> Building libarchive ($arch, minOS $MIN_MACOS)..."
+    mkdir -p "$WORK_DIR/la-build-$arch" "$WORK_DIR/la-prefix-$arch"
+    (
+        cd "$WORK_DIR/la-build-$arch"
+        "$LIBARCHIVE_SRC/configure" \
+            --host="${arch}-apple-darwin" \
+            --prefix="$WORK_DIR/la-prefix-$arch" \
+            --enable-static \
+            --disable-shared \
+            --disable-bsdtar \
+            --disable-bsdcat \
+            --disable-bsdcpio \
+            --disable-bsdunzip \
+            --without-xml2 \
+            --without-expat \
+            --without-openssl \
+            --without-nettle \
+            --without-lzo2 \
+            --without-libb2 \
+            --with-zlib \
+            --with-bz2lib \
+            --with-lzma \
+            --with-zstd \
+            --with-lz4 \
+            CC="xcrun clang -arch $arch -mmacosx-version-min=$MIN_MACOS -isysroot $SDK_PATH" \
+            CPPFLAGS="-I$INC_DIR" \
+            CFLAGS="-O3 -fPIC" \
+            LDFLAGS="-L$LIB_DIR" >/dev/null
+        make -j"$JOBS" install >/dev/null
+    )
+    cp "$WORK_DIR/la-prefix-$arch/lib/libarchive.a" "$WORK_DIR/stage/libarchive-$arch.a"
+done
+
+lipo -create \
+    "$WORK_DIR/stage/libarchive-arm64.a" \
+    "$WORK_DIR/stage/libarchive-x86_64.a" \
+    -output "$LIB_DIR/libarchive.a"
+cp "$WORK_DIR/la-prefix-arm64/include/archive.h" "$WORK_DIR/la-prefix-arm64/include/archive_entry.h" "$INC_DIR/"
+
 echo "==> Universal static libraries created in $OUT_DIR:"
-lipo -info "$LIB_DIR/libzstd.a" "$LIB_DIR/liblzma.a" "$LIB_DIR/liblz4.a"
+lipo -info "$LIB_DIR/libzstd.a" "$LIB_DIR/liblzma.a" "$LIB_DIR/liblz4.a" "$LIB_DIR/libarchive.a"
 ls -lh "$LIB_DIR"

@@ -102,7 +102,7 @@ struct BoltWindowFrostedBacking: View {
 
 /// Shared window backing automatically synced with WorkspaceViewModel color, appearance, and glass strength.
 struct BoltUnifiedWindowBacking: View {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {

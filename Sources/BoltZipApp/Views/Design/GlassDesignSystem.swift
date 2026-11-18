@@ -219,10 +219,14 @@ extension View {
 
     @ViewBuilder
     func boltSheetPresentationGlass(_ enabled: Bool) -> some View {
-        if enabled {
-            self.presentationBackground(.ultraThinMaterial)
+        if #available(macOS 13.3, *) {
+            if enabled {
+                self.presentationBackground(.ultraThinMaterial)
+            } else {
+                self.presentationBackground(Color(nsColor: .windowBackgroundColor))
+            }
         } else {
-            self.presentationBackground(Color(nsColor: .windowBackgroundColor))
+            self
         }
     }
 
@@ -292,11 +296,41 @@ extension View {
     }
 
     @ViewBuilder
+    func boltScrollTopMargin(_ top: CGFloat, includeContent: Bool = true) -> some View {
+        if #available(macOS 14.0, *) {
+            if includeContent {
+                self
+                    .contentMargins(.top, top, for: .scrollContent)
+                    .contentMargins(.top, top, for: .scrollIndicators)
+            } else {
+                self.contentMargins(.top, top, for: .scrollIndicators)
+            }
+        } else if includeContent {
+            self.safeAreaInset(edge: .top, spacing: 0) {
+                Color.clear.frame(height: top)
+            }
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func boltFocusEffectDisabled() -> some View {
+        if #available(macOS 14.0, *) {
+            self.focusEffectDisabled()
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
     func boltWindowToolbarBackgroundVisibility(_ visibility: Visibility) -> some View {
         if #available(macOS 15.0, *) {
             self.toolbarBackgroundVisibility(visibility, for: .windowToolbar)
-        } else {
+        } else if #available(macOS 13.0, *) {
             self.toolbarBackground(visibility, for: .windowToolbar)
+        } else {
+            self
         }
     }
 
@@ -310,19 +344,8 @@ extension View {
     }
 }
 
-extension ToolbarContent {
-    @ToolbarContentBuilder
-    func boltHiddenSharedBackground() -> some ToolbarContent {
-        if #available(macOS 26.0, *) {
-            self.sharedBackgroundVisibility(.hidden)
-        } else {
-            self
-        }
-    }
-}
-
 private struct BoltUnifiedSheetModifier: ViewModifier {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {

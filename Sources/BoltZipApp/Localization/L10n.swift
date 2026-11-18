@@ -345,7 +345,7 @@ struct L10n: Sendable {
         )
     }
     var aboutMenuTitle: String { t("关于 BoltZip", "關於 BoltZip", "About BoltZip", "BoltZip について") }
-    var aboutVersionLabel: String { BoltPlatformCapabilities.runtimeVersionSummary(appVersion: "0.9.0") }
+    var aboutVersionLabel: String { BoltPlatformCapabilities.runtimeVersionSummary(appVersion: "0.9.1") }
     var aboutDesc: String {
         t(
             "开源压缩/解压缩工作台，原生融合 Windows Zip 效率交互、访达一级 Bolt 菜单与液态玻璃设计。",

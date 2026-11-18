@@ -34,8 +34,8 @@ enum ParallelExecutor {
         let workers = min(maxWorkers, items.count)
         let queue = DispatchQueue.global(qos: .userInitiated)
         let group = DispatchGroup()
-        let nextIndexLock = OSAllocatedUnfairLock(initialState: 0)
-        let errorLock = OSAllocatedUnfairLock<Error?>(initialState: nil)
+        let nextIndexLock = BoltLockedBox(initialState: 0)
+        let errorLock = BoltLockedBox<Error?>(initialState: nil)
 
         for _ in 0..<workers {
             group.enter()

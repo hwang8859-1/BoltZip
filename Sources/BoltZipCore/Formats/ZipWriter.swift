@@ -512,7 +512,7 @@ public enum ZipWriter {
             return
         }
 
-        let completedBytesLock = OSAllocatedUnfairLock(initialState: UInt64(0))
+        let completedBytesLock = BoltLockedBox(initialState: UInt64(0))
         try ParallelExecutor.orderedMap(
             items,
             maxWorkers: ParallelExecutor.defaultWorkerCount,

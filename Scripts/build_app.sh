@@ -4,12 +4,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-APP_VERSION="0.9.0"
-APP_BUILD="9"
-MIN_MACOS="14.0"
+APP_VERSION="0.9.1"
+APP_BUILD="10"
+MIN_MACOS="12.0"
 VENDOR_LIB_DIR="$ROOT_DIR/Vendor/Compression/lib"
 
-if [ ! -f "$VENDOR_LIB_DIR/libzstd.a" ] || [ ! -f "$VENDOR_LIB_DIR/liblzma.a" ] || [ ! -f "$VENDOR_LIB_DIR/liblz4.a" ]; then
+if [ ! -f "$VENDOR_LIB_DIR/libzstd.a" ] || [ ! -f "$VENDOR_LIB_DIR/liblzma.a" ] || [ ! -f "$VENDOR_LIB_DIR/liblz4.a" ] || [ ! -f "$VENDOR_LIB_DIR/libarchive.a" ]; then
     echo "==> Building universal compression static libraries (arm64 + x86_64)..."
     "$ROOT_DIR/Scripts/build_universal_deps.sh"
 fi

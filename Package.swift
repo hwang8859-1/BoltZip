@@ -12,6 +12,7 @@ let compressionLinkFlags: [String]
 if useVendorCompression {
     compressionIncludeFlags = ["-I\(vendorInclude)"]
     compressionLinkFlags = [
+        "\(vendorLib)/libarchive.a",
         "\(vendorLib)/libzstd.a",
         "\(vendorLib)/liblzma.a",
         "\(vendorLib)/liblz4.a"
@@ -26,6 +27,7 @@ if useVendorCompression {
         "-I\(brewPrefix)/opt/lz4/include"
     ]
     compressionLinkFlags = [
+        "-larchive",
         "\(brewPrefix)/opt/zstd/lib/libzstd.a",
         "\(brewPrefix)/opt/xz/lib/liblzma.a",
         "\(brewPrefix)/opt/lz4/lib/liblz4.a"
@@ -36,7 +38,7 @@ let package = Package(
     name: "BoltZip",
     defaultLocalization: "zh-Hans",
     platforms: [
-        .macOS(.v14)
+        .macOS(.v12)
     ],
     products: [
         .library(name: "BoltZipCore", targets: ["BoltZipCore"]),
@@ -53,7 +55,7 @@ let package = Package(
             linkerSettings: [
                 .linkedLibrary("z"),
                 .linkedLibrary("bz2"),
-                .linkedLibrary("archive"),
+                .linkedLibrary("iconv"),
                 .unsafeFlags(compressionLinkFlags)
             ]
         ),

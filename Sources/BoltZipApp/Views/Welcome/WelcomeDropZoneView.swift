@@ -13,7 +13,7 @@ private struct FeaturesCardHeightKey: PreferenceKey {
 }
 
 struct WelcomeDropZoneView: View {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     let titlebarHeight: CGFloat
 
     @Environment(\.colorScheme) private var colorScheme
@@ -48,7 +48,7 @@ struct WelcomeDropZoneView: View {
                         .padding(.top, topOffset + 4)
                         .padding(.bottom, 12)
                     }
-                    .contentMargins(.top, topOffset, for: .scrollIndicators)
+                    .boltScrollTopMargin(topOffset, includeContent: false)
                     .boltSoftTopScrollEdgeEffect()
                     .frame(width: w, height: h)
                 } else {

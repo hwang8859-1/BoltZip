@@ -331,7 +331,7 @@ final class BoltZipCoreTests: XCTestCase {
 
         let zipURL = tempDir.appendingPathComponent("paused.zip")
         let controller = ArchiveTaskController()
-        let recorded = OSAllocatedUnfairLock(initialState: (didPause: false, maxProcessed: UInt64(0), totalBytes: UInt64(0), lastFraction: 0.0))
+        let recorded = BoltLockedBox(initialState: (didPause: false, maxProcessed: UInt64(0), totalBytes: UInt64(0), lastFraction: 0.0))
 
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.12) {
             controller.setPaused(false)
@@ -382,7 +382,7 @@ final class BoltZipCoreTests: XCTestCase {
 
         let zipURL = tempDir.appendingPathComponent("cancelled.zip")
         let controller = ArchiveTaskController()
-        let didCancel = OSAllocatedUnfairLock(initialState: false)
+        let didCancel = BoltLockedBox(initialState: false)
 
         XCTAssertThrowsError(
             try BoltArchiveEngine.createArchive(

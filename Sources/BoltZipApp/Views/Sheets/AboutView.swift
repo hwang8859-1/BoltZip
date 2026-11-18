@@ -2,13 +2,13 @@ import AppKit
 import SwiftUI
 
 struct AboutView: View {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         let l = vm.l10n
         let glassEnabled = vm.effectiveWindowTranslucency
-        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.9.0"
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.9.1"
 
         VStack(spacing: 12) {
             BoltLogoBadge(size: 64, whiteBackground: vm.useWhiteAppIcon)

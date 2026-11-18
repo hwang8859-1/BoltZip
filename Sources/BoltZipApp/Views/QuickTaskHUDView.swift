@@ -2,8 +2,8 @@ import BoltZipCore
 import SwiftUI
 
 struct QuickTaskHUDView: View {
-    let vm: WorkspaceViewModel
-    @Bindable var hud: QuickTaskHUDModel
+    @ObservedObject var vm: WorkspaceViewModel
+    @ObservedObject var hud: QuickTaskHUDModel
     var isFloatingWindow: Bool = true
     @FocusState private var passwordFieldFocused: Bool
 
@@ -32,7 +32,7 @@ struct QuickTaskHUDView: View {
         .onHover { hovering in
             hud.setHovering(hovering)
         }
-        .onChange(of: hud.phase) { _, newPhase in
+        .onChange(of: hud.phase) { newPhase in
             if case .needsPassword = newPhase {
                 passwordFieldFocused = true
             }
@@ -94,11 +94,18 @@ struct QuickTaskHUDView: View {
     private var rightHeaderMetric: some View {
         switch hud.phase {
         case .preparing, .running, .paused:
-            Text(hud.percentageText)
-                .font(BoltType.metricLarge)
-                .monospacedDigit()
-                .foregroundStyle(hud.phase == .paused ? Color.orange : Color.primary)
-                .contentTransition(.numericText())
+            if #available(macOS 13.0, *) {
+                Text(hud.percentageText)
+                    .font(BoltType.metricLarge)
+                    .monospacedDigit()
+                    .foregroundStyle(hud.phase == .paused ? Color.orange : Color.primary)
+                    .contentTransition(.numericText())
+            } else {
+                Text(hud.percentageText)
+                    .font(BoltType.metricLarge)
+                    .monospacedDigit()
+                    .foregroundStyle(hud.phase == .paused ? Color.orange : Color.primary)
+            }
         case .completed:
             Image(systemName: "checkmark.circle.fill")
                 .font(BoltType.statusGlyph)

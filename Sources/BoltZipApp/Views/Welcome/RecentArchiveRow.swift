@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Single recently opened archive entry with click-to-open body and dedicated trailing delete button.
 struct RecentArchiveRow: View {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     let url: URL
     let l: L10n
     @State private var isHovered = false

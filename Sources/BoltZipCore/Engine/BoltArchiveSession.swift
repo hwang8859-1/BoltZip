@@ -347,7 +347,7 @@ public enum BoltArchiveEngine {
                 }
             } else {
                 let writeCollisionLock = NSLock()
-                let progressLock = OSAllocatedUnfairLock(initialState: UInt64(0))
+                let progressLock = BoltLockedBox(initialState: UInt64(0))
                 let renameMapLock = writeCollisionLock
                 let policy = options.overwritePolicy
                 let pw = options.password

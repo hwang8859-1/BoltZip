@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ArchiveExplorerView: View {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     let listing: ArchiveListing
     let titlebarHeight: CGFloat
 
@@ -25,7 +25,7 @@ struct ArchiveExplorerView: View {
 
     var body: some View {
         let l = vm.l10n
-        let isSidebarVisible = vm.columnVisibility != .detailOnly
+        let isSidebarVisible = vm.isSidebarVisible
         let glassEnabled = vm.effectiveWindowTranslucency
 
         GeometryReader { geo in
@@ -61,11 +61,11 @@ struct ArchiveExplorerView: View {
             seedExpandedFolders(from: vm.folderTree)
             expandAncestors(for: vm.currentFolder)
         }
-        .onChange(of: listing.archiveURL) { _, _ in
+        .onChange(of: listing.archiveURL) { _ in
             seedExpandedFolders(from: vm.folderTree)
             expandAncestors(for: vm.currentFolder)
         }
-        .onChange(of: vm.currentFolder) { _, newPath in
+        .onChange(of: vm.currentFolder) { newPath in
             expandAncestors(for: newPath)
         }
     }
@@ -91,9 +91,8 @@ struct ArchiveExplorerView: View {
                             .padding(.top, 6)
                             .padding(.bottom, 8)
                         }
-                        .contentMargins(.top, BoltMetrics.headerHeight, for: .scrollContent)
-                        .contentMargins(.top, BoltMetrics.headerHeight, for: .scrollIndicators)
-                        .onChange(of: vm.currentFolder) { _, newPath in
+                        .boltScrollTopMargin(BoltMetrics.headerHeight)
+                        .onChange(of: vm.currentFolder) { newPath in
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 treeProxy.scrollTo(newPath, anchor: .center)
                             }
@@ -250,18 +249,17 @@ struct ArchiveExplorerView: View {
                             .padding(.bottom, 8)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .contentMargins(.top, BoltMetrics.headerHeight, for: .scrollContent)
-                        .contentMargins(.top, BoltMetrics.headerHeight, for: .scrollIndicators)
-                        .onChange(of: vm.currentFolder) { _, _ in
+                        .boltScrollTopMargin(BoltMetrics.headerHeight)
+                        .onChange(of: vm.currentFolder) { _ in
                             fileProxy.scrollTo("EXPLORER_TOP", anchor: .top)
                         }
-                        .onChange(of: vm.searchText) { _, _ in
+                        .onChange(of: vm.searchText) { _ in
                             fileProxy.scrollTo("EXPLORER_TOP", anchor: .top)
                         }
-                        .onChange(of: vm.sortColumn) { _, _ in
+                        .onChange(of: vm.sortColumn) { _ in
                             fileProxy.scrollTo("EXPLORER_TOP", anchor: .top)
                         }
-                        .onChange(of: vm.sortAscending) { _, _ in
+                        .onChange(of: vm.sortAscending) { _ in
                             fileProxy.scrollTo("EXPLORER_TOP", anchor: .top)
                         }
                         .background {
@@ -281,17 +279,17 @@ struct ArchiveExplorerView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .focusable()
-            .focusEffectDisabled()
+            .boltFocusEffectDisabled()
             .clipShape(RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous))
             .boltLayeredSurface(
                 glassEnabled: glassEnabled,
                 tone: .regular,
                 in: RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous)
             )
-            .onKeyPress(.space) { previewSelectedOrReturnIgnored() }
-            .onKeyPress(.return) { previewSelectedOrReturnIgnored() }
-            .onKeyPress(.upArrow) { moveSelection(delta: -1) }
-            .onKeyPress(.downArrow) { moveSelection(delta: 1) }
+            .modifier(BoltExplorerKeyNavigationModifier(
+                onPreview: { previewSelectedOrIgnore() },
+                onMove: { delta in moveSelection(delta: delta) }
+            ))
             .overlay {
                 if isTableDropTargeted && listing.format.supportsInPlaceEditing {
                     RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous)
@@ -386,8 +384,8 @@ struct ArchiveExplorerView: View {
                             }
                         }
                     }
-                    .defaultScrollAnchor(.trailing)
-                    .onChange(of: vm.currentFolder) { _, newPath in
+                    .modifier(BoltTrailingScrollAnchorModifier())
+                    .onChange(of: vm.currentFolder) { newPath in
                         withAnimation(.easeInOut(duration: 0.18)) {
                             crumbProxy.scrollTo(newPath, anchor: .trailing)
                         }
@@ -438,11 +436,11 @@ struct ArchiveExplorerView: View {
         .buttonStyle(.plain)
     }
 
-    private func previewSelectedOrReturnIgnored() -> KeyPress.Result {
+    private func previewSelectedOrIgnore() -> Bool {
         guard let firstID = vm.selectedEntryIDs.first,
-              let entry = vm.visibleEntries.first(where: { $0.id == firstID }) else { return .ignored }
+              let entry = vm.visibleEntries.first(where: { $0.id == firstID }) else { return false }
         vm.previewOrOpenEntry(entry)
-        return .handled
+        return true
     }
 
     private func handleRowTap(_ entry: ArchiveEntry) {
@@ -482,9 +480,9 @@ struct ArchiveExplorerView: View {
         }
     }
 
-    private func moveSelection(delta: Int) -> KeyPress.Result {
+    private func moveSelection(delta: Int) -> Bool {
         let entries = vm.visibleEntries
-        guard !entries.isEmpty else { return .ignored }
+        guard !entries.isEmpty else { return false }
         if let firstID = vm.selectedEntryIDs.first,
            let idx = entries.firstIndex(where: { $0.id == firstID }) {
             let nextIdx = min(max(0, idx + delta), entries.count - 1)
@@ -496,7 +494,7 @@ struct ArchiveExplorerView: View {
             vm.selectedEntryIDs = [target.id]
             selectionAnchorID = target.id
         }
-        return .handled
+        return true
     }
 
     private func seedExpandedFolders(from root: FolderTreeNode) {
@@ -536,6 +534,60 @@ struct ArchiveExplorerView: View {
         case "mp4", "mov": return "film"
         case "mp3", "wav", "m4a": return "waveform"
         default: return "doc"
+        }
+    }
+}
+
+private struct BoltTrailingScrollAnchorModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 14.0, *) {
+            content.defaultScrollAnchor(.trailing)
+        } else {
+            content
+        }
+    }
+}
+
+private struct BoltExplorerKeyNavigationModifier: ViewModifier {
+    let onPreview: @MainActor () -> Bool
+    let onMove: @MainActor (Int) -> Bool
+    @State private var monitorToken: Any?
+
+    func body(content: Content) -> some View {
+        if #available(macOS 14.0, *) {
+            content
+                .onKeyPress(.space) { onPreview() ? .handled : .ignored }
+                .onKeyPress(.return) { onPreview() ? .handled : .ignored }
+                .onKeyPress(.upArrow) { onMove(-1) ? .handled : .ignored }
+                .onKeyPress(.downArrow) { onMove(1) ? .handled : .ignored }
+        } else {
+            content
+                .onAppear {
+                    guard monitorToken == nil else { return }
+                    monitorToken = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                        guard let keyWin = NSApp.keyWindow,
+                              keyWin.attachedSheet == nil,
+                              !(keyWin.firstResponder is NSTextView) else {
+                            return event
+                        }
+                        switch event.keyCode {
+                        case 49, 36: // Space or Return
+                            return MainActor.assumeIsolated { onPreview() } ? nil : event
+                        case 126: // Up arrow
+                            return MainActor.assumeIsolated { onMove(-1) } ? nil : event
+                        case 125: // Down arrow
+                            return MainActor.assumeIsolated { onMove(1) } ? nil : event
+                        default:
+                            return event
+                        }
+                    }
+                }
+                .onDisappear {
+                    if let token = monitorToken {
+                        NSEvent.removeMonitor(token)
+                        monitorToken = nil
+                    }
+                }
         }
     }
 }

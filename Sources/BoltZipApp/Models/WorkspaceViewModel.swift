@@ -1,56 +1,55 @@
 import AppKit
 import BoltZipCore
+import Combine
 import Foundation
-import Observation
 import SwiftUI
 
-@Observable
 @MainActor
-final class WorkspaceViewModel {
-    var listing: ArchiveListing?
-    var openedArchiveFromHome: Bool = false
-    var currentFolder: String = ""
-    var folderForwardStack: [String] = []
-    var selectedEntryIDs: Set<String> = []
-    var searchText: String = ""
-    var encodingOption: FilenameEncodingOption = .auto
-    var sortColumn: SortColumn = .name
-    var sortAscending: Bool = true
-    var columnVisibility: NavigationSplitViewVisibility = .all
+final class WorkspaceViewModel: ObservableObject {
+    @Published var listing: ArchiveListing?
+    @Published var openedArchiveFromHome: Bool = false
+    @Published var currentFolder: String = ""
+    @Published var folderForwardStack: [String] = []
+    @Published var selectedEntryIDs: Set<String> = []
+    @Published var searchText: String = ""
+    @Published var encodingOption: FilenameEncodingOption = .auto
+    @Published var sortColumn: SortColumn = .name
+    @Published var sortAscending: Bool = true
+    @Published var isSidebarVisible: Bool = true
 
-    var isBusy: Bool = false
-    var progress: OperationProgress?
-    var statusMessage: String = ""
-    var alertMessage: String?
-    var pendingExtractConflict: PendingExtractConflict?
-    var activeSheet: ActiveSheet?
-    var savedPassword: String?
+    @Published var isBusy: Bool = false
+    @Published var progress: OperationProgress?
+    @Published var statusMessage: String = ""
+    @Published var alertMessage: String?
+    @Published var pendingExtractConflict: PendingExtractConflict?
+    @Published var activeSheet: ActiveSheet?
+    @Published var savedPassword: String?
 
-    var recentArchivePaths: [String] = []
-    var defaultStripMacJunk: Bool = true
-    var quickActionsInstalled: Bool = QuickActionInstaller.isExtensionEnabled()
-    var associationStatuses: [ArchiveAssociationStatus] = []
-    var isUpdatingAssociations: Bool = false
+    @Published var recentArchivePaths: [String] = []
+    @Published var defaultStripMacJunk: Bool = true
+    @Published var quickActionsInstalled: Bool = QuickActionInstaller.isExtensionEnabled()
+    @Published var associationStatuses: [ArchiveAssociationStatus] = []
+    @Published var isUpdatingAssociations: Bool = false
 
     // Localization, Window Behavior, Translucency & Modular Panel Visibility Preferences
-    var appLanguage: AppLanguage = .system {
+    @Published var appLanguage: AppLanguage = .system {
         didSet {
             UserDefaults.standard.set(appLanguage.rawValue, forKey: Keys.appLanguage)
             onLanguageChanged?()
         }
     }
-    var appTheme: AppTheme = .system {
+    @Published var appTheme: AppTheme = .system {
         didSet {
             UserDefaults.standard.set(appTheme.rawValue, forKey: Keys.appTheme)
             NSApp.appearance = appTheme.nsAppearance
         }
     }
-    var isWindowTranslucent: Bool = true {
+    @Published var isWindowTranslucent: Bool = true {
         didSet {
             UserDefaults.standard.set(isWindowTranslucent, forKey: Keys.windowTranslucent)
         }
     }
-    var glassIntensity: Double = 0.75 {
+    @Published var glassIntensity: Double = 0.75 {
         didSet {
             UserDefaults.standard.set(glassIntensity, forKey: Keys.glassIntensity)
         }
@@ -59,46 +58,46 @@ final class WorkspaceViewModel {
         get { max(0.05, 1.0 - glassIntensity) }
         set { glassIntensity = min(max(1.0 - newValue, 0.0), 1.0) }
     }
-    var appBackgroundColor: AppBackgroundColor = .pureWhite {
+    @Published var appBackgroundColor: AppBackgroundColor = .pureWhite {
         didSet {
             UserDefaults.standard.set(appBackgroundColor.rawValue, forKey: Keys.appBackgroundColor)
         }
     }
-    var customBackgroundRed: Double = 0.94 {
+    @Published var customBackgroundRed: Double = 0.94 {
         didSet { UserDefaults.standard.set(customBackgroundRed, forKey: Keys.customBgR) }
     }
-    var customBackgroundGreen: Double = 0.96 {
+    @Published var customBackgroundGreen: Double = 0.96 {
         didSet { UserDefaults.standard.set(customBackgroundGreen, forKey: Keys.customBgG) }
     }
-    var customBackgroundBlue: Double = 0.99 {
+    @Published var customBackgroundBlue: Double = 0.99 {
         didSet { UserDefaults.standard.set(customBackgroundBlue, forKey: Keys.customBgB) }
     }
-    var showFinderBanner: Bool = true {
+    @Published var showFinderBanner: Bool = true {
         didSet {
             UserDefaults.standard.set(showFinderBanner, forKey: Keys.showFinderBanner)
         }
     }
-    var showFeatureHighlights: Bool = true {
+    @Published var showFeatureHighlights: Bool = true {
         didSet {
             UserDefaults.standard.set(showFeatureHighlights, forKey: Keys.showFeatures)
         }
     }
-    var showRecentArchives: Bool = true {
+    @Published var showRecentArchives: Bool = true {
         didSet {
             UserDefaults.standard.set(showRecentArchives, forKey: Keys.showRecents)
         }
     }
-    var showSidebarInspector: Bool = true {
+    @Published var showSidebarInspector: Bool = true {
         didSet {
             UserDefaults.standard.set(showSidebarInspector, forKey: Keys.showInspector)
         }
     }
-    var showStatusBar: Bool = true {
+    @Published var showStatusBar: Bool = true {
         didSet {
             UserDefaults.standard.set(showStatusBar, forKey: Keys.showStatusBar)
         }
     }
-    var useWhiteAppIcon: Bool = false {
+    @Published var useWhiteAppIcon: Bool = false {
         didSet {
             UserDefaults.standard.set(useWhiteAppIcon, forKey: Keys.whiteAppIcon)
             BoltAppIconRenderer.apply(whiteBackground: useWhiteAppIcon)
@@ -112,9 +111,10 @@ final class WorkspaceViewModel {
     let compressWindowController = CompressWizardWindowController()
     var isHUDConfigured = false
     var isInAppHUDConfigured = false
-    var isPreparingHUDExtract: Bool = false
+    @Published var isPreparingHUDExtract: Bool = false
 
     var onRequestShowMainWindow: (() -> Void)?
+    var onRequestOpenSettings: (() -> Void)?
     var onHUDDidHide: (() -> Void)?
     var onCompressWindowDidClose: (() -> Void)?
     var onLanguageChanged: (() -> Void)?

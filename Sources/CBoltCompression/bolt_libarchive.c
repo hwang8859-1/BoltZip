@@ -1,6 +1,8 @@
 #include "bolt_compression.h"
 
 #include <errno.h>
+#include <locale.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -93,6 +95,22 @@ static int32_t classify_la_error(const char *msg, int has_password, int entry_en
     return fallback_code != 0 ? fallback_code : -1;
 }
 
+static void init_utf8_ctype_once(void) {
+    const char *cur = setlocale(LC_CTYPE, NULL);
+    if (!cur || strcmp(cur, "C") == 0 || strcmp(cur, "POSIX") == 0) {
+        if (!setlocale(LC_CTYPE, "UTF-8")) {
+            if (!setlocale(LC_CTYPE, "en_US.UTF-8")) {
+                setlocale(LC_CTYPE, "");
+            }
+        }
+    }
+}
+
+static void ensure_utf8_ctype(void) {
+    static pthread_once_t once = PTHREAD_ONCE_INIT;
+    pthread_once(&once, init_utf8_ctype_once);
+}
+
 static struct archive *open_la_reader(
     const char **paths,
     size_t path_count,
@@ -101,6 +119,7 @@ static struct archive *open_la_reader(
     char *err_buf,
     size_t err_cap
 ) {
+    ensure_utf8_ctype();
     if (!paths || path_count == 0 || !paths[0]) {
         if (out_code) *out_code = EINVAL;
         write_err(err_buf, err_cap, "No archive path provided");
@@ -165,7 +184,7 @@ static void populate_entry_info(
     info->path = utf8 ? utf8 : (raw ? raw : "");
     info->path_is_utf8 = (utf8 != NULL) ? 1 : 0;
 
-    const char *raw_src = raw ? raw : info->path;
+    const char *raw_src = utf8 ? utf8 : (raw ? raw : "");
     info->raw_path_bytes = (const uint8_t *)raw_src;
     info->raw_path_len = strlen(raw_src);
 

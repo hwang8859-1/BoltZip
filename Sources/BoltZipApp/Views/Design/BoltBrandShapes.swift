@@ -101,10 +101,16 @@ struct BoltHeaderIconBadge: View {
                         .strokeBorder(tint.opacity(0.30), lineWidth: 0.75)
                 )
 
-            Image(systemName: symbol)
-                .font(BoltType.badgeSymbol)
-                .foregroundStyle(tint)
-                .symbolEffect(.pulse, isActive: isPulsing)
+            if #available(macOS 14.0, *) {
+                Image(systemName: symbol)
+                    .font(BoltType.badgeSymbol)
+                    .foregroundStyle(tint)
+                    .symbolEffect(.pulse, isActive: isPulsing)
+            } else {
+                Image(systemName: symbol)
+                    .font(BoltType.badgeSymbol)
+                    .foregroundStyle(tint)
+            }
         }
         .frame(width: 36, height: 36)
     }

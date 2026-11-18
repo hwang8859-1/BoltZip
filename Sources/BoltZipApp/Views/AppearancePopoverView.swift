@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AppearancePopoverView: View {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
 
     var body: some View {
         let l = vm.l10n

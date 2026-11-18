@@ -3,7 +3,7 @@ import BoltZipCore
 import SwiftUI
 
 struct CreateArchiveSheet: View {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     let isStandaloneWindow: Bool
     let onCloseWindow: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
@@ -212,7 +212,7 @@ struct CreateArchiveSheet: View {
                 }
                 .labelsHidden()
                 .frame(maxWidth: BoltMetrics.createPickerWidth)
-                .onChange(of: format) { _, newFmt in
+                .onChange(of: format) { newFmt in
                     if !newFmt.supportedAlgorithms.contains(algorithm) {
                         algorithm = newFmt.defaultAlgorithm
                     }
@@ -234,7 +234,7 @@ struct CreateArchiveSheet: View {
                 }
                 .labelsHidden()
                 .frame(maxWidth: BoltMetrics.createPickerWidth)
-                .onChange(of: algorithm) { _, newAlgo in
+                .onChange(of: algorithm) { newAlgo in
                     level = preset.level(for: newAlgo)
                 }
             }
@@ -254,7 +254,7 @@ struct CreateArchiveSheet: View {
                     .pickerStyle(.segmented)
                     .controlSize(.small)
                     .frame(maxWidth: 264)
-                    .onChange(of: preset) { _, newPreset in
+                    .onChange(of: preset) { newPreset in
                         level = newPreset.level(for: algorithm)
                     }
                 }
@@ -438,7 +438,7 @@ struct CreateArchiveSheet: View {
 }
 
 private struct CreateArchiveContainerStyleModifier: ViewModifier {
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     let isStandaloneWindow: Bool
     let glassEnabled: Bool
 

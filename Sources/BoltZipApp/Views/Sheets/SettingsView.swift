@@ -10,7 +10,7 @@ struct SettingsView: View {
         var id: Int { rawValue }
     }
 
-    @Bindable var vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var selectedTab: Tab = .general
     @State private var feedbackMessage: String?
@@ -56,7 +56,7 @@ struct SettingsView: View {
             BoltGlassContainer(spacing: 10) {
                 HStack {
                     Text(BoltPlatformCapabilities.runtimeVersionSummary(
-                        appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.9.0"
+                        appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.9.1"
                     ))
                     .font(BoltType.monoCaption)
                     .foregroundStyle(.secondary)

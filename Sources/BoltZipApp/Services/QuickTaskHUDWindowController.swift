@@ -30,7 +30,9 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
             hostingController.rootView = rootView
         } else {
             let hc = NSHostingController(rootView: rootView)
-            hc.sizingOptions = [.preferredContentSize]
+            if #available(macOS 13.0, *) {
+                hc.sizingOptions = [.preferredContentSize]
+            }
             self.hostingController = hc
         }
 
@@ -77,7 +79,13 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
         }
 
         hostingController.view.layoutSubtreeIfNeeded()
-        let fitting = hostingController.sizeThatFits(in: NSSize(width: 436, height: 420))
+        let fitting: NSSize
+        if #available(macOS 13.0, *) {
+            fitting = hostingController.sizeThatFits(in: NSSize(width: 436, height: 420))
+        } else {
+            let f = hostingController.view.fittingSize
+            fitting = NSSize(width: f.width > 10 ? f.width : 436, height: f.height > 10 ? f.height : 184)
+        }
         if !hasPositionedOnce {
             positionInitialFrame(panel: panel, size: fitting)
             hasPositionedOnce = true
@@ -197,7 +205,7 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
 }
 
 private struct QuickTaskHUDRootView: View {
-    let vm: WorkspaceViewModel
+    @ObservedObject var vm: WorkspaceViewModel
     let hud: QuickTaskHUDModel
 
     var body: some View {

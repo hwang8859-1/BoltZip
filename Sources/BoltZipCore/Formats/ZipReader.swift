@@ -462,7 +462,7 @@ public final class ZipReader: @unchecked Sendable {
             var failed = 0
             var missingPw = 0
         }
-        let stateLock = OSAllocatedUnfairLock(initialState: IntegrityStats(results: [IntegrityEntryResult?](repeating: nil, count: total)))
+        let stateLock = BoltLockedBox(initialState: IntegrityStats(results: [IntegrityEntryResult?](repeating: nil, count: total)))
         let indexedRecords = Array(parsed.records.enumerated())
 
         try ParallelExecutor.forEachBounded(indexedRecords) { _, pair in
