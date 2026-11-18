@@ -1,38 +1,46 @@
 # Contributing to BoltZip
 
-感谢你关注并为 **BoltZip** 贡献代码！为保证发布分支稳定与版本演进清晰，请按以下分支规范提交 Pull Request：
+感谢你关注并为 **BoltZip** 贡献代码！BoltZip 采用「一版本一活跃 `dev-*` 分支 + 受保护 `main` 发布分支 + `legacy/macos-12` 长期兼容分支」三轨模式（Option A）。
 
 ## 分支结构与提交流程
 
-| 分支 | 用途 | 规则 |
+| 分支 | 用途 | 保护与协作规则 |
 | :--- | :--- | :--- |
-| **`dev-1.0.1`** *(GitHub 默认分支)* | **当前活跃开发分支** | 所有日常功能开发、Bug 修复与文档改进 **均须以本分支作为起点与 PR 目标分支（base）** |
-| **`main`** | **稳定发布分支**（受保护） | 禁止直接 `git push`；仅接收维护者从活跃开发分支合入的版本发布 PR |
-| **`legacy/macos-12`** | **v0.9.1 LTS 兼容分支** | 仅维护 Intel (`x86_64`) + macOS 12–26 关键兼容性修复 |
+| **[默认 `dev-*` 分支](../../)** *(当前 `dev-1.0.1`)* | **当前活跃开发分支** | 所有日常开发与外部贡献 PR **均须基于并提交至此默认分支**；受 Ruleset 保护禁止强推与误删 |
+| **`main`** | **稳定发布分支**（受保护） | 禁止直接 `git push`；仅接收从活跃 `dev-*` 合入的版本发布 PR，受 [`pr-target-guard`](.github/workflows/pr-target-guard.yml) 强校验 |
+| **`legacy/macos-12`** | **v0.9.1 LTS 兼容分支** | 仅维护 Intel (`x86_64`) + macOS 12–26 关键兼容性修复；受 Ruleset 保护禁止强推与删除 |
 
 > [!IMPORTANT]
-> 请不要将常规开发 PR 指向 `main`。在 GitHub 创建 PR 时请确认顶部 `base:` 分支为 **`dev-1.0.1`**（当前默认分支）；针对 `main` 的非发布 PR 会触发 [`pr-target-guard`](.github/workflows/pr-target-guard.yml) 自动提醒并关闭。
+> 请不要将常规开发 PR 指向 `main`。由于当前默认分支已设置为活跃 `dev-*` 分支，直接执行 `git clone` 或在 GitHub 点击创建 PR 时会自动指向正确分支；若错指 `main`，[`pr-target-guard`](.github/workflows/pr-target-guard.yml) 会自动提示改投并关闭该 PR。
 
-## 开发与验证规范
+## 贡献与验证步骤
 
-1. 从当前默认分支切出开发分支：
+1. 从当前默认开发分支切出特性分支：
    ```bash
    git clone https://github.com/hwang8859-1/BoltZip.git
    cd BoltZip
    git checkout -b feat/your-change
    ```
-2. 提交前请参考 [`AGENTS.md`](AGENTS.md) 中的工程约束并执行完整检查：
+2. 提交前请遵守 [`AGENTS.md`](AGENTS.md) 中的开发规范并运行验证：
    ```bash
    swift test
    ./Scripts/build_app.sh
    codesign --verify --deep --strict dist/BoltZip.app
    ```
-3. 请勿硬编码任何本地用户路径（如 `/Users/...`），新增用户界面文案请完整补充 `L10n.swift` 四语支持（`zh-Hans` / `zh-Hant` / `en` / `ja`）。
+3. 请勿引入本地个人路径（`/Users/...`），新增用户界面文案请完整补充 `L10n.swift` 四语支持（`zh-Hans` / `zh-Hant` / `en` / `ja`）。
+
+## 维护者发版切分支流程
+
+版本发布完成（通过 Merge Commit 将活跃 `dev-*` 合入 `main` 并创建 `vX.Y.Z` Tag）后，运行脚本切换至下一版本分支并清理已合入旧分支：
+
+```bash
+./Scripts/cut_next_dev_branch.sh dev-1.0.2 --cleanup-old dev-1.0.1
+```
 
 ---
 
 ## Branch Workflow (English)
 
-- **`dev-1.0.1`** *(default branch)*: Active development branch. Always fork/branch from it and target **`dev-1.0.1`** as your PR base branch.
-- **`main`** *(protected)*: Release-only branch. Direct pushes are blocked, and non-release PRs targeting `main` are rejected automatically.
+- **[Default `dev-*` branch](../../)** *(currently `dev-1.0.1`)*: Active development branch. Always branch from it and target it as your PR base branch (protected against force pushes and deletion via repository rulesets).
+- **`main`** *(protected)*: Release-only branch. Direct pushes are blocked, and non-release PRs targeting `main` are automatically closed by [`pr-target-guard`](.github/workflows/pr-target-guard.yml).
 - **`legacy/macos-12`**: Maintenance branch for macOS 12–26 Universal (`arm64` + `x86_64`) v0.9.x releases.
