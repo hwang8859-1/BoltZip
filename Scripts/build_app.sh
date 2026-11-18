@@ -47,7 +47,14 @@ cat <<APPEX_PLIST > "$APPEX_DIR/Contents/Info.plist"
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key>
-    <string>zh_CN</string>
+    <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>zh-Hans</string>
+        <string>zh-Hant</string>
+        <string>en</string>
+        <string>ja</string>
+    </array>
     <key>CFBundleDisplayName</key>
     <string>Bolt</string>
     <key>CFBundleExecutable</key>
@@ -83,6 +90,71 @@ cat <<APPEX_PLIST > "$APPEX_DIR/Contents/Info.plist"
 </plist>
 APPEX_PLIST
 
+echo "==> Generating bundle localization resources (.lproj)..."
+for lang in zh-Hans zh-Hant en ja; do
+    mkdir -p "$CONTENTS/Resources/${lang}.lproj" "$APPEX_DIR/Contents/Resources/${lang}.lproj"
+done
+
+cat <<'STR_ZH_HANS' > "$APPEX_DIR/Contents/Resources/zh-Hans.lproj/Localizable.strings"
+"finder.compressFolderZip" = "将当前文件夹压缩为 ZIP";
+"finder.compressFolderTarZst" = "将当前文件夹压缩为 TAR.ZST";
+"finder.openWorkspace" = "打开 BoltZip 工作台";
+"finder.smartExtract" = "智能解压到当前位置";
+"finder.extractSubfolder" = "解压到同名文件夹";
+"finder.openInBoltZip" = "在 BoltZip 中打开浏览";
+"finder.verifyIntegrity" = "校验压缩包完整性";
+"finder.compressZip" = "压缩为 ZIP";
+"finder.compressTarZst" = "压缩为 TAR.ZST (Zstd)";
+"finder.compress7z" = "压缩为 7z";
+"finder.encryptSplitCompress" = "加密 / 分卷高级压缩...";
+"finder.repackEncryptCompress" = "重新打包 / 加密压缩...";
+STR_ZH_HANS
+
+cat <<'STR_ZH_HANT' > "$APPEX_DIR/Contents/Resources/zh-Hant.lproj/Localizable.strings"
+"finder.compressFolderZip" = "將目前資料夾壓縮為 ZIP";
+"finder.compressFolderTarZst" = "將目前資料夾壓縮為 TAR.ZST";
+"finder.openWorkspace" = "開啟 BoltZip 工作台";
+"finder.smartExtract" = "智慧解壓至目前位置";
+"finder.extractSubfolder" = "解壓至同名資料夾";
+"finder.openInBoltZip" = "在 BoltZip 中開啟瀏覽";
+"finder.verifyIntegrity" = "驗證封存檔完整性";
+"finder.compressZip" = "壓縮為 ZIP";
+"finder.compressTarZst" = "壓縮為 TAR.ZST (Zstd)";
+"finder.compress7z" = "壓縮為 7z";
+"finder.encryptSplitCompress" = "加密 / 分卷進階壓縮...";
+"finder.repackEncryptCompress" = "重新打包 / 加密壓縮...";
+STR_ZH_HANT
+
+cat <<'STR_EN' > "$APPEX_DIR/Contents/Resources/en.lproj/Localizable.strings"
+"finder.compressFolderZip" = "Compress Folder as ZIP";
+"finder.compressFolderTarZst" = "Compress Folder as TAR.ZST";
+"finder.openWorkspace" = "Open BoltZip Workspace";
+"finder.smartExtract" = "Smart Extract Here";
+"finder.extractSubfolder" = "Extract to Subfolder";
+"finder.openInBoltZip" = "Open in BoltZip";
+"finder.verifyIntegrity" = "Verify Archive Integrity";
+"finder.compressZip" = "Compress to ZIP";
+"finder.compressTarZst" = "Compress to TAR.ZST (Zstd)";
+"finder.compress7z" = "Compress to 7z";
+"finder.encryptSplitCompress" = "Encrypt & Split Archive...";
+"finder.repackEncryptCompress" = "Repack / Encrypt Archive...";
+STR_EN
+
+cat <<'STR_JA' > "$APPEX_DIR/Contents/Resources/ja.lproj/Localizable.strings"
+"finder.compressFolderZip" = "現在のフォルダを ZIP に圧縮";
+"finder.compressFolderTarZst" = "現在のフォルダを TAR.ZST に圧縮";
+"finder.openWorkspace" = "BoltZip ワークスペースを開く";
+"finder.smartExtract" = "ここにスマート展開";
+"finder.extractSubfolder" = "同名フォルダへ展開";
+"finder.openInBoltZip" = "BoltZip で開く";
+"finder.verifyIntegrity" = "書庫の整合性を検証";
+"finder.compressZip" = "ZIP に圧縮";
+"finder.compressTarZst" = "TAR.ZST (Zstd) に圧縮";
+"finder.compress7z" = "7z に圧縮";
+"finder.encryptSplitCompress" = "暗号化・分割して圧縮...";
+"finder.repackEncryptCompress" = "再圧縮・暗号化...";
+STR_JA
+
 echo "==> Generating macOS AppIcon.icns..."
 ICONSET_DIR="$DIST_DIR/AppIcon.iconset"
 rm -rf "$ICONSET_DIR"
@@ -96,7 +168,14 @@ cat <<PLIST > "$CONTENTS/Info.plist"
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key>
-    <string>zh_CN</string>
+    <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>zh-Hans</string>
+        <string>zh-Hant</string>
+        <string>en</string>
+        <string>ja</string>
+    </array>
     <key>CFBundleExecutable</key>
     <string>BoltZipApp</string>
     <key>CFBundleIconFile</key>
