@@ -11,7 +11,11 @@ struct AboutView: View {
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
 
         VStack(spacing: 12) {
-            BoltLogoBadge(size: 64, whiteBackground: vm.useWhiteAppIcon)
+            BoltLogoBadge(
+                size: 64,
+                whiteBackground: vm.useWhiteAppIcon,
+                glassEnabled: glassEnabled
+            )
 
             VStack(spacing: 4) {
                 Text("BoltZip")
@@ -85,10 +89,8 @@ struct AboutView: View {
                 backgroundOpacity: vm.windowBackgroundOpacity
             )
         )
-        .boltWindowContainerBackground(
-            glassEnabled ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
-        )
-        .boltWindowToolbarBackgroundVisibility(glassEnabled ? .hidden : .automatic)
+        .environment(\.boltGlassIntensity, vm.glassIntensity)
+        .boltUnifiedWindowContainerBackground(glassEnabled: glassEnabled)
         .preferredColorScheme(vm.appTheme.colorScheme)
     }
 }

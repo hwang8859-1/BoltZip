@@ -30,6 +30,7 @@ struct SettingsView: View {
                 .padding(5)
                 .boltLayeredSurface(
                     glassEnabled: glassEnabled,
+                    level: .elevated,
                     tone: .regular,
                     in: RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous)
                 )
@@ -72,6 +73,7 @@ struct SettingsView: View {
                 .padding(.vertical, BoltMetrics.cardFooterVPad)
                 .boltLayeredSurface(
                     glassEnabled: glassEnabled,
+                    level: .elevated,
                     tone: .regular,
                     in: RoundedRectangle(cornerRadius: BoltRadius.bar, style: .continuous)
                 )
@@ -86,10 +88,8 @@ struct SettingsView: View {
                 backgroundOpacity: vm.windowBackgroundOpacity
             )
         )
-        .boltWindowContainerBackground(
-            glassEnabled ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
-        )
-        .boltWindowToolbarBackgroundVisibility(glassEnabled ? .hidden : .automatic)
+        .environment(\.boltGlassIntensity, vm.glassIntensity)
+        .boltUnifiedWindowContainerBackground(glassEnabled: glassEnabled)
         .preferredColorScheme(vm.appTheme.colorScheme)
         .onAppear {
             vm.refreshQuickActionsStatus()

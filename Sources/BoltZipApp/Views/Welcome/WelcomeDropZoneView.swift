@@ -126,18 +126,12 @@ struct WelcomeDropZoneView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(
-                accent.opacity(0.13),
+            .boltLayeredSurface(
+                glassEnabled: vm.effectiveWindowTranslucency,
+                level: .card,
+                tone: .regular,
+                tint: accent.opacity(0.18),
                 in: RoundedRectangle(cornerRadius: BoltRadius.bar, style: .continuous)
-            )
-            .boltGlassSurface(
-                .regular,
-                tint: accent.opacity(0.22),
-                in: RoundedRectangle(cornerRadius: BoltRadius.bar, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: BoltRadius.bar, style: .continuous)
-                    .strokeBorder(accent.opacity(0.26), lineWidth: 0.75)
             )
         }
     }
@@ -178,7 +172,8 @@ struct WelcomeDropZoneView: View {
             VStack(spacing: isCompactHeight ? 7 : 10) {
                 BoltLogoBadge(
                     size: isCompactHeight ? 42 : 52,
-                    whiteBackground: vm.useWhiteAppIcon
+                    whiteBackground: vm.useWhiteAppIcon,
+                    glassEnabled: vm.effectiveWindowTranslucency
                 )
 
                 Text(l.dropZoneTitle)
@@ -221,7 +216,6 @@ struct WelcomeDropZoneView: View {
             glassEnabled: vm.effectiveWindowTranslucency,
             tone: .regular,
             tint: isDropTargeted ? Color.cyan.opacity(0.18) : nil,
-            interactive: true,
             in: RoundedRectangle(cornerRadius: BoltRadius.hero, style: .continuous)
         )
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in

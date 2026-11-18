@@ -202,6 +202,7 @@ private struct QuickTaskHUDRootView: View {
 
     var body: some View {
         QuickTaskHUDView(vm: vm, hud: hud)
+            .environment(\.boltGlassIntensity, vm.glassIntensity)
             .preferredColorScheme(vm.appTheme.colorScheme)
     }
 }

@@ -34,12 +34,10 @@ struct MainWindowView: View {
             )
         )
         .frame(minWidth: minW, minHeight: minH)
+        .environment(\.boltGlassIntensity, vm.glassIntensity)
         .preferredColorScheme(vm.appTheme.colorScheme)
         .navigationTitle(vm.listing == nil ? "BoltZip" : " ")
-        .boltWindowContainerBackground(
-            vm.effectiveWindowTranslucency ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
-        )
-        .boltWindowToolbarBackgroundVisibility(vm.effectiveWindowTranslucency ? .hidden : .automatic)
+        .boltUnifiedWindowContainerBackground(glassEnabled: vm.effectiveWindowTranslucency)
         .toolbar {
             mainToolbarContent(l: l)
         }
@@ -141,7 +139,7 @@ struct MainWindowView: View {
                 }
                 .padding(.horizontal, 4)
                 .frame(height: 30)
-                .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, tone: .regular, interactive: true, in: Capsule())
+                .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, level: .elevated, tone: .regular, interactive: true, in: Capsule())
             }
             .boltHiddenSharedBackground()
 
@@ -168,7 +166,7 @@ struct MainWindowView: View {
                     }
                     .padding(.horizontal, 9)
                     .frame(height: 28)
-                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, tone: .regular, interactive: true, in: Capsule())
+                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, level: .elevated, tone: .regular, interactive: true, in: Capsule())
 
                     HStack(spacing: 1) {
                         ToolbarPillIconButton(
@@ -239,7 +237,7 @@ struct MainWindowView: View {
                     }
                     .padding(.horizontal, 5)
                     .frame(height: 30)
-                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, tone: .regular, interactive: true, in: Capsule())
+                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, level: .elevated, tone: .regular, interactive: true, in: Capsule())
                 }
             }
             .boltHiddenSharedBackground()
@@ -255,7 +253,7 @@ struct MainWindowView: View {
                     }
                     .padding(.horizontal, 2)
                     .frame(height: 30)
-                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, tone: .regular, interactive: true, in: Capsule())
+                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, level: .elevated, tone: .regular, interactive: true, in: Capsule())
                 }
                 .boltHiddenSharedBackground()
             }
@@ -289,7 +287,7 @@ struct MainWindowView: View {
                 }
                 .padding(.horizontal, 4)
                 .frame(height: 30)
-                .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, tone: .regular, interactive: true, in: Capsule())
+                .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, level: .elevated, tone: .regular, interactive: true, in: Capsule())
             }
             .boltHiddenSharedBackground()
         }
@@ -344,12 +342,13 @@ struct MainWindowView: View {
                         .lineLimit(1)
                 }
                 .padding(18)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: BoltRadius.hero, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: BoltRadius.hero, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.75)
+                .boltLayeredSurface(
+                    glassEnabled: vm.effectiveWindowTranslucency,
+                    level: .card,
+                    tone: .regular,
+                    in: RoundedRectangle(cornerRadius: BoltRadius.hero, style: .continuous)
                 )
-                .shadow(radius: 16)
+                .shadow(color: .black.opacity(0.18), radius: 16, y: 6)
             }
         }
     }

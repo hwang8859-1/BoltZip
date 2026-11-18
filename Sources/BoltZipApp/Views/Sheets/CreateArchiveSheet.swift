@@ -98,6 +98,7 @@ struct CreateArchiveSheet: View {
                 .padding(.vertical, BoltMetrics.cardHeaderVPad)
                 .boltLayeredSurface(
                     glassEnabled: glassEnabled,
+                    level: .elevated,
                     tone: .regular,
                     in: RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous)
                 )
@@ -142,6 +143,7 @@ struct CreateArchiveSheet: View {
                 .padding(.vertical, BoltMetrics.cardFooterVPad)
                 .boltLayeredSurface(
                     glassEnabled: glassEnabled,
+                    level: .elevated,
                     tone: .regular,
                     in: RoundedRectangle(cornerRadius: BoltRadius.bar, style: .continuous)
                 )
@@ -453,10 +455,8 @@ private struct CreateArchiveContainerStyleModifier: ViewModifier {
                         backgroundOpacity: vm.windowBackgroundOpacity
                     )
                 )
-                .boltWindowContainerBackground(
-                    glassEnabled ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
-                )
-                .boltWindowToolbarBackgroundVisibility(glassEnabled ? .hidden : .automatic)
+                .environment(\.boltGlassIntensity, vm.glassIntensity)
+                .boltUnifiedWindowContainerBackground(glassEnabled: glassEnabled)
                 .preferredColorScheme(vm.appTheme.colorScheme)
         } else {
             content

@@ -402,10 +402,13 @@ struct ArchiveExplorerView: View {
             .focusable()
             .focusEffectDisabled()
             .clipShape(RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous))
-            .boltLayeredSurface(
-                glassEnabled: glassEnabled,
-                tone: .regular,
+            .background(
+                Color(nsColor: .controlBackgroundColor),
                 in: RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
             )
             .onKeyPress(.space) { previewSelectedOrReturnIgnored() }
             .onKeyPress(.return) { previewSelectedOrReturnIgnored() }
@@ -421,7 +424,7 @@ struct ArchiveExplorerView: View {
                                 .font(BoltType.sectionTitle)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)
-                                .boltLayeredSurface(glassEnabled: glassEnabled, tone: .regular, tint: .cyan.opacity(0.22), interactive: true, in: Capsule())
+                                .boltLayeredSurface(glassEnabled: glassEnabled, level: .elevated, tone: .regular, tint: .cyan.opacity(0.22), in: Capsule())
                         }
                 }
             }
@@ -497,8 +500,9 @@ struct ArchiveExplorerView: View {
                                 .buttonStyle(.plain)
                                 .boltLayeredSurface(
                                     glassEnabled: glassEnabled,
-                                    tone: crumb.path == vm.currentFolder ? .regular : .clear,
-                                    tint: crumb.path == vm.currentFolder ? .cyan.opacity(0.18) : nil,
+                                    level: crumb.path == vm.currentFolder ? .elevated : .card,
+                                    tone: .regular,
+                                    tint: crumb.path == vm.currentFolder ? .cyan.opacity(0.16) : nil,
                                     interactive: true,
                                     in: Capsule()
                                 )
