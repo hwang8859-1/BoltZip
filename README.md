@@ -20,7 +20,7 @@
 > 💡 **Intel Mac 或 macOS 12 Monterey ~ macOS 15 用户**：长期兼容版 **v0.9.1 Universal (`arm64 + x86_64`)** 维护在 [`legacy/macos-12`](../../tree/legacy/macos-12) 分支 / `v0.9.1` Release Tag。
 
 > [!IMPORTANT]
-> **当前活跃开发分支：`dev-1.0.1`**（仓库默认分支）· `main` 分支仅用于稳定版本发布且已受保护。提交代码或 PR 请务必指向 **`dev-1.0.1`**，详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+> **当前活跃开发分支：[GitHub 默认 `dev-*` 分支](../../)** · `main` 分支仅用于稳定版本发布且已受保护。提交代码或 PR 请务必保持指向当前默认开发分支，详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## ✨ 核心特性
 

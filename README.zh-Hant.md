@@ -20,7 +20,7 @@
 > 💡 **Intel Mac 或 macOS 12–15 使用者**：長期相容版本 **v0.9.1 Universal (`arm64 + x86_64`)** 維護於 [`legacy/macos-12`](../../tree/legacy/macos-12) 分支與 `v0.9.1` 標籤。
 
 > [!IMPORTANT]
-> **目前活躍開發分支：`dev-1.0.1`**（預設分支）· `main` 分支僅供穩定版發佈使用且已受保護。提交程式碼或 PR 請務必指向 **`dev-1.0.1`**，詳見 [CONTRIBUTING.md](CONTRIBUTING.md)。
+> **目前活躍開發分支：[GitHub 預設 `dev-*` 分支](../../)** · `main` 分支僅供穩定版發佈使用且已受保護。提交程式碼或 PR 請務必保持指向目前預設開發分支，詳見 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## ✨ 核心功能
 

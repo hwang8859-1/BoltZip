@@ -20,7 +20,7 @@
 > 💡 **Using Intel Mac or macOS 12–15?** Download **v0.9.1 Universal (`arm64` + `x86_64`)** from the [`legacy/macos-12`](../../tree/legacy/macos-12) branch / `v0.9.1` release tag.
 
 > [!IMPORTANT]
-> **Active Development Branch: `dev-1.0.1`** (default branch) · `main` is a protected release-only branch. Please target **`dev-1.0.1`** for all pull requests — see [CONTRIBUTING.md](CONTRIBUTING.md).
+> **Active Development: [Repository Default `dev-*` Branch](../../)** · `main` is a protected release-only branch. Please target the active default `dev-*` branch for all pull requests — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## ✨ Highlights
 
