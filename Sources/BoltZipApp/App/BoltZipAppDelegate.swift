@@ -129,6 +129,10 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        viewModel.cleanupPreviewTempFiles()
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         if viewModel.hudModel.phase != .idle
             || viewModel.isPreparingHUDExtract

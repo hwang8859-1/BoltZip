@@ -40,6 +40,9 @@ extension WorkspaceViewModel {
             do {
                 let result = try BoltArchiveEngine.inspect(archiveURL: url, encoding: encoding, password: password)
                 await MainActor.run {
+                    if self.listing?.archiveURL != url {
+                        self.cleanupPreviewTempFiles()
+                    }
                     self.listing = result
                     self.openedArchiveFromHome = fromHomeOrigin
                     self.currentFolder = ""
@@ -76,6 +79,7 @@ extension WorkspaceViewModel {
     }
 
     func closeArchive() {
+        cleanupPreviewTempFiles()
         listing = nil
         openedArchiveFromHome = false
         currentFolder = ""
@@ -313,6 +317,14 @@ extension WorkspaceViewModel {
                     if let pw, !pw.isEmpty { self.savedPassword = pw }
                     self.statusMessage = entry.name
                     QuickLookPreviewController.shared.preview(url: fileURL)
+                    let previousDir = self.activePreviewTempDir
+                    self.activePreviewTempDir = subDir
+                    if let previousDir, previousDir != subDir {
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(400))
+                            try? FileManager.default.removeItem(at: previousDir)
+                        }
+                    }
                 }
             } catch BoltZipError.passwordRequired, BoltZipError.wrongPassword {
                 await MainActor.run {

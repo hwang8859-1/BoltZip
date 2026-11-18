@@ -435,8 +435,12 @@ struct ArchiveExplorerView: View {
                 }
             }
 
-            bottomBreadcrumbBar(l: l, glassEnabled: glassEnabled)
+            if vm.showStatusBar {
+                bottomBreadcrumbBar(l: l, glassEnabled: glassEnabled)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.easeInOut(duration: 0.16), value: vm.showStatusBar)
     }
 
     @ViewBuilder

@@ -120,6 +120,7 @@ final class WorkspaceViewModel {
     var onLanguageChanged: (() -> Void)?
 
     let previewTempRoot: URL
+    var activePreviewTempDir: URL?
 
     enum Keys {
         static let recents = "BoltZip.RecentArchives"
@@ -244,5 +245,10 @@ final class WorkspaceViewModel {
 
     func shouldReturnHomeOnWindowClose() -> Bool {
         listing != nil && openedArchiveFromHome
+    }
+
+    func cleanupPreviewTempFiles() {
+        activePreviewTempDir = nil
+        try? FileManager.default.removeItem(at: previewTempRoot)
     }
 }
