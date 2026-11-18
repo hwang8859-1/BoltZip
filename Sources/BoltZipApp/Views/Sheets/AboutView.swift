@@ -8,7 +8,7 @@ struct AboutView: View {
     var body: some View {
         let l = vm.l10n
         let glassEnabled = vm.effectiveWindowTranslucency
-        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.9.0"
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
 
         VStack(spacing: 12) {
             BoltLogoBadge(size: 64, whiteBackground: vm.useWhiteAppIcon)

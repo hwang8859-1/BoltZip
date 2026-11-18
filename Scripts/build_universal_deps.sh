@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$ROOT_DIR/Vendor/Compression"
 INC_DIR="$OUT_DIR/include"
 LIB_DIR="$OUT_DIR/lib"
-MIN_MACOS="14.0"
+MIN_MACOS="26.0"
 SDK_PATH="$(xcrun --show-sdk-path)"
 JOBS="$(sysctl -n hw.ncpu)"
 
@@ -31,7 +31,7 @@ fetch_and_verify() {
     local dest="$4"
 
     echo "==> Fetching $name..."
-    curl -fsSL "$url" -o "$dest"
+    curl -fsSL --retry 4 --retry-delay 2 "$url" -o "$dest"
     local actual_sha
     actual_sha="$(shasum -a 256 "$dest" | awk '{print $1}')"
     if [ "$actual_sha" != "$expected_sha" ]; then
@@ -43,85 +43,64 @@ fetch_and_verify() {
 rm -rf "$OUT_DIR"
 mkdir -p "$INC_DIR" "$LIB_DIR" "$WORK_DIR/src" "$WORK_DIR/stage"
 
-# 1. Zstandard (multithreaded static lib)
+# 1. Zstandard (multithreaded static lib, Apple Silicon arm64, minOS 26.0+)
 fetch_and_verify "zstd-$ZSTD_VER" "$ZSTD_URL" "$ZSTD_SHA256" "$WORK_DIR/zstd.tar.gz"
 tar -xzf "$WORK_DIR/zstd.tar.gz" -C "$WORK_DIR/src"
 ZSTD_SRC="$WORK_DIR/src/zstd-$ZSTD_VER"
 
-for arch in arm64 x86_64; do
-    echo "==> Building zstd ($arch, minOS $MIN_MACOS)..."
-    cp -R "$ZSTD_SRC" "$WORK_DIR/zstd-$arch"
-    make -C "$WORK_DIR/zstd-$arch/lib" -j"$JOBS" libzstd.a \
-        CC="xcrun clang" \
-        CFLAGS="-arch $arch -mmacosx-version-min=$MIN_MACOS -isysroot $SDK_PATH -O3 -fPIC" \
-        MOREFLAGS="-DZSTD_MULTITHREAD -pthread" \
-        HAVE_ZLIB=0 HAVE_LZMA=0 HAVE_LZ4=0
-    cp "$WORK_DIR/zstd-$arch/lib/libzstd.a" "$WORK_DIR/stage/libzstd-$arch.a"
-done
-
-lipo -create \
-    "$WORK_DIR/stage/libzstd-arm64.a" \
-    "$WORK_DIR/stage/libzstd-x86_64.a" \
-    -output "$LIB_DIR/libzstd.a"
+echo "==> Building zstd (arm64, minOS $MIN_MACOS)..."
+cp -R "$ZSTD_SRC" "$WORK_DIR/zstd-arm64"
+make -C "$WORK_DIR/zstd-arm64/lib" -j"$JOBS" libzstd.a \
+    CC="xcrun clang" \
+    CFLAGS="-arch arm64 -mmacosx-version-min=$MIN_MACOS -isysroot $SDK_PATH -O3 -fPIC" \
+    MOREFLAGS="-DZSTD_MULTITHREAD -pthread" \
+    HAVE_ZLIB=0 HAVE_LZMA=0 HAVE_LZ4=0
+cp "$WORK_DIR/zstd-arm64/lib/libzstd.a" "$LIB_DIR/libzstd.a"
 cp "$ZSTD_SRC/lib/zstd.h" "$ZSTD_SRC/lib/zstd_errors.h" "$ZSTD_SRC/lib/zdict.h" "$INC_DIR/"
 
-# 2. XZ Utils / liblzma (POSIX multithreaded static lib)
+# 2. XZ Utils / liblzma (POSIX multithreaded static lib, Apple Silicon arm64, minOS 26.0+)
 fetch_and_verify "xz-$XZ_VER" "$XZ_URL" "$XZ_SHA256" "$WORK_DIR/xz.tar.gz"
 tar -xzf "$WORK_DIR/xz.tar.gz" -C "$WORK_DIR/src"
 XZ_SRC="$WORK_DIR/src/xz-$XZ_VER"
 
-for arch in arm64 x86_64; do
-    echo "==> Building xz / liblzma ($arch, minOS $MIN_MACOS)..."
-    mkdir -p "$WORK_DIR/xz-build-$arch" "$WORK_DIR/xz-prefix-$arch"
-    (
-        cd "$WORK_DIR/xz-build-$arch"
-        "$XZ_SRC/configure" \
-            --host="${arch}-apple-darwin" \
-            --prefix="$WORK_DIR/xz-prefix-$arch" \
-            --enable-static \
-            --disable-shared \
-            --disable-xz \
-            --disable-xzdec \
-            --disable-lzmadec \
-            --disable-lzmainfo \
-            --disable-scripts \
-            --disable-doc \
-            --disable-nls \
-            --enable-threads=posix \
-            CC="xcrun clang -arch $arch -mmacosx-version-min=$MIN_MACOS -isysroot $SDK_PATH" \
-            CFLAGS="-O3 -fPIC" >/dev/null
-        make -j"$JOBS" install >/dev/null
-    )
-    cp "$WORK_DIR/xz-prefix-$arch/lib/liblzma.a" "$WORK_DIR/stage/liblzma-$arch.a"
-done
-
-lipo -create \
-    "$WORK_DIR/stage/liblzma-arm64.a" \
-    "$WORK_DIR/stage/liblzma-x86_64.a" \
-    -output "$LIB_DIR/liblzma.a"
+echo "==> Building xz / liblzma (arm64, minOS $MIN_MACOS)..."
+mkdir -p "$WORK_DIR/xz-build-arm64" "$WORK_DIR/xz-prefix-arm64"
+(
+    cd "$WORK_DIR/xz-build-arm64"
+    "$XZ_SRC/configure" \
+        --host="arm64-apple-darwin" \
+        --prefix="$WORK_DIR/xz-prefix-arm64" \
+        --enable-static \
+        --disable-shared \
+        --disable-xz \
+        --disable-xzdec \
+        --disable-lzmadec \
+        --disable-lzmainfo \
+        --disable-scripts \
+        --disable-doc \
+        --disable-nls \
+        --enable-threads=posix \
+        CC="xcrun clang -arch arm64 -mmacosx-version-min=$MIN_MACOS -isysroot $SDK_PATH" \
+        CFLAGS="-O3 -fPIC" >/dev/null
+    make -j"$JOBS" install >/dev/null
+)
+cp "$WORK_DIR/xz-prefix-arm64/lib/liblzma.a" "$LIB_DIR/liblzma.a"
 cp "$WORK_DIR/xz-prefix-arm64/include/lzma.h" "$INC_DIR/"
 cp -R "$WORK_DIR/xz-prefix-arm64/include/lzma" "$INC_DIR/"
 
-# 3. LZ4 (static lib)
+# 3. LZ4 (static lib, Apple Silicon arm64, minOS 26.0+)
 fetch_and_verify "lz4-$LZ4_VER" "$LZ4_URL" "$LZ4_SHA256" "$WORK_DIR/lz4.tar.gz"
 tar -xzf "$WORK_DIR/lz4.tar.gz" -C "$WORK_DIR/src"
 LZ4_SRC="$WORK_DIR/src/lz4-$LZ4_VER"
 
-for arch in arm64 x86_64; do
-    echo "==> Building lz4 ($arch, minOS $MIN_MACOS)..."
-    cp -R "$LZ4_SRC" "$WORK_DIR/lz4-$arch"
-    make -C "$WORK_DIR/lz4-$arch/lib" -j"$JOBS" liblz4.a \
-        CC="xcrun clang" \
-        CFLAGS="-arch $arch -mmacosx-version-min=$MIN_MACOS -isysroot $SDK_PATH -O3 -fPIC"
-    cp "$WORK_DIR/lz4-$arch/lib/liblz4.a" "$WORK_DIR/stage/liblz4-$arch.a"
-done
-
-lipo -create \
-    "$WORK_DIR/stage/liblz4-arm64.a" \
-    "$WORK_DIR/stage/liblz4-x86_64.a" \
-    -output "$LIB_DIR/liblz4.a"
+echo "==> Building lz4 (arm64, minOS $MIN_MACOS)..."
+cp -R "$LZ4_SRC" "$WORK_DIR/lz4-arm64"
+make -C "$WORK_DIR/lz4-arm64/lib" -j"$JOBS" liblz4.a \
+    CC="xcrun clang" \
+    CFLAGS="-arch arm64 -mmacosx-version-min=$MIN_MACOS -isysroot $SDK_PATH -O3 -fPIC"
+cp "$WORK_DIR/lz4-arm64/lib/liblz4.a" "$LIB_DIR/liblz4.a"
 cp "$LZ4_SRC/lib/lz4.h" "$LZ4_SRC/lib/lz4frame.h" "$LZ4_SRC/lib/lz4hc.h" "$INC_DIR/"
 
-echo "==> Universal static libraries created in $OUT_DIR:"
+echo "==> Apple Silicon (arm64) static libraries created in $OUT_DIR:"
 lipo -info "$LIB_DIR/libzstd.a" "$LIB_DIR/liblzma.a" "$LIB_DIR/liblz4.a"
 ls -lh "$LIB_DIR"

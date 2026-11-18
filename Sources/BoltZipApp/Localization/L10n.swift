@@ -72,19 +72,11 @@ struct L10n: Sendable {
     var readyStatus: String { t("就绪 · 拖入压缩包浏览，或拖入文件立即打包", "就緒 · 拖入封存檔瀏覽，或拖入檔案立即打包", "Ready — Drop an archive to browse, or files to compress", "準備完了 — 書庫をドロップして閲覧、またはファイルを圧縮") }
     var dropZoneTitle: String { t("拖放压缩包直接浏览，或拖入文件立即打包", "拖放封存檔直接瀏覽，或拖入檔案立即打包", "Drop an archive to browse, or files to compress", "書庫を開いて閲覧、またはファイルをここにドロップ") }
     var dropZoneSubtitle: String {
-        if BoltPlatformCapabilities.supportsLiquidGlass {
-            return t(
-                "macOS 液态玻璃原生体验 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · 自动清理 .DS_Store 与 GBK 乱码修复",
-                "macOS 液態玻璃原生體驗 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · 自動清除 .DS_Store 與編碼自動修正",
-                "Native macOS Liquid Glass · ZIP, RAR, 7z, TAR.ZST, XZ, LZ4 · Auto-remove .DS_Store & CJK fix",
-                "macOS Liquid Glass 対応 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · .DS_Store 自動除外＆文字コード補正"
-            )
-        }
-        return t(
-            "macOS 原生极速工作台 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · 自动清理 .DS_Store 与 GBK 乱码修复",
-            "macOS 原生極速工作台 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · 自動清除 .DS_Store 與編碼自動修正",
-            "Native macOS Archive Studio · ZIP, RAR, 7z, TAR.ZST, XZ, LZ4 · Auto-remove .DS_Store & CJK fix",
-            "macOS ネイティブ書庫スタジオ · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · .DS_Store 自動除外＆文字コード補正"
+        t(
+            "macOS 液态玻璃原生体验 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · 自动清理 .DS_Store 与 GBK 乱码修复",
+            "macOS 液態玻璃原生體驗 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · 自動清除 .DS_Store 與編碼自動修正",
+            "Native macOS Liquid Glass · ZIP, RAR, 7z, TAR.ZST, XZ, LZ4 · Auto-remove .DS_Store & CJK fix",
+            "macOS Liquid Glass 対応 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · .DS_Store 自動除外＆文字コード補正"
         )
     }
 
@@ -345,7 +337,7 @@ struct L10n: Sendable {
         )
     }
     var aboutMenuTitle: String { t("关于 BoltZip", "關於 BoltZip", "About BoltZip", "BoltZip について") }
-    var aboutVersionLabel: String { BoltPlatformCapabilities.runtimeVersionSummary(appVersion: "0.9.0") }
+    var aboutVersionLabel: String { BoltPlatformCapabilities.runtimeVersionSummary(appVersion: "1.0.0") }
     var aboutDesc: String {
         t(
             "开源压缩/解压缩工作台，原生融合 Windows Zip 效率交互、访达一级 Bolt 菜单与液态玻璃设计。",

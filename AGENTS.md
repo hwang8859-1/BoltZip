@@ -4,11 +4,11 @@ Welcome! This file gives human contributors and AI coding agents an accurate map
 
 ## 1. Project Overview
 
-**BoltZip** is an open-source macOS archive manager (targeting **macOS 14.0+ / Universal `arm64` + `x86_64`**, with native Liquid Glass on macOS 26+ and clean non-glass fallback on macOS 14–15) inspired by classic Windows archive tools (7-Zip / WinZip / Bandizip), built with **Swift 6**, **SwiftUI + AppKit**, a pure-Swift/C open-source core (`BoltZipCore` + `CBoltCompression`), a CLI (`boltzip`), and a sandboxed Finder Sync Extension (`BoltZipFinderSync`).
+**BoltZip (`main`, v1.0.0)** is an open-source macOS archive manager exclusively targeting **Apple Silicon (`arm64` / M-series) on macOS 26.0+** with native 3-layer **Liquid Glass** (legacy macOS 12–26 Universal `arm64` + `x86_64` support lives on the **`legacy/macos-12` (`v0.9.1`)** branch). Inspired by classic Windows archive tools (7-Zip / WinZip / Bandizip), BoltZip is built with **Swift 6.2**, **SwiftUI + AppKit**, a pure-Swift/C open-source core (`BoltZipCore` + `CBoltCompression`), a CLI (`boltzip`), and a sandboxed Finder Sync Extension (`BoltZipFinderSync`).
 
 - **Repository**: `https://github.com/hwang8859-1/BoltZip.git`
 - **License**: MIT ([LICENSE](LICENSE))
-- **Toolchain**: Swift 6.0+, Xcode / Command Line Tools with macOS 26+ / 27.2+ SDK, Universal static `zstd`, `xz` (`liblzma`), `lz4` in `Vendor/Compression/` (regenerable via `Scripts/build_universal_deps.sh`).
+- **Toolchain**: Swift 6.2+, Xcode / Command Line Tools with macOS 26+ / 27.2+ SDK, Apple Silicon (`arm64`) static `zstd`, `xz` (`liblzma`), `lz4` in `Vendor/Compression/` (regenerable via `Scripts/build_universal_deps.sh`).
 
 ---
 
@@ -18,10 +18,10 @@ Welcome! This file gives human contributors and AI coding agents an accurate map
 BoltZip/
 ├── Package.swift                        # SwiftPM manifest (CBoltCompression, BoltZipCore, boltzip, BoltZipApp, tests)
 ├── Scripts/
-│   ├── build_app.sh                     # Release Universal (arm64 + x86_64) build -> dist/BoltZip.app + BoltZipFinderSync.appex + AppIcon.icns + codesign
-│   ├── build_universal_deps.sh          # Cross-compile Universal (arm64 + x86_64, minOS 14.0) static zstd/xz/lz4 into Vendor/Compression/
+│   ├── build_app.sh                     # Release Apple Silicon (arm64, minOS 26.0) build -> dist/BoltZip.app + BoltZipFinderSync.appex + AppIcon.icns + codesign
+│   ├── build_universal_deps.sh          # Compile Apple Silicon (arm64, minOS 26.0) static zstd/xz/lz4 into Vendor/Compression/
 │   └── generate_icon.swift              # CoreGraphics procedural 1024x1024 macOS iconset generator
-├── Vendor/Compression/                  # Prebuilt Universal (arm64 + x86_64, minOS 14.0) headers & static libs (zstd, xz, lz4)
+├── Vendor/Compression/                  # Prebuilt Apple Silicon (arm64, minOS 26.0) headers & static libs (zstd, xz, lz4)
 ├── Sources/
 │   ├── CBoltCompression/                # C wrapper statically linking zlib, libzstd, liblzma, libbz2, liblz4
 │   │   ├── include/bolt_compression.h
@@ -82,13 +82,13 @@ open dist/BoltZip.app
 ```
 
 ### Static Linking Note
-`Package.swift` links system `libz` and `libbz2` alongside the Universal (`arm64` + `x86_64`, `minOS 14.0`) static archives in `Vendor/Compression/lib/lib{zstd,lzma,lz4}.a` (with automatic fallback to `/opt/homebrew` or `/usr/local` if `Vendor/Compression` is absent) so `dist/BoltZip.app` and `boltzip` have **zero Homebrew runtime dylib dependencies**. Run `./Scripts/build_universal_deps.sh` to regenerate `Vendor/Compression` from SHA256-verified upstream sources.
+`Package.swift` links system `libz`, `libbz2`, and `libarchive` alongside the Apple Silicon (`arm64`, `minOS 26.0`) static archives in `Vendor/Compression/lib/lib{zstd,lzma,lz4}.a` (with automatic fallback to `/opt/homebrew` or `/usr/local` if `Vendor/Compression` is absent) so `dist/BoltZip.app` and `boltzip` have **zero Homebrew runtime dylib dependencies**. Run `./Scripts/build_universal_deps.sh` to regenerate `Vendor/Compression` from SHA256-verified upstream sources.
 
 ---
 
 ## 4. Critical Engineering Invariants (Do Not Break)
 
-1. **Swift 6 Strict Concurrency**: The project compiles under Swift 6 (`swift-tools-version: 6.0`). All UI state lives on `@MainActor` (`WorkspaceViewModel`), while heavy archive I/O runs inside `Task.detached` with `Sendable` models (`ArchiveEntry`, `ArchiveListing`, `CreateArchiveOptions`, `ExtractOptions`).
+1. **Swift 6 Strict Concurrency**: The project compiles under Swift 6.2 (`swift-tools-version: 6.2`, `.macOS(.v26)`). All UI state lives on `@MainActor` (`WorkspaceViewModel`), while heavy archive I/O runs inside `Task.detached` with `Sendable` models (`ArchiveEntry`, `ArchiveListing`, `CreateArchiveOptions`, `ExtractOptions`).
 2. **WinZip AE-2 Specification (`ZipCrypto.swift`)**:
    - PBKDF2-HMAC-SHA1 (`1000` iterations) derives encryption key + auth key + 2-byte password verifier.
    - AES-256-CTR uses a **128-bit little-endian counter starting at `1`** (`[1, 0, ..., 0]`).

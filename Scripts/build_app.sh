@@ -4,20 +4,20 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-APP_VERSION="0.9.0"
-APP_BUILD="9"
-MIN_MACOS="14.0"
+APP_VERSION="1.0.0"
+APP_BUILD="11"
+MIN_MACOS="26.0"
 VENDOR_LIB_DIR="$ROOT_DIR/Vendor/Compression/lib"
 
 if [ ! -f "$VENDOR_LIB_DIR/libzstd.a" ] || [ ! -f "$VENDOR_LIB_DIR/liblzma.a" ] || [ ! -f "$VENDOR_LIB_DIR/liblz4.a" ]; then
-    echo "==> Building universal compression static libraries (arm64 + x86_64)..."
+    echo "==> Building Apple Silicon (arm64) compression static libraries..."
     "$ROOT_DIR/Scripts/build_universal_deps.sh"
 fi
 
-echo "==> Building BoltZipApp and boltzip CLI (release, Universal arm64 + x86_64, minOS $MIN_MACOS)..."
-swift build -c release --arch arm64 --arch x86_64
+echo "==> Building BoltZipApp and boltzip CLI (release, arm64, minOS $MIN_MACOS)..."
+swift build -c release --arch arm64
 
-BIN_DIR="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)"
+BIN_DIR="$(swift build -c release --arch arm64 --show-bin-path)"
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/BoltZip.app"
 CONTENTS="$APP_DIR/Contents"
@@ -30,11 +30,8 @@ cp "$BIN_DIR/BoltZipApp" "$CONTENTS/MacOS/BoltZipApp"
 cp "$BIN_DIR/boltzip" "$CONTENTS/Helpers/boltzip"
 cp -R "$ROOT_DIR/showcase/." "$CONTENTS/Resources/showcase/"
 
-echo "==> Building BoltZipFinderSync.appex (Universal arm64 + x86_64, minOS $MIN_MACOS)..."
+echo "==> Building BoltZipFinderSync.appex (arm64, minOS $MIN_MACOS)..."
 SDK_PATH="$(xcrun --show-sdk-path)"
-TMP_APPEX_ARM64="$(mktemp "${TMPDIR:-/tmp}/BoltZipFinderSync-arm64.XXXXXX")"
-TMP_APPEX_X86_64="$(mktemp "${TMPDIR:-/tmp}/BoltZipFinderSync-x86_64.XXXXXX")"
-trap 'rm -f "$TMP_APPEX_ARM64" "$TMP_APPEX_X86_64"' EXIT
 
 swiftc -O -parse-as-library \
     -target "arm64-apple-macosx$MIN_MACOS" \
@@ -42,17 +39,7 @@ swiftc -O -parse-as-library \
     -framework Foundation -framework AppKit -framework FinderSync \
     -Xlinker -e -Xlinker _NSExtensionMain \
     "$ROOT_DIR/Sources/BoltZipFinderSync/FinderSync.swift" \
-    -o "$TMP_APPEX_ARM64"
-
-swiftc -O -parse-as-library \
-    -target "x86_64-apple-macosx$MIN_MACOS" \
-    -sdk "$SDK_PATH" \
-    -framework Foundation -framework AppKit -framework FinderSync \
-    -Xlinker -e -Xlinker _NSExtensionMain \
-    "$ROOT_DIR/Sources/BoltZipFinderSync/FinderSync.swift" \
-    -o "$TMP_APPEX_X86_64"
-
-lipo -create "$TMP_APPEX_ARM64" "$TMP_APPEX_X86_64" -output "$APPEX_DIR/Contents/MacOS/BoltZipFinderSync"
+    -o "$APPEX_DIR/Contents/MacOS/BoltZipFinderSync"
 
 cat <<APPEX_PLIST > "$APPEX_DIR/Contents/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -264,7 +251,7 @@ if [ -d "$HOME/Library/Services" ]; then
     /System/Library/CoreServices/pbs -update || true
 fi
 
-RELEASE_ZIP="$DIST_DIR/BoltZip-${APP_VERSION}-macOS-universal.zip"
+RELEASE_ZIP="$DIST_DIR/BoltZip-${APP_VERSION}-macOS-arm64.zip"
 SOURCE_TAR="$DIST_DIR/BoltZip-${APP_VERSION}-source.tar.gz"
 SOURCE_ZIP="$DIST_DIR/BoltZip-${APP_VERSION}-source.zip"
 SUMS_FILE="$DIST_DIR/BoltZip-${APP_VERSION}-SHA256SUMS.txt"
@@ -279,7 +266,7 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && [ -z "$(git status --p
 else
     echo "==> Creating clean source archives from workspace ($APP_VERSION)..."
     STAGE_SRC="$(mktemp -d "${TMPDIR:-/tmp}/BoltZip-src.XXXXXX")"
-    trap 'rm -f "$TMP_APPEX_ARM64" "$TMP_APPEX_X86_64"; rm -rf "$STAGE_SRC"' EXIT
+    trap 'rm -rf "$STAGE_SRC"' EXIT
     mkdir -p "$STAGE_SRC/BoltZip-${APP_VERSION}"
     COPYFILE_DISABLE=1 rsync -a \
         --exclude='.git' \

@@ -26,12 +26,10 @@ struct BoltBehindWindowBlurView: NSViewRepresentable {
         visual.autoresizingMask = [.width, .height]
         container.addSubview(visual)
 
-        if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView()
-            glass.cornerRadius = 0
-            glass.autoresizingMask = [.width, .height]
-            container.addSubview(glass)
-        }
+        let glass = NSGlassEffectView()
+        glass.cornerRadius = 0
+        glass.autoresizingMask = [.width, .height]
+        container.addSubview(glass)
         apply(to: container)
         return container
     }
@@ -48,8 +46,7 @@ struct BoltBehindWindowBlurView: NSViewRepresentable {
             visual.material = .hudWindow
             visual.alphaValue = CGFloat(max(0.24, 0.88 - clamped * 0.56))
         }
-        if #available(macOS 26.0, *),
-           let glass = container.subviews.first(where: { $0 is NSGlassEffectView }) as? NSGlassEffectView {
+        if let glass = container.subviews.first(where: { $0 is NSGlassEffectView }) as? NSGlassEffectView {
             glass.style = clamped >= 0.70 ? .clear : .regular
             let tintAlpha = max(0.03, (1.0 - clamped) * 0.55)
             glass.tintColor = tintColor.withAlphaComponent(tintAlpha)

@@ -2,6 +2,18 @@
 
 All notable changes to **BoltZip** will be documented in this file.
 
+## [1.0.0] - 2026-11-18 (`main`: Apple Silicon + macOS 26+ Exclusive)
+
+### Changed
+- **Apple Silicon (`arm64`) + macOS 26+ Baseline**:
+  - Raised deployment target on `main` to **macOS 26.0+** with `swift-tools-version: 6.2` and exclusively targets **Apple Silicon (`arm64` / M-series)** (`Scripts/build_app.sh` and `Scripts/build_universal_deps.sh` drop `x86_64` fat slices for smaller binaries and zero deprecation warnings).
+  - Simplified [`WindowBackingViews.swift`](Sources/BoltZipApp/Views/Design/WindowBackingViews.swift) and [`GlassDesignSystem.swift`](Sources/BoltZipApp/Views/Design/GlassDesignSystem.swift) to use native macOS 26 **Liquid Glass** APIs (`GlassEffectContainer`, `.glassEffect`, `NSGlassEffectView`, `.buttonStyle(.glass)`, `.toolbarBackgroundVisibility`, `.sharedBackgroundVisibility(.hidden)`) directly without pre-macOS-26 `#available` fallbacks.
+  - Legacy support for **macOS 12 Monterey through macOS 26+ Universal (`arm64` + `x86_64` / Intel)** is preserved as **`v0.9.1`** on branch [`legacy/macos-12`](../../tree/legacy/macos-12).
+- **RAR / RAR5, Multi-Core Parallelism & Default File Associations**:
+  - Added full inspection, integrity check, password unlock, and extraction for `.rar`, `.r00/.r01`, `.part1.rar`, and RAR5 archives.
+  - Added multi-core parallel entry preparation and chunked extraction via `ParallelExecutor`.
+  - Added default archive file association management in Settings and return-to-welcome navigation on archive close.
+
 ## [0.9.0] - 2026-11-17
 
 ### Added & Improved
