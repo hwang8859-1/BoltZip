@@ -18,7 +18,9 @@ Welcome! This file gives human contributors and AI coding agents an accurate map
 BoltZip/
 ├── Package.swift                        # SwiftPM manifest (CBoltCompression, BoltZipCore, boltzip, BoltZipApp, tests)
 ├── Scripts/
-│   ├── build_app.sh                     # Release Apple Silicon (arm64, minOS 26.0) build -> dist/BoltZip.app + BoltZipFinderSync.appex + AppIcon.icns + codesign
+│   ├── build_app.sh                     # Release Apple Silicon (arm64, minOS 26.0) build -> dist/BoltZip.app + .dmg + BoltZipFinderSync.appex + codesign
+│   ├── create_dmg.sh                    # Creates drag-to-Applications HFS+ UDZO .dmg installer with custom Retina background & volume icon
+│   ├── generate_dmg_bg.swift            # CoreGraphics Retina 1x/2x DMG drag-to-Applications backdrop generator
 │   ├── build_universal_deps.sh          # Compile Apple Silicon (arm64, minOS 26.0) static zstd/xz/lz4 into Vendor/Compression/
 │   └── generate_icon.swift              # CoreGraphics procedural 1024x1024 macOS iconset generator
 ├── Vendor/Compression/                  # Prebuilt Apple Silicon (arm64, minOS 26.0) headers & static libs (zstd, xz, lz4)

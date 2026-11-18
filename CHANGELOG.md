@@ -5,6 +5,8 @@ All notable changes to **BoltZip** will be documented in this file.
 ## [1.0.0] - 2026-11-18 (`main`: Apple Silicon + macOS 26+ Exclusive)
 
 ### Changed
+- **DMG Drag-to-Applications Installer**:
+  - Added [`Scripts/create_dmg.sh`](Scripts/create_dmg.sh) and [`Scripts/generate_dmg_bg.swift`](Scripts/generate_dmg_bg.swift) to package `BoltZip-*.dmg` with a high-DPI Finder drag-to-Applications window, custom volume icon, and clean `.DS_Store` layout alongside the portable `.zip` bundle.
 - **Apple Silicon (`arm64`) + macOS 26+ Baseline**:
   - Raised deployment target on `main` to **macOS 26.0+** with `swift-tools-version: 6.2` and exclusively targets **Apple Silicon (`arm64` / M-series)** (`Scripts/build_app.sh` and `Scripts/build_universal_deps.sh` drop `x86_64` fat slices for smaller binaries and zero deprecation warnings).
   - Simplified [`WindowBackingViews.swift`](Sources/BoltZipApp/Views/Design/WindowBackingViews.swift) and [`GlassDesignSystem.swift`](Sources/BoltZipApp/Views/Design/GlassDesignSystem.swift) to use native macOS 26 **Liquid Glass** APIs (`GlassEffectContainer`, `.glassEffect`, `NSGlassEffectView`, `.buttonStyle(.glass)`, `.toolbarBackgroundVisibility`, `.sharedBackgroundVisibility(.hidden)`) directly without pre-macOS-26 `#available` fallbacks.
