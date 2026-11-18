@@ -20,7 +20,7 @@
 > 💡 **Intel Mac や macOS 12〜15 をお使いの方**：長期互換リリース **v0.9.1 Universal (`arm64 + x86_64`)** を [`legacy/macos-12`](../../tree/legacy/macos-12) ブランチおよび `v0.9.1` タグにて提供しています。
 
 > [!IMPORTANT]
-> **現在の開発ブランチ：`dev-1.0.1`**（デフォルトブランチ）· `main` は保護されたリリース専用ブランチです。PR は必ず **`dev-1.0.1`** をターゲットに作成してください（詳細は [CONTRIBUTING.md](CONTRIBUTING.md)）。
+> **現在の開発ブランチ：[GitHub デフォルトの `dev-*` ブランチ](../../)** · `main` は保護されたリリース専用ブランチです。PR は必ず現在のデフォルト開発ブランチをターゲットに作成してください（詳細は [CONTRIBUTING.md](CONTRIBUTING.md)）。
 
 ## ✨ 主な特長
 

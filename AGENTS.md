@@ -4,9 +4,14 @@ Welcome! This file gives human contributors and AI coding agents an accurate map
 
 ## 1. Project Overview
 
-**BoltZip (`main`, v1.0.0)** is an open-source macOS archive manager exclusively targeting **Apple Silicon (`arm64` / M-series) on macOS 26.0+** with native 3-layer **Liquid Glass** (legacy macOS 12–26 Universal `arm64` + `x86_64` support lives on the **`legacy/macos-12` (`v0.9.1`)** branch). Inspired by classic Windows archive tools (7-Zip / WinZip / Bandizip), BoltZip is built with **Swift 6.2**, **SwiftUI + AppKit**, a pure-Swift/C open-source core (`BoltZipCore` + `CBoltCompression`), a CLI (`boltzip`), and a sandboxed Finder Sync Extension (`BoltZipFinderSync`).
+**BoltZip (`dev-*` active development · `main` v1.0.0 release)** is an open-source macOS archive manager exclusively targeting **Apple Silicon (`arm64` / M-series) on macOS 26.0+** with native 3-layer **Liquid Glass** (legacy macOS 12–26 Universal `arm64` + `x86_64` support lives on the **`legacy/macos-12` (`v0.9.1`)** branch). Inspired by classic Windows archive tools (7-Zip / WinZip / Bandizip), BoltZip is built with **Swift 6.2**, **SwiftUI + AppKit**, a pure-Swift/C open-source core (`BoltZipCore` + `CBoltCompression`), a CLI (`boltzip`), and a sandboxed Finder Sync Extension (`BoltZipFinderSync`).
 
 - **Repository**: `https://github.com/hwang8859-1/BoltZip.git`
+- **Branch Governance (Option A — One `dev-X.Y.Z` branch per release)**:
+  - **Active `dev-*` branch** (`dev-1.0.1` currently, set as GitHub **default branch**): All new feature work and contributor PRs must target this branch. Protected via repository ruleset against force-pushes and accidental deletion.
+  - **`main` (Protected Release Branch)**: Release-only. Direct pushes are blocked (`enforce_admins: true`); merges require a PR from the active `dev-*` branch using **Merge Commit** and passing `.github/workflows/pr-target-guard.yml`.
+  - **`legacy/macos-12` (`v0.9.1` LTS)**: Critical Intel / macOS 12–26 fixes only; protected against force-pushes and deletion.
+  - **Version Cutover**: After releasing `dev-X.Y.Z -> main` + tagging `vX.Y.Z`, run `./Scripts/cut_next_dev_branch.sh dev-X.Y.(Z+1) --cleanup-old dev-X.Y.Z` to branch from `main`, advance GitHub's default branch, and retire the merged dev branch.
 - **License**: MIT ([LICENSE](LICENSE))
 - **Toolchain**: Swift 6.2+, Xcode / Command Line Tools with macOS 26+ / 27.2+ SDK, Apple Silicon (`arm64`) static `zstd`, `xz` (`liblzma`), `lz4` in `Vendor/Compression/` (regenerable via `Scripts/build_universal_deps.sh`).
 
@@ -20,6 +25,7 @@ BoltZip/
 ├── Scripts/
 │   ├── build_app.sh                     # Release Apple Silicon (arm64, minOS 26.0) build -> dist/BoltZip.app + .dmg + BoltZipFinderSync.appex + codesign
 │   ├── create_dmg.sh                    # Creates drag-to-Applications HFS+ UDZO .dmg installer with custom Retina background & volume icon
+│   ├── cut_next_dev_branch.sh           # Option-A release transition helper (cuts dev-X.Y.Z, switches default branch, cleans merged old dev)
 │   ├── generate_dmg_bg.swift            # CoreGraphics Retina 1x/2x DMG drag-to-Applications backdrop generator
 │   ├── build_universal_deps.sh          # Compile Apple Silicon (arm64, minOS 26.0) static zstd/xz/lz4 into Vendor/Compression/
 │   └── generate_icon.swift              # CoreGraphics procedural 1024x1024 macOS iconset generator
@@ -43,10 +49,11 @@ BoltZip/
 │   │   │   ├── TarCodec.swift           # Pure Swift USTAR/PAX tar + .tar.{gz,zst,xz,bz2,lz4} + single-stream
 │   │   │   └── ExtendedArchiveDriver.swift # .7z / .iso / .cab / .xar bridge via /usr/bin/tar (libarchive)
 │   │   └── Engine/
+│   │       ├── ArchiveAssociationService.swift # Shared LaunchServices UTI & default app association logic
 │   │       ├── BoltArchiveSession.swift # High-level BoltArchiveEngine (inspect, extract, create, editZip, test)
 │   │       └── BenchmarkRunner.swift    # Multi-codec local throughput & ratio benchmark
 │   ├── BoltZipCLI/
-│   │   └── main.swift                   # `boltzip` CLI (a, x, l, t, bench, engines)
+│   │   └── main.swift                   # `boltzip` CLI (a, x, l, t, associate, bench, engines)
 │   ├── BoltZipFinderSync/
 │   │   ├── FinderSync.swift             # Top-level Finder right-click "Bolt >" menu extension (sandboxed .appex)
 │   │   └── FinderSync.entitlements
