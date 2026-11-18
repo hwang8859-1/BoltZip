@@ -1,3 +1,4 @@
+import AppKit
 import BoltZipCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -5,12 +6,17 @@ import UniformTypeIdentifiers
 struct MainWindowView: View {
     @Bindable var vm: WorkspaceViewModel
     @Environment(\.colorScheme) private var colorScheme
+
+    @State private var showInspector: Bool = true
     @State private var isTableDropTargeted = false
     @State private var showAppearancePopover = false
     @State private var titlebarHeight: CGFloat = 40
-    @State private var sidebarWidth: CGFloat = 215
+    @State private var sidebarWidth: CGFloat = 210
+    @State private var inspectorWidth: CGFloat = 260
     @State private var dragStartSidebarWidth: CGFloat?
-    @State private var isDividerHovered = false
+    @State private var dragStartInspectorWidth: CGFloat?
+    @State private var isSidebarDividerHovered = false
+    @State private var isInspectorDividerHovered = false
     @State private var expandedFolderPaths: Set<String> = [""]
 
     private static let dateFormatter: DateFormatter = {
@@ -22,8 +28,9 @@ struct MainWindowView: View {
 
     var body: some View {
         let l = vm.l10n
-        let minW: CGFloat = vm.listing == nil ? 380 : 500
-        let minH: CGFloat = vm.listing == nil ? 285 : 340
+        let minW: CGFloat = vm.listing == nil ? 440 : 680
+        let minH: CGFloat = vm.listing == nil ? 320 : 420
+
         Group {
             if let listing = vm.listing {
                 archiveExplorer(listing: listing, l: l)
@@ -32,7 +39,7 @@ struct MainWindowView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(windowBackingLayer)
+        .background(Color(nsColor: .windowBackgroundColor))
         .background(
             WindowStyleConfigurator(
                 isTranslucent: vm.effectiveWindowTranslucency,
@@ -44,180 +51,180 @@ struct MainWindowView: View {
         )
         .frame(minWidth: minW, minHeight: minH)
         .preferredColorScheme(vm.appTheme.colorScheme)
-        .boltWindowContainerBackground(
-            vm.effectiveWindowTranslucency ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
-        )
-        .boltWindowToolbarBackgroundVisibility(vm.effectiveWindowTranslucency ? .hidden : .automatic)
         .toolbar {
             if let listing = vm.listing {
-                ToolbarItem(placement: .navigation) {
-                    HStack(spacing: 1) {
-                        ToolbarPillIconButton(
-                            systemImage: "sidebar.left",
-                            label: l.folderTreeSection,
-                            helpText: l.folderTreeSection
-                        ) {
-                            withAnimation(.spring(response: 0.24, dampingFraction: 0.88)) {
-                                vm.columnVisibility = (vm.columnVisibility == .detailOnly) ? .all : .detailOnly
-                            }
+                // Navigation Section
+                ToolbarItemGroup(placement: .navigation) {
+                    Button {
+                        withAnimation(.spring(response: 0.24, dampingFraction: 0.88)) {
+                            vm.columnVisibility = (vm.columnVisibility == .detailOnly) ? .all : .detailOnly
                         }
-
-                        ToolbarPillIconButton(
-                            systemImage: "house",
-                            label: l.backHome,
-                            helpText: l.backHome
-                        ) {
-                            vm.closeArchive()
-                        }
-
-                        ToolbarPillIconButton(
-                            systemImage: "chevron.up",
-                            label: l.goUp,
-                            helpText: l.goUp,
-                            isDisabled: !vm.canNavigateUp
-                        ) {
-                            vm.navigateUp()
-                        }
-                        .keyboardShortcut(.upArrow, modifiers: .command)
+                    } label: {
+                        Label(l.folderTreeSection, systemImage: "sidebar.left")
                     }
-                    .padding(.horizontal, 4)
-                    .frame(height: 30)
-                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, tone: .regular, interactive: true, in: Capsule())
+                    .help(l.folderTreeSection)
+
+                    Button {
+                        vm.closeArchive()
+                    } label: {
+                        Label(l.backHome, systemImage: "house")
+                    }
+                    .help(l.backHome)
+
+                    Button {
+                        vm.navigateUp()
+                    } label: {
+                        Label(l.goUp, systemImage: "chevron.up")
+                    }
+                    .disabled(!vm.canNavigateUp)
+                    .help(l.goUp)
+                    .keyboardShortcut(.upArrow, modifiers: .command)
                 }
-                .boltHiddenSharedBackground()
 
-                ToolbarItem(placement: .primaryAction) {
-                    HStack(spacing: 1) {
-                        ToolbarPillIconButton(
-                            systemImage: "plus.rectangle.on.folder",
-                            label: l.newCompress,
-                            helpText: l.newCompress
-                        ) {
-                            vm.startNewArchivePanel()
+                // Principal Title Section
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "archivebox.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.accentColor)
+
+                        Text(listing.archiveURL.lastPathComponent)
+                            .font(.system(.body, design: .default).weight(.semibold))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+
+                        Text(listing.format.displayName)
+                            .font(.system(.caption2, design: .monospaced).weight(.semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color(nsColor: .quaternaryLabelColor), in: Capsule())
+
+                        if listing.hasEncryptedEntries {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.orange)
+                                .help(l.encryptedBadge)
                         }
+                    }
+                    .frame(maxWidth: 320)
+                }
 
-                        ToolbarPillIconButton(
-                            systemImage: "folder",
-                            label: l.open,
-                            helpText: l.open
-                        ) {
-                            vm.openArchivePanel()
-                        }
-
-                        pillSeparator
-
-                        ToolbarPillIconButton(
-                            systemImage: "arrow.down.doc.fill",
-                            label: l.smartExtract,
-                            helpText: l.smartExtract
-                        ) {
+                // Primary Action Section
+                ToolbarItemGroup(placement: .primaryAction) {
+                    // Extract Split Menu
+                    Menu {
+                        Button {
                             vm.triggerSmartExtractNow()
+                        } label: {
+                            Label(l.smartExtract, systemImage: "arrow.down.doc.fill")
                         }
 
-                        ToolbarPillIconButton(
-                            systemImage: "square.and.arrow.down.on.square",
-                            label: l.extractTo,
-                            helpText: l.extractTo
-                        ) {
+                        Button {
                             let mode: ExtractMode = vm.selectedEntryIDs.isEmpty ? .smart : .selected(vm.selectedEntryIDs)
                             vm.activeSheet = .extractOptions(mode)
+                        } label: {
+                            Label(l.extractTo, systemImage: "square.and.arrow.down.on.square")
                         }
+                    } label: {
+                        Label(l.smartExtract, systemImage: "arrow.down.doc.fill")
+                    } primaryAction: {
+                        vm.triggerSmartExtractNow()
+                    }
+                    .help(l.smartExtract)
+                    .keyboardShortcut("e", modifiers: .command)
 
-                        if listing.format.supportsInPlaceEditing {
-                            ToolbarPillIconButton(
-                                systemImage: "doc.badge.plus",
-                                label: l.addInside,
-                                helpText: l.addInside
-                            ) {
+                    if listing.format.supportsInPlaceEditing {
+                        // Edit & Add Menu
+                        Menu {
+                            Button {
                                 vm.addItemsToCurrentZipPanel()
+                            } label: {
+                                Label(l.addInside, systemImage: "plus")
                             }
 
-                            ToolbarPillIconButton(
-                                systemImage: "folder.badge.plus",
-                                label: l.newFolder,
-                                helpText: l.newFolder
-                            ) {
+                            Button {
                                 vm.activeSheet = .createFolder(parentFolder: vm.currentFolder)
+                            } label: {
+                                Label(l.newFolder, systemImage: "folder.badge.plus")
                             }
 
-                            ToolbarPillIconButton(
-                                systemImage: "trash",
-                                label: l.delete,
-                                helpText: l.delete,
-                                isDisabled: vm.selectedEntryIDs.isEmpty
-                            ) {
-                                vm.deleteSelectedEntries()
+                            if !vm.selectedEntryIDs.isEmpty {
+                                Divider()
+                                Button(role: .destructive) {
+                                    vm.deleteSelectedEntries()
+                                } label: {
+                                    Label(l.delete, systemImage: "trash")
+                                }
                             }
+                        } label: {
+                            Label(l.addInside, systemImage: "plus")
+                        } primaryAction: {
+                            vm.addItemsToCurrentZipPanel()
                         }
-
-                        ToolbarPillIconButton(
-                            systemImage: "checkmark.shield",
-                            label: l.verify,
-                            helpText: l.verify
-                        ) {
-                            vm.testIntegrity()
-                        }
-
-                        pillSeparator
-
-                        ToolbarPillIconButton(
-                            systemImage: "slider.horizontal.3",
-                            label: l.layoutMenuTitle,
-                            helpText: l.appearanceTitle
-                        ) {
-                            showAppearancePopover.toggle()
-                        }
-                        .popover(isPresented: $showAppearancePopover, arrowEdge: .bottom) {
-                            AppearancePopoverView(vm: vm)
-                        }
+                        .help(l.addInside)
                     }
-                    .padding(.horizontal, 5)
-                    .frame(height: 30)
-                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, tone: .regular, interactive: true, in: Capsule())
+
+                    Button {
+                        vm.testIntegrity()
+                    } label: {
+                        Label(l.verify, systemImage: "checkmark.shield")
+                    }
+                    .help(l.verify)
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            showInspector.toggle()
+                        }
+                    } label: {
+                        Label("显示简介", systemImage: "info.circle")
+                    }
+                    .help("显示/隐藏属性检查器 (⌘I)")
+                    .keyboardShortcut("i", modifiers: .command)
+
+                    Button {
+                        showAppearancePopover.toggle()
+                    } label: {
+                        Label(l.layoutMenuTitle, systemImage: "slider.horizontal.3")
+                    }
+                    .help(l.appearanceTitle)
+                    .popover(isPresented: $showAppearancePopover, arrowEdge: .bottom) {
+                        AppearancePopoverView(vm: vm)
+                    }
                 }
-                .boltHiddenSharedBackground()
             } else {
-                ToolbarItem(placement: .primaryAction) {
-                    HStack(spacing: 1) {
-                        ToolbarPillIconButton(
-                            systemImage: "plus.rectangle.on.folder",
-                            label: l.newCompress,
-                            helpText: l.newArchive
-                        ) {
-                            vm.startNewArchivePanel()
-                        }
-
-                        ToolbarPillIconButton(
-                            systemImage: "folder",
-                            label: l.open,
-                            helpText: l.openArchive
-                        ) {
-                            vm.openArchivePanel()
-                        }
-
-                        ToolbarPillIconButton(
-                            systemImage: "slider.horizontal.3",
-                            label: l.layoutMenuTitle,
-                            helpText: l.appearanceTitle
-                        ) {
-                            showAppearancePopover.toggle()
-                        }
-                        .popover(isPresented: $showAppearancePopover, arrowEdge: .bottom) {
-                            AppearancePopoverView(vm: vm)
-                        }
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        vm.startNewArchivePanel()
+                    } label: {
+                        Label(l.newCompress, systemImage: "plus")
                     }
-                    .padding(.horizontal, 4)
-                    .frame(height: 30)
-                    .boltLayeredSurface(glassEnabled: vm.effectiveWindowTranslucency, tone: .regular, interactive: true, in: Capsule())
+                    .help(l.newArchive)
+
+                    Button {
+                        vm.openArchivePanel()
+                    } label: {
+                        Label(l.open, systemImage: "folder")
+                    }
+                    .help(l.openArchive)
+
+                    Button {
+                        showAppearancePopover.toggle()
+                    } label: {
+                        Label(l.layoutMenuTitle, systemImage: "slider.horizontal.3")
+                    }
+                    .help(l.appearanceTitle)
+                    .popover(isPresented: $showAppearancePopover, arrowEdge: .bottom) {
+                        AppearancePopoverView(vm: vm)
+                    }
                 }
-                .boltHiddenSharedBackground()
             }
         }
+        .searchable(text: $vm.searchText, placement: .toolbar, prompt: l.searchPlaceholder)
         .overlay {
             if vm.isBusy {
                 ZStack {
-                    Color.black.opacity(0.18).ignoresSafeArea()
-                    VStack(spacing: 10) {
+                    Color.black.opacity(0.22).ignoresSafeArea()
+                    VStack(spacing: 12) {
                         ProgressView(value: vm.progress?.fractionCompleted ?? 0.3)
                             .progressViewStyle(.linear)
                             .frame(width: 240)
@@ -225,9 +232,12 @@ struct MainWindowView: View {
                             .font(.callout.weight(.medium))
                             .lineLimit(1)
                     }
-                    .padding(18)
-                    .boltGlassSurface(.regular, tint: .cyan.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .shadow(radius: 16)
+                    .padding(20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color(nsColor: .windowBackgroundColor))
+                            .shadow(color: Color.black.opacity(0.18), radius: 18)
+                    )
                 }
             }
         }
@@ -276,55 +286,41 @@ struct MainWindowView: View {
         }
     }
 
-    @ViewBuilder
-    private var windowBackingLayer: some View {
-        if vm.effectiveWindowTranslucency {
-            ZStack {
-                BoltAmbientBackdrop()
-                    .opacity(max(0.15, 0.9 - vm.windowBackgroundOpacity * 0.45))
-                Color(nsColor: .windowBackgroundColor)
-                    .opacity(max(0.0, vm.windowBackgroundOpacity - 0.35))
-                    .ignoresSafeArea()
-            }
-        } else {
-            Color(nsColor: .windowBackgroundColor)
-                .ignoresSafeArea()
-        }
-    }
-
+    // MARK: - Archive Explorer View (3-Column Layout)
     @ViewBuilder
     private func archiveExplorer(listing: ArchiveListing, l: L10n) -> some View {
         let isSidebarVisible = vm.columnVisibility != .detailOnly
-        let glassEnabled = vm.effectiveWindowTranslucency
 
         GeometryReader { geo in
             let w = geo.size.width
-            let topOffset = max(40, titlebarHeight)
-            let clampedSidebarWidth = min(max(168, sidebarWidth), max(168, w * 0.40))
+            let clampedSidebarWidth = min(max(170, sidebarWidth), max(170, w * 0.35))
+            let clampedInspectorWidth = min(max(220, inspectorWidth), max(220, w * 0.38))
 
-            ZStack(alignment: .top) {
-                // Layer 2: Floating glass directory sidebar & file browser over Layer 1 backdrop
-                HStack(spacing: 0) {
-                    if isSidebarVisible {
-                        leftGlassSidebar(listing: listing, l: l, glassEnabled: glassEnabled)
-                            .frame(width: clampedSidebarWidth)
-                            .transition(.move(edge: .leading).combined(with: .opacity))
+            HStack(spacing: 0) {
+                // Column 1: Native Sidebar
+                if isSidebarVisible {
+                    nativeSidebar(listing: listing, l: l)
+                        .frame(width: clampedSidebarWidth)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
 
-                        sidebarResizeDivider(currentWidth: clampedSidebarWidth, maxWidth: max(200, w * 0.40))
-                    }
-
-                    rightGlassWorkspace(listing: listing, l: l, glassEnabled: glassEnabled)
+                    sidebarResizeDivider(currentWidth: clampedSidebarWidth, maxWidth: max(200, w * 0.40))
                 }
-                .padding(.horizontal, 10)
-                .padding(.top, topOffset + 4)
-                .padding(.bottom, 10)
-                .frame(width: w, height: geo.size.height)
 
-                // Layer 3: Unified full-width glass menu/title bar matching welcome screen height
-                explorerTitlebarOverlay(width: w, height: topOffset, glassEnabled: glassEnabled)
+                // Column 2: Center Table Workspace
+                centerWorkspace(listing: listing, l: l)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                // Column 3: Native Inspector (Collapsible)
+                if showInspector && vm.showSidebarInspector {
+                    inspectorResizeDivider(currentWidth: clampedInspectorWidth, maxWidth: max(240, w * 0.40))
+
+                    nativeInspector(listing: listing, l: l)
+                        .frame(width: clampedInspectorWidth)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
             }
+            .frame(width: w, height: geo.size.height)
         }
-        .ignoresSafeArea(.container, edges: .top)
         .onAppear {
             seedExpandedFolders(from: vm.folderTree)
             expandAncestors(for: vm.currentFolder)
@@ -338,302 +334,188 @@ struct MainWindowView: View {
         }
     }
 
+    // MARK: - Column 1: Native Sidebar
     @ViewBuilder
-    private func explorerTitlebarOverlay(width: CGFloat, height: CGFloat, glassEnabled: Bool) -> some View {
-        let isDark = colorScheme == .dark
-        Group {
-            if glassEnabled {
-                Rectangle()
-                    .fill(Color.clear)
-                    .boltGlassSurface(
-                        .regular,
-                        tint: Color.white.opacity(isDark ? 0.04 : 0.10),
-                        in: Rectangle()
-                    )
-                    .overlay(alignment: .bottom) {
-                        Rectangle()
-                            .fill(Color.white.opacity(isDark ? 0.10 : 0.28))
-                            .frame(height: 0.5)
-                    }
-            } else {
-                Rectangle()
-                    .fill(Color(nsColor: .windowBackgroundColor))
-                    .overlay(alignment: .bottom) {
-                        Divider()
-                    }
+    private func nativeSidebar(listing: ArchiveListing, l: L10n) -> some View {
+        VStack(spacing: 0) {
+            // Directory Tree Header
+            HStack(spacing: 6) {
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.accentColor)
+                Text(l.folderTreeSection)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
             }
-        }
-        .frame(width: width, height: height)
-        .allowsHitTesting(false)
-    }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
 
-    @ViewBuilder
-    private func leftGlassSidebar(listing: ArchiveListing, l: L10n, glassEnabled: Bool) -> some View {
-        let isDark = colorScheme == .dark
-        BoltGlassContainer(spacing: 8) {
-            VStack(spacing: 8) {
-                // Directory Tree Glass Card
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "folder.fill")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.cyan)
-                        Text(l.folderTreeSection)
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+            Divider()
 
-                    Divider()
-                        .opacity(glassEnabled ? 0.30 : 0.65)
-
-                    ScrollView(.vertical, showsIndicators: true) {
-                        LazyVStack(alignment: .leading, spacing: 2) {
-                            GlassFolderTreeRow(
-                                node: vm.folderTree,
-                                depth: 0,
-                                vm: vm,
-                                canEditZip: listing.format.supportsInPlaceEditing,
-                                glassEnabled: glassEnabled,
-                                expandedPaths: $expandedFolderPaths
-                            )
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.top, 6)
-                        .padding(.bottom, 8)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .boltLayeredSurface(
-                    glassEnabled: glassEnabled,
-                    tone: .regular,
-                    tint: Color.cyan.opacity(isDark ? 0.04 : 0.05),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                )
-
-                // Archive Summary Inspector Glass Card
-                if vm.showSidebarInspector {
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack {
-                            Text(listing.format.displayName)
-                                .font(.caption2.weight(.bold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .boltLayeredSurface(
-                                    glassEnabled: glassEnabled,
-                                    tone: .regular,
-                                    tint: .cyan.opacity(0.18),
-                                    in: Capsule()
-                                )
-                            Spacer()
-                            if listing.hasEncryptedEntries {
-                                Label(l.encryptedBadge, systemImage: "lock.fill")
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.orange)
-                            }
-                        }
-
-                        InfoMetricRow(label: l.totalEntries, value: l.itemCount(listing.entries.count))
-                        InfoMetricRow(label: l.originalSize, value: DropHelper.formatBytes(listing.totalUncompressedBytes))
-                        InfoMetricRow(label: l.packedSize, value: DropHelper.formatBytes(listing.totalCompressedBytes))
-                        InfoMetricRow(label: l.spaceSaved, value: String(format: "%.1f%%", listing.overallCompressionRatioPercent))
-
-                        Divider().opacity(glassEnabled ? 0.35 : 0.7)
-
-                        HStack {
-                            Text(l.filenameEncoding)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Picker("", selection: Binding(
-                                get: { vm.encodingOption },
-                                set: { vm.reloadWithEncoding($0) }
-                            )) {
-                                ForEach(FilenameEncodingOption.allCases) { enc in
-                                    Text(l.encodingTitle(enc)).tag(enc)
-                                }
-                            }
-                            .labelsHidden()
-                            .controlSize(.mini)
-                        }
-                    }
-                    .padding(10)
-                    .boltLayeredSurface(
-                        glassEnabled: glassEnabled,
-                        tone: .regular,
-                        tint: .cyan.opacity(0.06),
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            // Directory Tree Rows
+            ScrollView(.vertical, showsIndicators: true) {
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    NativeFolderTreeRow(
+                        node: vm.folderTree,
+                        depth: 0,
+                        vm: vm,
+                        canEditZip: listing.format.supportsInPlaceEditing,
+                        expandedPaths: $expandedFolderPaths
                     )
                 }
-            }
-        }
-    }
-
-    private func sidebarResizeDivider(currentWidth: CGFloat, maxWidth: CGFloat) -> some View {
-        ZStack {
-            Color.clear
-            Capsule()
-                .fill(Color.primary.opacity(isDividerHovered ? 0.25 : 0.08))
-                .frame(width: 3, height: isDividerHovered ? 44 : 28)
-        }
-        .frame(width: 10)
-        .frame(maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .onHover { hovering in
-            isDividerHovered = hovering
-            if hovering {
-                NSCursor.resizeLeftRight.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
-        .gesture(
-            DragGesture(minimumDistance: 1)
-                .onChanged { value in
-                    if dragStartSidebarWidth == nil {
-                        dragStartSidebarWidth = currentWidth
-                    }
-                    let base = dragStartSidebarWidth ?? currentWidth
-                    sidebarWidth = min(max(168, base + value.translation.width), maxWidth)
-                }
-                .onEnded { _ in
-                    dragStartSidebarWidth = nil
-                }
-        )
-    }
-
-    @ViewBuilder
-    private func rightGlassWorkspace(listing: ArchiveListing, l: L10n, glassEnabled: Bool) -> some View {
-        let isDark = colorScheme == .dark
-        VStack(spacing: 8) {
-            BoltGlassContainer(spacing: 8) {
-                HStack(spacing: 8) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 3) {
-                            ForEach(Array(vm.breadcrumbComponents.enumerated()), id: \.offset) { idx, crumb in
-                                if idx > 0 {
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption2)
-                                        .foregroundStyle(.tertiary)
-                                }
-                                Button {
-                                    vm.currentFolder = crumb.path
-                                    vm.selectedEntryIDs.removeAll()
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        if idx == 0 { Image(systemName: "archivebox.fill") }
-                                        Text(crumb.title)
-                                    }
-                                    .font(.system(size: 12.5, weight: crumb.path == vm.currentFolder ? .semibold : .regular, design: .rounded))
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                }
-                                .buttonStyle(.plain)
-                                .boltLayeredSurface(
-                                    glassEnabled: glassEnabled,
-                                    tone: crumb.path == vm.currentFolder ? .regular : .clear,
-                                    tint: crumb.path == vm.currentFolder ? .cyan.opacity(0.18) : nil,
-                                    interactive: true,
-                                    in: Capsule()
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer()
-
-                    HStack(spacing: 5) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(.secondary)
-                        TextField(l.searchPlaceholder, text: $vm.searchText)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 12.5))
-                            .frame(minWidth: 90, maxWidth: 160)
-                    }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .boltLayeredSurface(glassEnabled: glassEnabled, tone: .regular, in: Capsule())
-                }
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 6)
                 .padding(.vertical, 6)
-                .boltLayeredSurface(
-                    glassEnabled: glassEnabled,
-                    tone: .regular,
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                )
             }
 
+            Divider()
+
+            // Footer Section: Clean Packing Badge & Encoding
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.green)
+                    Text("自动隔离 .DS_Store / __MACOSX")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack {
+                    Text(l.filenameEncoding)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Picker("", selection: Binding(
+                        get: { vm.encodingOption },
+                        set: { vm.reloadWithEncoding($0) }
+                    )) {
+                        ForEach(FilenameEncodingOption.allCases) { enc in
+                            Text(l.encodingTitle(enc)).tag(enc)
+                        }
+                    }
+                    .labelsHidden()
+                    .controlSize(.mini)
+                }
+            }
+            .padding(10)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.35))
+        }
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.65))
+    }
+
+    // MARK: - Column 2: Center Table Workspace
+    @ViewBuilder
+    private func centerWorkspace(listing: ArchiveListing, l: L10n) -> some View {
+        VStack(spacing: 0) {
+            // Path Bar (Finder-Style Breadcrumbs)
+            HStack(spacing: 4) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 3) {
+                        ForEach(Array(vm.breadcrumbComponents.enumerated()), id: \.offset) { idx, crumb in
+                            if idx > 0 {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            Button {
+                                vm.currentFolder = crumb.path
+                                vm.selectedEntryIDs.removeAll()
+                            } label: {
+                                HStack(spacing: 4) {
+                                    if idx == 0 { Image(systemName: "archivebox.fill").font(.system(size: 11)) }
+                                    Text(crumb.title)
+                                }
+                                .font(.system(size: 11.5, weight: crumb.path == vm.currentFolder ? .semibold : .regular))
+                                .foregroundStyle(crumb.path == vm.currentFolder ? Color.primary : Color.secondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2.5)
+                                .background(
+                                    crumb.path == vm.currentFolder
+                                        ? RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.primary.opacity(0.08))
+                                        : nil
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                Text("按 Space 快速预览")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+            .frame(height: 28)
+            .padding(.horizontal, 10)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.40))
+
+            Divider()
+
+            // Main Files Table
             Table(vm.visibleEntries, selection: $vm.selectedEntryIDs) {
                 TableColumn(l.colName) { entry in
-                    HStack(spacing: 6) {
+                    HStack(spacing: 7) {
                         Image(systemName: entry.isDirectory ? "folder.fill" : iconForFile(entry.name))
-                            .foregroundStyle(entry.isDirectory ? Color.cyan : Color.secondary)
-                        Text(entry.name)
                             .font(.system(size: 13))
+                            .foregroundStyle(entry.isDirectory ? Color.accentColor : Color.secondary)
+
+                        Text(entry.name)
+                            .font(.system(size: 12.5))
                             .lineLimit(1)
+
                         if entry.isEncrypted {
                             Image(systemName: "lock.fill")
-                                .font(.caption2)
+                                .font(.system(size: 10))
                                 .foregroundStyle(.orange)
                         }
                     }
                 }
-                .width(min: 110, ideal: 220)
+                .width(min: 140, ideal: 240)
 
                 TableColumn(l.colOriginalSize) { entry in
                     Text(entry.isDirectory ? "—" : DropHelper.formatBytes(entry.uncompressedSize))
-                        .monospacedDigit()
+                        .font(.system(size: 12).monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
-                .width(min: 55, ideal: 75)
+                .width(min: 65, ideal: 85)
 
                 TableColumn(l.colPackedSize) { entry in
                     Text(entry.isDirectory || entry.compressedSize == 0 ? "—" : DropHelper.formatBytes(entry.compressedSize))
-                        .monospacedDigit()
+                        .font(.system(size: 12).monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
-                .width(min: 55, ideal: 75)
+                .width(min: 65, ideal: 85)
 
                 TableColumn(l.colRatio) { entry in
                     if entry.isDirectory || entry.uncompressedSize == 0 {
                         Text("—").foregroundStyle(.tertiary)
                     } else {
                         Text(String(format: "%.1f%%", entry.compressionRatioPercent))
-                            .monospacedDigit()
+                            .font(.system(size: 12, weight: .medium).monospacedDigit())
                             .foregroundStyle(.green)
                     }
                 }
-                .width(min: 48, ideal: 60)
+                .width(min: 55, ideal: 70)
 
                 TableColumn(l.colMethod) { entry in
                     let label = entry.isEncrypted ? "\(entry.compressionMethodName) · \(entry.encryptionLabel)" : entry.compressionMethodName
                     Text(label)
-                        .font(.caption)
+                        .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                 }
-                .width(min: 65, ideal: 100)
+                .width(min: 75, ideal: 110)
 
                 TableColumn(l.colModified) { entry in
                     Text(Self.dateFormatter.string(from: entry.modifiedDate))
-                        .font(.caption)
+                        .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                 }
-                .width(min: 80, ideal: 110)
+                .width(min: 85, ideal: 120)
             }
-            .scrollContentBackground(.hidden)
-            .alternatingRowBackgrounds(.disabled)
-            .background(Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .boltLayeredSurface(
-                glassEnabled: glassEnabled,
-                tone: .regular,
-                tint: Color.white.opacity(isDark ? 0.02 : 0.04),
-                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-            )
+            .alternatingRowBackgrounds(.enabled)
             .contextMenu(forSelectionType: String.self) { ids in
                 if ids.isEmpty {
                     emptySpaceContextMenu(listing: listing, l: l)
@@ -659,15 +541,18 @@ struct MainWindowView: View {
             }
             .overlay {
                 if isTableDropTargeted && listing.format.supportsInPlaceEditing {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(Color.cyan, style: StrokeStyle(lineWidth: 2.5, dash: [7, 5]))
-                        .background(Color.cyan.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2.5, dash: [8, 5]))
+                        .background(Color.accentColor.opacity(0.08))
                         .overlay {
                             Label(l.dropToAddLabel(vm.currentFolder.isEmpty ? l.rootLabel : vm.currentFolder), systemImage: "plus.circle.fill")
-                                .font(.subheadline.weight(.semibold))
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .boltLayeredSurface(glassEnabled: glassEnabled, tone: .regular, tint: .cyan.opacity(0.22), interactive: true, in: Capsule())
+                                .font(.headline)
+                                .padding(12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(Color(nsColor: .windowBackgroundColor))
+                                        .shadow(radius: 6)
+                                )
                         }
                 }
             }
@@ -678,6 +563,9 @@ struct MainWindowView: View {
                 }
             }
 
+            Divider()
+
+            // Bottom Status Bar
             if vm.showStatusBar {
                 HStack(spacing: 12) {
                     Text(vm.statusMessage)
@@ -686,26 +574,256 @@ struct MainWindowView: View {
                     if !vm.selectedEntryIDs.isEmpty {
                         let selBytes = vm.selectedEntries.reduce(UInt64(0)) { $0 + $1.uncompressedSize }
                         Text(l.selectedSummary(vm.selectedEntryIDs.count, DropHelper.formatBytes(selBytes)))
-                            .foregroundStyle(.cyan)
+                            .foregroundStyle(Color.accentColor)
+                            .fontWeight(.medium)
                     }
                     if listing.format.supportsInPlaceEditing {
                         Text(l.editableHint)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.tertiary)
                     }
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 6, height: 6)
                 }
-                .font(.system(size: 11.5))
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .boltLayeredSurface(
-                    glassEnabled: glassEnabled,
-                    tone: .regular,
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                )
+                .padding(.vertical, 5)
+                .background(Color(nsColor: .controlBackgroundColor).opacity(0.40))
             }
         }
     }
 
+    // MARK: - Column 3: Native Inspector (显示简介)
+    @ViewBuilder
+    private func nativeInspector(listing: ArchiveListing, l: L10n) -> some View {
+        let selected = vm.selectedEntries.first
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 14) {
+                // Header
+                HStack {
+                    Text("显示简介")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            showInspector = false
+                        }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            .padding(4)
+                    }
+                    .buttonStyle(.plain)
+                    .help("关闭检查器 (⌘I)")
+                }
+
+                if let entry = selected {
+                    // Item Preview Card
+                    VStack(spacing: 8) {
+                        Image(systemName: entry.isDirectory ? "folder.fill" : iconForFile(entry.name))
+                            .font(.system(size: 38))
+                            .foregroundStyle(entry.isDirectory ? Color.accentColor : Color.secondary)
+                            .padding(.top, 4)
+
+                        Text(entry.name)
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+
+                        Text(entry.isDirectory ? "文件夹" : (entry.name as NSString).pathExtension.uppercased() + " 文件")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+
+                        Button {
+                            vm.previewOrOpenEntry(entry)
+                        } label: {
+                            Label("Quick Look 预览", systemImage: "eye")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .padding(.top, 2)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.75)
+                            )
+                    )
+
+                    // Entry Properties
+                    VStack(spacing: 7) {
+                        inspectorMetricRow(label: "原始体积", value: entry.isDirectory ? "—" : DropHelper.formatBytes(entry.uncompressedSize))
+                        inspectorMetricRow(label: "压缩后体积", value: entry.isDirectory ? "—" : DropHelper.formatBytes(entry.compressedSize))
+                        inspectorMetricRow(label: "空间节省", value: entry.isDirectory ? "—" : String(format: "%.1f%%", entry.compressionRatioPercent), isGreen: true)
+                        inspectorMetricRow(label: "压缩引擎", value: entry.compressionMethodName)
+                        inspectorMetricRow(label: "加密状态", value: entry.isEncrypted ? entry.encryptionLabel : "未加密")
+                        inspectorMetricRow(label: "CRC32 校验", value: String(format: "0x%08X", entry.crc32))
+                        inspectorMetricRow(label: "修改时间", value: Self.dateFormatter.string(from: entry.modifiedDate))
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+                    )
+
+                    // Single Item Actions
+                    VStack(spacing: 6) {
+                        Button {
+                            vm.quickExtract(mode: .selected([entry.id]))
+                        } label: {
+                            Text("单独解压选中项")
+                                .font(.system(size: 11.5, weight: .medium))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+
+                        if listing.format.supportsInPlaceEditing {
+                            Button(role: .destructive) {
+                                vm.deleteSelectedEntries()
+                            } label: {
+                                Text("从归档中删除")
+                                    .font(.system(size: 11.5))
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
+                } else {
+                    // Whole Archive Overview Card
+                    VStack(spacing: 8) {
+                        Image(systemName: "archivebox.fill")
+                            .font(.system(size: 38))
+                            .foregroundStyle(Color.accentColor)
+                            .padding(.top, 4)
+
+                        Text(listing.archiveURL.lastPathComponent)
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+
+                        Text(listing.format.displayName)
+                            .font(.system(size: 10.5, weight: .bold).monospaced())
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color(nsColor: .quaternaryLabelColor), in: Capsule())
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.75)
+                            )
+                    )
+
+                    // Archive Metrics
+                    VStack(spacing: 7) {
+                        inspectorMetricRow(label: l.totalEntries, value: l.itemCount(listing.entries.count))
+                        inspectorMetricRow(label: l.originalSize, value: DropHelper.formatBytes(listing.totalUncompressedBytes))
+                        inspectorMetricRow(label: l.packedSize, value: DropHelper.formatBytes(listing.totalCompressedBytes))
+                        inspectorMetricRow(label: l.spaceSaved, value: String(format: "%.1f%%", listing.overallCompressionRatioPercent), isGreen: true)
+                        inspectorMetricRow(label: "加密防护", value: listing.hasEncryptedEntries ? "AES-256 加密" : "未加密")
+                        inspectorMetricRow(label: "纯净保护", value: "已剔除 .DS_Store")
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+                    )
+
+                    Button {
+                        vm.triggerSmartExtractNow()
+                    } label: {
+                        Text("智能解压全部文件")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+            }
+            .padding(12)
+        }
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+    }
+
+    private func inspectorMetricRow(label: String, value: String, isGreen: Bool = false) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.system(size: 11, weight: isGreen ? .semibold : .regular).monospacedDigit())
+                .foregroundStyle(isGreen ? Color.green : Color.primary)
+                .lineLimit(1)
+        }
+    }
+
+    // MARK: - Resizable Splitters
+    private func sidebarResizeDivider(currentWidth: CGFloat, maxWidth: CGFloat) -> some View {
+        ZStack {
+            Color.clear
+            Capsule()
+                .fill(Color.primary.opacity(isSidebarDividerHovered ? 0.25 : 0.08))
+                .frame(width: 3, height: isSidebarDividerHovered ? 40 : 24)
+        }
+        .frame(width: 8)
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isSidebarDividerHovered = hovering
+            if hovering { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    if dragStartSidebarWidth == nil { dragStartSidebarWidth = currentWidth }
+                    let base = dragStartSidebarWidth ?? currentWidth
+                    sidebarWidth = min(max(170, base + value.translation.width), maxWidth)
+                }
+                .onEnded { _ in dragStartSidebarWidth = nil }
+        )
+    }
+
+    private func inspectorResizeDivider(currentWidth: CGFloat, maxWidth: CGFloat) -> some View {
+        ZStack {
+            Color.clear
+            Capsule()
+                .fill(Color.primary.opacity(isInspectorDividerHovered ? 0.25 : 0.08))
+                .frame(width: 3, height: isInspectorDividerHovered ? 40 : 24)
+        }
+        .frame(width: 8)
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isInspectorDividerHovered = hovering
+            if hovering { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    if dragStartInspectorWidth == nil { dragStartInspectorWidth = currentWidth }
+                    let base = dragStartInspectorWidth ?? currentWidth
+                    inspectorWidth = min(max(220, base - value.translation.width), maxWidth)
+                }
+                .onEnded { _ in dragStartInspectorWidth = nil }
+        )
+    }
+
+    // MARK: - Directory Tree Utilities
     private func seedExpandedFolders(from root: FolderTreeNode) {
         var expanded: Set<String> = [root.path]
         var queue: [FolderTreeNode] = [root]
@@ -732,6 +850,7 @@ struct MainWindowView: View {
         }
     }
 
+    // MARK: - Context Menus
     @ViewBuilder
     private func rowContextMenu(ids: Set<String>, listing: ArchiveListing, l: L10n) -> some View {
         let picked = vm.visibleEntries.filter { ids.contains($0.id) }
@@ -855,13 +974,6 @@ struct MainWindowView: View {
         }
     }
 
-    private var pillSeparator: some View {
-        Rectangle()
-            .fill(Color.primary.opacity(0.14))
-            .frame(width: 1, height: 14)
-            .padding(.horizontal, 3)
-    }
-
     private func iconForFile(_ name: String) -> String {
         let ext = (name as NSString).pathExtension.lowercased()
         switch ext {
@@ -869,7 +981,7 @@ struct MainWindowView: View {
         case "png", "jpg", "jpeg", "webp", "gif", "svg": return "photo"
         case "pdf": return "doc.richtext"
         case "md", "txt", "log": return "doc.text"
-        case "zip", "7z", "tar", "gz", "zst", "xz": return "doc.zipper"
+        case "zip", "7z", "tar", "gz", "zst", "xz", "rar": return "doc.zipper"
         case "mp4", "mov": return "film"
         case "mp3", "wav", "m4a": return "waveform"
         default: return "doc"
@@ -877,12 +989,12 @@ struct MainWindowView: View {
     }
 }
 
-private struct GlassFolderTreeRow: View {
+// MARK: - Native Folder Tree Row
+private struct NativeFolderTreeRow: View {
     let node: FolderTreeNode
     let depth: Int
     @Bindable var vm: WorkspaceViewModel
     let canEditZip: Bool
-    let glassEnabled: Bool
     @Binding var expandedPaths: Set<String>
     @State private var isHovered = false
 
@@ -890,17 +1002,16 @@ private struct GlassFolderTreeRow: View {
     private var isExpanded: Bool { expandedPaths.contains(node.path) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 1) {
             rowView
 
             if isExpanded && !node.children.isEmpty {
                 ForEach(node.children) { child in
-                    GlassFolderTreeRow(
+                    NativeFolderTreeRow(
                         node: child,
                         depth: depth + 1,
                         vm: vm,
                         canEditZip: canEditZip,
-                        glassEnabled: glassEnabled,
                         expandedPaths: $expandedPaths
                     )
                 }
@@ -910,7 +1021,7 @@ private struct GlassFolderTreeRow: View {
 
     private var rowView: some View {
         let l = vm.l10n
-        return HStack(spacing: 4) {
+        return HStack(spacing: 5) {
             if !node.children.isEmpty {
                 Button {
                     withAnimation(.easeInOut(duration: 0.14)) {
@@ -922,19 +1033,19 @@ private struct GlassFolderTreeRow: View {
                     }
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 9.5, weight: .semibold))
+                        .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(isSelected ? Color.white.opacity(0.9) : Color.secondary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .frame(width: 16, height: 18)
+                        .frame(width: 14, height: 16)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             } else {
-                Spacer().frame(width: 16)
+                Spacer().frame(width: 14)
             }
 
             Image(systemName: node.path.isEmpty ? "archivebox.fill" : "folder.fill")
-                .font(.system(size: 12.5))
+                .font(.system(size: 12))
                 .foregroundStyle(
                     isSelected
                         ? Color.white
@@ -942,27 +1053,39 @@ private struct GlassFolderTreeRow: View {
                 )
 
             Text(node.name)
-                .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
+                .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
                 .foregroundStyle(isSelected ? Color.white : Color.primary)
                 .lineLimit(1)
                 .truncationMode(.middle)
 
             Spacer(minLength: 4)
+
+            if node.fileCount > 0 {
+                Text("\(node.fileCount)")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.8) : Color.secondary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(
+                        isSelected ? Color.white.opacity(0.2) : Color.primary.opacity(0.06),
+                        in: Capsule()
+                    )
+            }
         }
-        .padding(.leading, CGFloat(depth * 12) + 4)
-        .padding(.trailing, 8)
-        .padding(.vertical, 5)
+        .padding(.leading, CGFloat(depth * 10) + 4)
+        .padding(.trailing, 6)
+        .padding(.vertical, 4.5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             if isSelected {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.accentColor.opacity(glassEnabled ? 0.78 : 0.92))
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.accentColor)
             } else if isHovered {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(Color.primary.opacity(0.06))
             }
         }
-        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .onHover { isHovered = $0 }
         .onTapGesture {
             vm.currentFolder = node.path
@@ -1003,51 +1126,6 @@ private struct GlassFolderTreeRow: View {
                     }
                 }
             }
-        }
-    }
-}
-
-private struct ToolbarPillIconButton: View {
-    let systemImage: String
-    let label: String
-    let helpText: String
-    var isDisabled: Bool = false
-    let action: () -> Void
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 14.5, weight: .regular))
-                .foregroundStyle(isDisabled ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
-                .frame(width: 32, height: 24)
-                .background(
-                    Capsule()
-                        .fill(Color.primary.opacity(!isDisabled && isHovered ? 0.10 : 0.0))
-                )
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(isDisabled)
-        .onHover { isHovered = $0 }
-        .help(helpText)
-        .accessibilityLabel(label)
-    }
-}
-
-private struct InfoMetricRow: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        HStack {
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(value)
-                .font(.caption2.weight(.medium))
-                .monospacedDigit()
         }
     }
 }

@@ -268,35 +268,9 @@ struct BoltAmbientBackdrop: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let isDark = colorScheme == .dark
-        ZStack {
-            LinearGradient(
-                colors: isDark
-                    ? [Color(red: 0.04, green: 0.07, blue: 0.14).opacity(0.75), Color(red: 0.08, green: 0.10, blue: 0.22).opacity(0.55), Color.clear]
-                    : [Color.cyan.opacity(0.08), Color.indigo.opacity(0.09), Color.clear],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Circle()
-                .fill(Color.cyan.opacity(isDark ? 0.18 : 0.14))
-                .frame(width: 420, height: 420)
-                .blur(radius: 95)
-                .offset(x: -240, y: -180)
-
-            Circle()
-                .fill(Color.indigo.opacity(isDark ? 0.20 : 0.14))
-                .frame(width: 460, height: 460)
-                .blur(radius: 105)
-                .offset(x: 260, y: 120)
-
-            Circle()
-                .fill(Color.yellow.opacity(isDark ? 0.08 : 0.06))
-                .frame(width: 300, height: 300)
-                .blur(radius: 85)
-                .offset(x: 40, y: 240)
-        }
-        .allowsHitTesting(false)
-        .ignoresSafeArea()
+        Color(nsColor: .windowBackgroundColor)
+            .allowsHitTesting(false)
+            .ignoresSafeArea()
     }
 }
 

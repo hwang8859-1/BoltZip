@@ -229,7 +229,7 @@ struct BoltZipApp: App {
                 )
         }
         .defaultSize(width: 760, height: 480)
-        .windowToolbarStyle(.unifiedCompact)
+        .windowToolbarStyle(.unified)
         .handlesExternalEvents(matching: Set(["finder"]))
         .commands {
             CommandGroup(replacing: .appInfo) {
@@ -312,7 +312,7 @@ struct BoltZipApp: App {
                 )
         }
         .windowResizability(.contentSize)
-        .windowToolbarStyle(.unifiedCompact)
+        .windowToolbarStyle(.unified)
         .handlesExternalEvents(matching: Set<String>())
 
         Settings {

@@ -1,3 +1,4 @@
+import AppKit
 import BoltZipCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -12,222 +13,163 @@ struct WelcomeDropZoneView: View {
 
     var body: some View {
         let l = vm.l10n
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            let topOffset = max(36, titlebarHeight)
-            let isNarrow = w < 540
-            let isCompactHeight = h < (topOffset + 345)
-            let showBannerHere = vm.showFinderBanner && h >= (topOffset + 330)
-            let showLowerCardsHere = (vm.showFeatureHighlights || vm.showRecentArchives) && h >= (topOffset + 390)
-            let contentWidth = max(280, w - 24)
+        let glassEnabled = vm.effectiveWindowTranslucency
 
-            ZStack(alignment: .top) {
-                // Layer 2: Scrollable or compact main content (slides underneath Layer 3 when scrolling)
-                if showLowerCardsHere {
-                    ScrollView(.vertical) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            if showBannerHere {
-                                finderBanner(l: l, isNarrow: isNarrow)
-                            }
-                            heroDropZone(l: l, isNarrow: isNarrow, isCompactHeight: isCompactHeight, fillsSpace: false)
-                            lowerCards(l: l, availableWidth: w)
-                        }
-                        .frame(width: contentWidth, alignment: .topLeading)
-                        .padding(.horizontal, 12)
-                        .padding(.top, topOffset + 4)
-                        .padding(.bottom, 12)
-                    }
-                    .contentMargins(.top, topOffset, for: .scrollIndicators)
-                    .boltSoftTopScrollEdgeEffect()
-                    .frame(width: w, height: h)
-                } else {
-                    VStack(spacing: 10) {
-                        if showBannerHere {
-                            finderBanner(l: l, isNarrow: isNarrow)
-                        }
-                        heroDropZone(l: l, isNarrow: isNarrow, isCompactHeight: isCompactHeight, fillsSpace: true)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.top, topOffset + 4)
-                    .padding(.bottom, 12)
-                    .frame(width: w, height: h)
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 16) {
+                // 1. FinderSync Extension Quick Action Banner
+                if vm.showFinderBanner {
+                    finderBanner(l: l, glassEnabled: glassEnabled)
                 }
 
-                // Layer 3: Dedicated Liquid Glass Titlebar Cap floating cleanly over scrolled content
-                titlebarGlassOverlay(width: w, height: topOffset)
+                // 2. Focused Hero Drop Zone
+                heroDropZone(l: l, glassEnabled: glassEnabled)
+
+                // 3. Recent Archives (if enabled)
+                if vm.showRecentArchives {
+                    recentsCard(l: l, glassEnabled: glassEnabled)
+                }
+
+                // 4. Subtle Footnote (Clean Packing & Integration info)
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.shield")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text("打包与解压默认净化 .DS_Store 及 __MACOSX 资源叉")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.top, 4)
+                .padding(.bottom, 8)
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
         }
-        .ignoresSafeArea(.container, edges: .top)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             vm.refreshQuickActionsStatus()
         }
     }
 
+    // MARK: - Finder Banner
     @ViewBuilder
-    private func titlebarGlassOverlay(width: CGFloat, height: CGFloat) -> some View {
-        let isDark = colorScheme == .dark
-        Group {
-            if vm.effectiveWindowTranslucency {
-                Rectangle()
-                    .fill(Color.clear)
-                    .boltGlassSurface(
-                        .regular,
-                        tint: Color.white.opacity(isDark ? 0.04 : 0.10),
-                        in: Rectangle()
-                    )
-                    .overlay(alignment: .bottom) {
-                        Rectangle()
-                            .fill(Color.white.opacity(isDark ? 0.10 : 0.28))
-                            .frame(height: 0.5)
-                    }
+    private func finderBanner(l: L10n, glassEnabled: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: vm.quickActionsInstalled ? "checkmark.circle.fill" : "contextualmenu.and.cursorarrow")
+                .font(.system(size: 15))
+                .foregroundStyle(vm.quickActionsInstalled ? Color.green : Color.accentColor)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(vm.quickActionsInstalled ? l.finderBannerEnabledTitle : l.finderBannerDisabledTitle)
+                    .font(.system(size: 12.5, weight: .semibold))
+                Text(finderActionToast ?? l.finderBannerSubtitle)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            Button(l.extensionSettings) {
+                vm.openFinderExtensionSettings()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+
+            if vm.quickActionsInstalled {
+                Button(l.resync) {
+                    finderActionToast = vm.installFinderQuickActions()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             } else {
-                Rectangle()
-                    .fill(Color(nsColor: .windowBackgroundColor))
-                    .overlay(alignment: .bottom) {
-                        Divider()
-                    }
-            }
-        }
-        .frame(width: width, height: height)
-        .allowsHitTesting(false)
-    }
-
-    @ViewBuilder
-    private func finderBanner(l: L10n, isNarrow: Bool) -> some View {
-        BoltGlassContainer(spacing: 8) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Image(systemName: vm.quickActionsInstalled ? "checkmark.circle.fill" : "contextualmenu.and.cursorarrow")
-                        .font(.system(size: 14))
-                        .foregroundStyle(vm.quickActionsInstalled ? .green : .cyan)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(vm.quickActionsInstalled ? l.finderBannerEnabledTitle : l.finderBannerDisabledTitle)
-                            .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                            .fixedSize(horizontal: false, vertical: true)
-                        if !isNarrow {
-                            Text(finderActionToast ?? l.finderBannerSubtitle)
-                                .font(.system(size: 11.5))
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-
-                    Spacer(minLength: 4)
-
-                    if !isNarrow {
-                        bannerButtons(l: l)
-                    }
-
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.16)) {
-                            vm.showFinderBanner = false
-                        }
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(l.hideThisSection)
+                Button(l.enableBoltMenu) {
+                    finderActionToast = vm.installFinderQuickActions()
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
 
-                if isNarrow {
-                    HStack(spacing: 6) {
-                        bannerButtons(l: l)
-                        Spacer()
-                    }
+            Button {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    vm.showFinderBanner = false
                 }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .padding(4)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .boltGlassSurface(
-                .regular,
-                tint: (vm.quickActionsInstalled ? Color.green : Color.cyan).opacity(0.10),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-            )
+            .buttonStyle(.plain)
+            .help(l.hideThisSection)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.85))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.75)
+                )
+        )
     }
 
+    // MARK: - Hero Drop Zone
     @ViewBuilder
-    private func bannerButtons(l: L10n) -> some View {
-        Button(l.extensionSettings) {
-            vm.openFinderExtensionSettings()
-        }
-        .boltGlassButton()
-        .controlSize(.small)
-
-        if vm.quickActionsInstalled {
-            Button(l.resync) {
-                finderActionToast = vm.installFinderQuickActions()
-            }
-            .boltGlassButton()
-            .controlSize(.small)
-        } else {
-            Button(l.enableBoltMenu) {
-                finderActionToast = vm.installFinderQuickActions()
-            }
-            .boltGlassProminentButton()
-            .controlSize(.small)
-        }
-    }
-
-    @ViewBuilder
-    private func heroDropZone(l: L10n, isNarrow: Bool, isCompactHeight: Bool, fillsSpace: Bool) -> some View {
+    private func heroDropZone(l: L10n, glassEnabled: Bool) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(
-                    isDropTargeted ? Color.cyan : Color.white.opacity(0.22),
-                    style: StrokeStyle(lineWidth: isDropTargeted ? 2.5 : 1.0, dash: [7, 5])
+                    isDropTargeted ? Color.accentColor : Color.primary.opacity(0.18),
+                    style: StrokeStyle(lineWidth: isDropTargeted ? 2.5 : 1.2, dash: [8, 6])
+                )
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(isDropTargeted ? Color.accentColor.opacity(0.08) : Color(nsColor: .controlBackgroundColor).opacity(0.55))
                 )
 
-            VStack(spacing: isCompactHeight ? 7 : 10) {
-                BoltLogoBadge(size: isCompactHeight ? 42 : 52)
+            VStack(spacing: 14) {
+                BoltLogoBadge(size: 54)
 
-                Text(l.dropZoneTitle)
-                    .font(.system(size: isNarrow ? 15.5 : 18.5, weight: .semibold, design: .rounded))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 10)
+                VStack(spacing: 4) {
+                    Text(l.dropZoneTitle)
+                        .font(.system(size: 17, weight: .semibold))
 
-                if !isCompactHeight {
                     Text(l.dropZoneSubtitle)
                         .font(.system(size: 12.5))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 14)
+                        .padding(.horizontal, 16)
                 }
 
-                BoltGlassContainer(spacing: 7) {
-                    if isNarrow {
-                        LazyVGrid(
-                            columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)],
-                            spacing: 7
-                        ) {
-                            actionButtons(l: l, fullWidth: true)
-                        }
-                        .frame(maxWidth: 320)
-                    } else {
-                        HStack(spacing: 8) {
-                            actionButtons(l: l, fullWidth: false)
-                        }
+                HStack(spacing: 12) {
+                    Button {
+                        vm.startNewArchivePanel()
+                    } label: {
+                        Label(l.newArchive, systemImage: "plus.rectangle.on.folder.fill")
+                            .font(.system(size: 13, weight: .medium))
                     }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+
+                    Button {
+                        vm.openArchivePanel()
+                    } label: {
+                        Label(l.openArchive, systemImage: "folder")
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
                 }
                 .padding(.top, 2)
             }
-            .padding(.vertical, isCompactHeight ? 10 : 16)
-            .padding(.horizontal, 12)
+            .padding(.vertical, 28)
+            .padding(.horizontal, 20)
         }
-        .frame(maxWidth: .infinity, minHeight: fillsSpace ? 155 : 165, maxHeight: fillsSpace ? .infinity : nil)
-        .boltGlassSurface(
-            .regular,
-            tint: (isDropTargeted ? Color.cyan : Color.indigo).opacity(isDropTargeted ? 0.22 : 0.08),
-            interactive: true,
-            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-        )
+        .frame(minHeight: 200)
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             DropHelper.extractFileURLs(from: providers) { urls in
                 vm.handleDroppedOrOpenedURLs(urls)
@@ -235,111 +177,19 @@ struct WelcomeDropZoneView: View {
         }
     }
 
+    // MARK: - Recent Archives Card
     @ViewBuilder
-    private func actionButtons(l: L10n, fullWidth: Bool) -> some View {
-        Button {
-            vm.startNewArchivePanel()
-        } label: {
-            Label(l.newArchive, systemImage: "plus.rectangle.on.folder.fill")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .lineLimit(1)
-                .frame(maxWidth: fullWidth ? .infinity : nil)
-        }
-        .boltGlassProminentButton()
-        .controlSize(.regular)
-
-        Button {
-            vm.openArchivePanel()
-        } label: {
-            Label(l.openArchive, systemImage: "folder.badge.gearshape")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .lineLimit(1)
-                .frame(maxWidth: fullWidth ? .infinity : nil)
-        }
-        .boltGlassButton()
-        .controlSize(.regular)
-
-        Button {
-            vm.activeSheet = .benchmark
-        } label: {
-            Label(l.benchmark, systemImage: "gauge.with.dots.needle.67percent")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .lineLimit(1)
-                .frame(maxWidth: fullWidth ? .infinity : nil)
-        }
-        .boltGlassButton()
-        .controlSize(.regular)
-
-        Button {
-            vm.openShowcaseWebsite()
-        } label: {
-            Label(l.showcasePage, systemImage: "safari")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .lineLimit(1)
-                .frame(maxWidth: fullWidth ? .infinity : nil)
-        }
-        .boltGlassButton()
-        .controlSize(.regular)
-    }
-
-    @ViewBuilder
-    private func lowerCards(l: L10n, availableWidth: CGFloat) -> some View {
-        let stackVertically = availableWidth < 660
-        if stackVertically {
-            VStack(spacing: 10) {
-                if vm.showFeatureHighlights { featuresCard(l: l) }
-                if vm.showRecentArchives { recentsCard(l: l) }
-            }
-        } else {
-            HStack(alignment: .top, spacing: 10) {
-                if vm.showFeatureHighlights { featuresCard(l: l) }
-                if vm.showRecentArchives { recentsCard(l: l) }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func featuresCard(l: L10n) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Label(l.featuresTitle, systemImage: "sparkles")
-                    .font(.system(size: 13.5, weight: .semibold, design: .rounded))
-                Spacer()
-                Button {
-                    withAnimation(.easeInOut(duration: 0.16)) {
-                        vm.showFeatureHighlights = false
-                    }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help(l.hideThisSection)
-            }
-
-            FeatureRow(icon: "folder.fill.badge.plus", title: l.featBrowseTitle, detail: l.featBrowseDesc)
-            FeatureRow(icon: "wand.and.stars", title: l.featSmartTitle, detail: l.featSmartDesc)
-            FeatureRow(icon: "trash.slash.fill", title: l.featMacJunkTitle, detail: l.featMacJunkDesc)
-            FeatureRow(icon: "character.book.closed.fill", title: l.featEncodingTitle, detail: l.featEncodingDesc)
-            FeatureRow(icon: "lock.shield.fill", title: l.featCryptoTitle, detail: l.featCryptoDesc)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .boltGlassSurface(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    @ViewBuilder
-    private func recentsCard(l: L10n) -> some View {
+    private func recentsCard(l: L10n, glassEnabled: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label(l.recentsTitle, systemImage: "clock.arrow.circlepath")
-                    .font(.system(size: 13.5, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
                 Spacer()
                 if !vm.recentArchiveURLs.isEmpty {
                     Text(l.itemCount(vm.recentArchiveURLs.count))
                         .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                 }
                 Button {
                     withAnimation(.easeInOut(duration: 0.16)) {
@@ -347,93 +197,79 @@ struct WelcomeDropZoneView: View {
                     }
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .padding(4)
                 }
                 .buttonStyle(.plain)
                 .help(l.hideThisSection)
             }
+            .padding(.horizontal, 4)
 
             if vm.recentArchiveURLs.isEmpty {
-                VStack(spacing: 6) {
-                    Image(systemName: "archivebox")
-                        .font(.title3)
-                        .foregroundStyle(.tertiary)
+                VStack(spacing: 4) {
                     Text(l.noRecents)
                         .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                 }
-                .frame(maxWidth: .infinity, minHeight: 88)
+                .frame(maxWidth: .infinity, minHeight: 60)
             } else {
-                ForEach(vm.recentArchiveURLs.prefix(5), id: \.path) { url in
-                    Button {
-                        vm.openArchive(url: url)
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "doc.zipper")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.cyan)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(url.lastPathComponent)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                Text((url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
+                VStack(spacing: 1) {
+                    ForEach(vm.recentArchiveURLs.prefix(5), id: \.path) { url in
+                        Button {
+                            vm.openArchive(url: url)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "doc.zipper")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(Color.accentColor)
+
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(url.lastPathComponent)
+                                        .font(.system(size: 12.5, weight: .medium))
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                    Text((url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)
+                                        .font(.system(size: 10.5))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+                                Spacer(minLength: 4)
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.tertiary)
                             }
-                            Spacer(minLength: 4)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.tertiary)
+                            .padding(.vertical, 7)
+                            .padding(.horizontal, 10)
+                            .contentShape(Rectangle())
                         }
-                        .padding(.vertical, 5)
-                        .padding(.horizontal, 8)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .boltGlassSurface(.clear, interactive: true, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .contextMenu {
-                        Button(l.ctxOpenBrowse) { vm.openArchive(url: url) }
-                        Divider()
-                        Button(l.ctxSmartExtractAll) { vm.quickExtract(mode: .smart, archiveURL: url) }
-                        Button(l.ctxExtractAllSubfolder) { vm.quickExtract(mode: .subfolder, archiveURL: url) }
-                        Button(l.ctxVerifyArchive) { vm.testIntegrity(archiveURL: url) }
-                        Divider()
-                        Button(l.ctxShowInFinder) { vm.showInFinder(url) }
-                        Button(l.ctxRemoveRecent, role: .destructive) { vm.removeRecent(url) }
+                        .buttonStyle(.plain)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.primary.opacity(0.0001)) // hit target
+                        )
+                        .contextMenu {
+                            Button(l.ctxOpenBrowse) { vm.openArchive(url: url) }
+                            Divider()
+                            Button(l.ctxSmartExtractAll) { vm.quickExtract(mode: .smart, archiveURL: url) }
+                            Button(l.ctxExtractAllSubfolder) { vm.quickExtract(mode: .subfolder, archiveURL: url) }
+                            Button(l.ctxVerifyArchive) { vm.testIntegrity(archiveURL: url) }
+                            Divider()
+                            Button(l.ctxShowInFinder) { vm.showInFinder(url) }
+                            Button(l.ctxRemoveRecent, role: .destructive) { vm.removeRecent(url) }
+                        }
                     }
                 }
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .boltGlassSurface(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-}
-
-private struct FeatureRow: View {
-    let icon: String
-    let title: String
-    let detail: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 13))
-                .foregroundStyle(.cyan)
-                .frame(width: 18)
-                .padding(.top, 2)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(detail)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                .padding(4)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.65))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.75)
+                        )
+                )
             }
         }
     }

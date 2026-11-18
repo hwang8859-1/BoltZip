@@ -25,15 +25,12 @@ struct WindowStyleConfigurator: NSViewRepresentable {
     private func apply(to window: NSWindow?) {
         guard let window else { return }
 
-        if window.toolbarStyle != .unifiedCompact {
-            window.toolbarStyle = .unifiedCompact
+        // Use macOS standard unified toolbar style for robust scaling and responsive layout
+        if window.toolbarStyle != .unified {
+            window.toolbarStyle = .unified
         }
         if let tb = window.toolbar, tb.sizeMode != .regular {
             tb.sizeMode = .regular
-        }
-        let measuredTB = window.frame.height - window.contentLayoutRect.height
-        if measuredTB > 20 && abs(measuredTB - titlebarHeight) > 0.5 {
-            titlebarHeight = measuredTB
         }
 
         let targetMin = NSSize(width: minWidth, height: minHeight)
@@ -44,35 +41,27 @@ struct WindowStyleConfigurator: NSViewRepresentable {
             window.minSize = targetMin
         }
 
-        if !window.inLiveResize {
-            var frame = window.frame
-            var needsResize = false
-            if frame.size.width < minWidth {
-                frame.size.width = minWidth
-                needsResize = true
-            }
-            if frame.size.height < minHeight {
-                let delta = minHeight - frame.size.height
-                frame.origin.y -= delta
-                frame.size.height = minHeight
-                needsResize = true
-            }
-            if needsResize {
-                window.setFrame(frame, display: true, animate: false)
-            }
-        }
-
+        // Standard native macOS titlebar configuration:
+        // Do not make titlebar transparent to prevent content from colliding with toolbar items on resize.
         if isTranslucent {
             if window.isOpaque { window.isOpaque = false }
-            if !window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = true }
-            if window.titlebarSeparatorStyle != .none { window.titlebarSeparatorStyle = .none }
-            let alpha = max(0.02, min(0.95, backgroundOpacity * 0.45))
+            let alpha = max(0.20, min(0.95, backgroundOpacity * 0.70))
             window.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(alpha)
         } else {
             if !window.isOpaque { window.isOpaque = true }
-            if window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = false }
-            if window.titlebarSeparatorStyle != .automatic { window.titlebarSeparatorStyle = .automatic }
             window.backgroundColor = NSColor.windowBackgroundColor
+        }
+
+        if window.titlebarAppearsTransparent {
+            window.titlebarAppearsTransparent = false
+        }
+        if window.titlebarSeparatorStyle != .automatic {
+            window.titlebarSeparatorStyle = .automatic
+        }
+
+        let measuredTB = window.frame.height - window.contentLayoutRect.height
+        if measuredTB > 0 && abs(measuredTB - titlebarHeight) > 0.5 {
+            titlebarHeight = measuredTB
         }
     }
 }
