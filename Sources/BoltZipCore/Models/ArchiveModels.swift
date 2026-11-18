@@ -70,7 +70,7 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
         case .tar:
             return [.store]
         case .sevenZip:
-            return [.xz]
+            return [.xz, .bzip2, .deflate, .store]
         default:
             return [.store]
         }

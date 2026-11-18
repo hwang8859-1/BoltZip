@@ -278,11 +278,18 @@ public final class ZipReader: @unchecked Sendable {
     }
 
     public func listEntries(encoding: FilenameEncodingOption = .auto) throws -> (entries: [ArchiveEntry], comment: String) {
+        let info = try inspectArchive(encoding: encoding)
+        return (info.entries, info.comment)
+    }
+
+    func inspectArchive(encoding: FilenameEncodingOption = .auto) throws -> (entries: [ArchiveEntry], comment: String, isSplitVolume: Bool) {
         let parsed = try parseArchive()
         let entries = parsed.records.map { record in
             Self.makeEntry(from: record, encoding: encoding)
         }
-        return (entries, parsed.comment)
+        let ext = url.pathExtension.lowercased()
+        let isSplitExt = ext != "zip" && ext.hasPrefix("z") && Int(ext.dropFirst()) != nil
+        return (entries, parsed.comment, parsed.totalDisks > 1 || isSplitExt)
     }
 
     static func makeEntry(from record: ZipRecord, encoding: FilenameEncodingOption) -> ArchiveEntry {

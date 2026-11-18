@@ -391,7 +391,7 @@ extension WorkspaceViewModel {
     }
 
     private func editCurrentZip(_ ops: [ZipEditOperation]) {
-        guard let listing, listing.format.supportsInPlaceEditing else { return }
+        guard let listing, listing.canEditInPlace else { return }
         let url = listing.archiveURL
         let enc = encodingOption
         let opts = CreateArchiveOptions(

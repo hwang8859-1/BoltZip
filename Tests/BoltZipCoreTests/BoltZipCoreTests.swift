@@ -735,4 +735,67 @@ final class BoltZipCoreTests: XCTestCase {
         XCTAssertEqual(reportWithPw.skippedEncryptedCount, 0)
         XCTAssertTrue(reportWithPw.isHealthy)
     }
+
+    func testSevenZipCompressionLevelsAndSplitZipEditGuard() throws {
+        // 1. Verify 7z algorithm & level options actually affect output size & extract cleanly
+        let sample = BenchmarkRunner.generateMixedSampleData(sizeBytes: 512 * 1024)
+        let srcFile = tempDir.appendingPathComponent("payload.json")
+        try sample.write(to: srcFile)
+
+        let store7z = tempDir.appendingPathComponent("store.7z")
+        let fast7z = tempDir.appendingPathComponent("fast.7z")
+        let max7z = tempDir.appendingPathComponent("max.7z")
+
+        try BoltArchiveEngine.createArchive(
+            from: [srcFile],
+            to: store7z,
+            options: CreateArchiveOptions(format: .sevenZip, algorithm: .store, level: 0)
+        )
+        try BoltArchiveEngine.createArchive(
+            from: [srcFile],
+            to: fast7z,
+            options: CreateArchiveOptions(format: .sevenZip, algorithm: .xz, level: 1)
+        )
+        try BoltArchiveEngine.createArchive(
+            from: [srcFile],
+            to: max7z,
+            options: CreateArchiveOptions(format: .sevenZip, algorithm: .xz, level: 9)
+        )
+
+        let storeSize = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: store7z.path)[.size] as? NSNumber).intValue
+        let fastSize = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: fast7z.path)[.size] as? NSNumber).intValue
+        let maxSize = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: max7z.path)[.size] as? NSNumber).intValue
+        XCTAssertGreaterThan(storeSize, fastSize)
+        XCTAssertGreaterThan(fastSize, maxSize)
+
+        let out7z = tempDir.appendingPathComponent("out7z", isDirectory: true)
+        try BoltArchiveEngine.extract(archiveURL: max7z, options: ExtractOptions(destinationURL: out7z, mode: .here))
+        XCTAssertEqual(try Data(contentsOf: out7z.appendingPathComponent("payload.json")), sample)
+
+        // 2. Verify split-volume ZIP marks isSplitVolume & blocks destructive in-place edits
+        let splitZip = tempDir.appendingPathComponent("split.zip")
+        let created = try BoltArchiveEngine.createArchive(
+            from: [srcFile],
+            to: splitZip,
+            options: CreateArchiveOptions(format: .zip, algorithm: .store, splitVolumeSizeBytes: 128 * 1024)
+        )
+        XCTAssertGreaterThan(created.count, 1)
+
+        let listing = try BoltArchiveEngine.inspect(archiveURL: splitZip)
+        XCTAssertTrue(listing.isSplitVolume)
+        XCTAssertFalse(listing.canEditInPlace)
+
+        XCTAssertThrowsError(try BoltArchiveEngine.editZip(
+            at: splitZip,
+            operations: [.createFolder(path: "forbidden/")]
+        )) { error in
+            guard case BoltZipError.unsupportedFormat = error else {
+                XCTFail("Expected unsupportedFormat for split-volume ZIP edit, got \(error)")
+                return
+            }
+        }
+        // Confirm split volume integrity remained intact
+        let report = try BoltArchiveEngine.testIntegrity(archiveURL: splitZip)
+        XCTAssertTrue(report.isHealthy)
+    }
 }

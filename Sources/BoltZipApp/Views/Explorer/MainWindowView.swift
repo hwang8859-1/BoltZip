@@ -197,7 +197,7 @@ struct MainWindowView: View {
                             vm.activeSheet = .extractOptions(mode)
                         }
 
-                        if listing.format.supportsInPlaceEditing {
+                        if listing.canEditInPlace {
                             ToolbarPillIconButton(
                                 systemImage: "doc.badge.plus",
                                 label: l.addInside,

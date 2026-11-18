@@ -612,6 +612,8 @@ public enum ExtendedArchiveDriver {
     public static func create7z(
         from inputURLs: [URL],
         to outputURL: URL,
+        algorithm: CompressionAlgorithm = .xz,
+        level: Int? = nil,
         excludeMacJunk: Bool,
         controller: ArchiveTaskController? = nil,
         progress: (@Sendable (OperationProgress) -> Void)? = nil
@@ -658,7 +660,12 @@ public enum ExtendedArchiveDriver {
             try fm.removeItem(at: outputURL)
         }
 
-        var args = ["--format=7zip", "-cf", outputURL.path, "-C", staging.path]
+        let tarOptions = sevenZipTarOptions(algorithm: algorithm, level: level)
+        var args = ["--format=7zip"]
+        if let tarOptions {
+            args.append(contentsOf: ["--options", tarOptions])
+        }
+        args.append(contentsOf: ["-cf", outputURL.path, "-C", staging.path])
         args.append(contentsOf: topLevelNames.isEmpty ? ["."] : topLevelNames)
         let outName = outputURL.lastPathComponent
         let compressStart = CFAbsoluteTimeGetCurrent()
@@ -682,6 +689,25 @@ public enum ExtendedArchiveDriver {
             throw error
         }
         progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outName, processedBytes: totalBytes, totalBytes: totalBytes))
+    }
+
+    private static func sevenZipTarOptions(algorithm: CompressionAlgorithm, level: Int?) -> String? {
+        switch algorithm {
+        case .store:
+            return "7zip:compression=store"
+        case .xz:
+            let lvl = min(max(level ?? algorithm.defaultLevel, 0), 9)
+            return "7zip:compression=lzma2,7zip:compression-level=\(lvl)"
+        case .bzip2:
+            let lvl = min(max(level ?? algorithm.defaultLevel, 1), 9)
+            return "7zip:compression=bzip2,7zip:compression-level=\(lvl)"
+        case .deflate:
+            let lvl = min(max(level ?? algorithm.defaultLevel, 1), 9)
+            return "7zip:compression=deflate,7zip:compression-level=\(lvl)"
+        case .zstd, .lz4:
+            let lvl = min(max(level ?? CompressionAlgorithm.xz.defaultLevel, 0), 9)
+            return "7zip:compression=lzma2,7zip:compression-level=\(lvl)"
+        }
     }
 
     /// Decodes `bsdtar` `safe_fprintf` octal escapes (`\350\213\217`) back into UTF-8/CJK paths.

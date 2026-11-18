@@ -10,6 +10,11 @@ public struct ArchiveListing: Sendable {
     public let totalCompressedBytes: UInt64
     public let archiveFileSize: UInt64
     public let hasEncryptedEntries: Bool
+    public let isSplitVolume: Bool
+
+    public var canEditInPlace: Bool {
+        format.supportsInPlaceEditing && !isSplitVolume
+    }
 
     public var overallCompressionRatioPercent: Double {
         guard totalUncompressedBytes > 0 else { return 0 }
@@ -33,16 +38,21 @@ public enum BoltArchiveEngine {
 
         let entries: [ArchiveEntry]
         var comment = ""
+        var isSplitVolume = false
 
         switch format {
         case .zip:
-            let res = try ZipReader(url: archiveURL).listEntries(encoding: encoding)
+            let res = try ZipReader(url: archiveURL).inspectArchive(encoding: encoding)
             entries = res.entries
             comment = res.comment
+            isSplitVolume = res.isSplitVolume
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
             entries = try TarCodec.listEntries(at: archiveURL, format: format)
         case .rar, .sevenZip, .iso, .cab, .xar:
             entries = try ExtendedArchiveDriver.listEntries(at: archiveURL, format: format, encoding: encoding, password: password)
+            if format == .rar {
+                isSplitVolume = ExtendedArchiveDriver.resolveVolumePaths(for: archiveURL, format: .rar).count > 1
+            }
         }
 
         let totalUncomp = entries.reduce(UInt64(0)) { $0 + ($1.isDirectory ? 0 : $1.uncompressedSize) }
@@ -57,7 +67,8 @@ public enum BoltArchiveEngine {
             totalUncompressedBytes: totalUncomp,
             totalCompressedBytes: totalComp > 0 ? totalComp : archiveFileSize,
             archiveFileSize: archiveFileSize,
-            hasEncryptedEntries: hasEnc
+            hasEncryptedEntries: hasEnc,
+            isSplitVolume: isSplitVolume
         )
     }
 
@@ -106,6 +117,8 @@ public enum BoltArchiveEngine {
             try ExtendedArchiveDriver.create7z(
                 from: inputURLs,
                 to: outputURL,
+                algorithm: options.algorithm,
+                level: options.level,
                 excludeMacJunk: options.excludeMacJunk,
                 controller: controller,
                 progress: progress

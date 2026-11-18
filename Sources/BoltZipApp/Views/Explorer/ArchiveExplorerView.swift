@@ -82,7 +82,7 @@ struct ArchiveExplorerView: View {
                                     node: vm.folderTree,
                                     depth: 0,
                                     vm: vm,
-                                    canEditZip: listing.format.supportsInPlaceEditing,
+                                    canEditZip: listing.canEditInPlace,
                                     glassEnabled: glassEnabled,
                                     expandedPaths: $expandedFolderPaths
                                 )
@@ -415,7 +415,7 @@ struct ArchiveExplorerView: View {
             .onKeyPress(.upArrow) { moveSelection(delta: -1) }
             .onKeyPress(.downArrow) { moveSelection(delta: 1) }
             .overlay {
-                if isTableDropTargeted && listing.format.supportsInPlaceEditing {
+                if isTableDropTargeted && listing.canEditInPlace {
                     RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous)
                         .strokeBorder(Color.cyan, style: StrokeStyle(lineWidth: 2.5, dash: [7, 5]))
                         .background(Color.cyan.opacity(0.08), in: RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous))
@@ -429,7 +429,7 @@ struct ArchiveExplorerView: View {
                 }
             }
             .onDrop(of: [.fileURL], isTargeted: $isTableDropTargeted) { providers in
-                guard listing.format.supportsInPlaceEditing else { return false }
+                guard listing.canEditInPlace else { return false }
                 return DropHelper.extractFileURLs(from: providers) { urls in
                     vm.addItemsToCurrentZip(urls)
                 }

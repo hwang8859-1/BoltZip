@@ -199,6 +199,15 @@ public enum ZipWriter {
     ) throws {
         let reader = ZipReader(url: archiveURL)
         let parsed = try reader.parseArchive()
+        let ext = archiveURL.pathExtension.lowercased()
+        if parsed.totalDisks > 1 || ext != "zip" {
+            throw BoltZipError.unsupportedFormat(BoltCoreLocalization.t(
+                "分卷 ZIP 归档不支持包内原地编辑，请先解压或另存为单文件 ZIP",
+                "分卷 ZIP 封存檔不支援封存檔內原地編輯，請先解壓或另存為單一 ZIP",
+                "In-place editing is not supported for split-volume ZIP archives",
+                "分割 ZIP 書庫の直接編集には対応していません"
+            ))
+        }
         let accessor = try ZipVolumeAccessor(archiveURL: archiveURL)
         try accessor.configureVolumes(totalDisks: parsed.totalDisks)
         defer { accessor.closeAll() }
