@@ -19,6 +19,9 @@
 
 > 💡 **Intel Mac 或 macOS 12 Monterey ~ macOS 15 用户**：长期兼容版 **v0.9.1 Universal (`arm64 + x86_64`)** 维护在 [`legacy/macos-12`](../../tree/legacy/macos-12) 分支 / `v0.9.1` Release Tag。
 
+> [!IMPORTANT]
+> **当前活跃开发分支：`dev-1.0.1`**（仓库默认分支）· `main` 分支仅用于稳定版本发布且已受保护。提交代码或 PR 请务必指向 **`dev-1.0.1`**，详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
 ## ✨ 核心特性
 
 - **自动删除 `.DS_Store` 等 Mac 隐藏垃圾文件**：打包创建、ZIP 包内追加文件以及解压提取时默认自动剔除 `.DS_Store`、`__MACOSX`、`._*`、`.Spotlight-V100`、`.Trashes` 等系统元文件，发给 Windows/Linux 用户不再污染目录，Smart 解压也不受 `__MACOSX` 干扰（CLI 可用 `--keep-junk` 按需保留）。

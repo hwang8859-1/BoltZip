@@ -19,6 +19,9 @@
 
 > 💡 **Intel Mac や macOS 12〜15 をお使いの方**：長期互換リリース **v0.9.1 Universal (`arm64 + x86_64`)** を [`legacy/macos-12`](../../tree/legacy/macos-12) ブランチおよび `v0.9.1` タグにて提供しています。
 
+> [!IMPORTANT]
+> **現在の開発ブランチ：`dev-1.0.1`**（デフォルトブランチ）· `main` は保護されたリリース専用ブランチです。PR は必ず **`dev-1.0.1`** をターゲットに作成してください（詳細は [CONTRIBUTING.md](CONTRIBUTING.md)）。
+
 ## ✨ 主な特長
 
 - **`.DS_Store` など Mac 不要ファイルを自動削除・除外**：新規圧縮・ZIP 内への追加・展開のすべてで `.DS_Store`、`__MACOSX`、`._*`、`.Spotlight-V100`、`.Trashes` を既定で自動除外。Windows/Linux ユーザーへの共有時にゴミを残さず、スマート展開も妨げません（CLI の `--keep-junk` または設定で保持も可能）。
