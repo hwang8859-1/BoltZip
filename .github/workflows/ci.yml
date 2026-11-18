@@ -12,7 +12,7 @@ on:
 jobs:
   swift-test:
     name: Build & Run BoltZipCoreTests
-    runs-on: macos-26
+    runs-on: macos-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
