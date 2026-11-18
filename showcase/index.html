@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BoltZip v1.0.0 — 为 Apple Silicon &amp; macOS 26+ 打造的开源极速液态玻璃压缩工作台</title>
+  <title>BoltZip v1.0.0 / v0.9.1 — Apple Silicon &amp; macOS 12–26 开源极速压缩工作台</title>
   <link rel="icon" type="image/png" sizes="64x64" href="favicon.png" />
   <link rel="apple-touch-icon" sizes="256x256" href="app-icon.png" />
   <link rel="stylesheet" href="styles.css" />
@@ -21,10 +21,10 @@
       <a href="#hero" class="brand">
         <img src="app-icon.png" alt="BoltZip" class="brand-icon" />
         <span class="brand-name">BoltZip</span>
-        <span class="badge-mini">v1.0.0 · macOS 26+ Apple Silicon</span>
+        <span class="badge-mini">v1.0.0 · v0.9.1 LTS</span>
       </a>
       <nav class="nav-links">
-        <a href="#downloads" data-i18n="navDownload">下载安装包</a>
+        <a href="#downloads" data-i18n="navDownload">版本下载</a>
         <a href="#simulator" data-i18n="navSim">交互演示</a>
         <a href="#features" data-i18n="navFeat">核心特性</a>
         <a href="#algorithms" data-i18n="navAlgo">开源算法</a>
@@ -49,28 +49,38 @@
         <div class="hero-copy">
           <div class="pill-badge">
             <span class="dot"></span>
-            <span data-i18n="heroBadge">macOS 26+ Apple Silicon (arm64) · 原生 Liquid Glass · MIT 开源</span>
+            <span data-i18n="heroBadge">v1.0.0 Apple Silicon (macOS 26+) · v0.9.1 Universal (macOS 12–26) · MIT</span>
           </div>
           <h1 data-i18n-html="heroTitle">
             把 <span class="gradient-text">Windows Zip</span> 的顺手，<br />
             带进 macOS 的通透质感。
           </h1>
           <p class="hero-desc" data-i18n="heroDesc">
-            告别双击就一股脑解压一地的传统体验。BoltZip 基于纯正开源压缩底座（zlib · Zstandard · LZMA2 · bzip2 · LZ4 · libarchive），原生还原「包内浏览、直接增删改、自动删除 .DS_Store、GBK 乱码自愈、访达一级 Bolt 菜单与 macOS 26+ 原生液态玻璃」（Intel / macOS 12–15 请见 <code>legacy/macos-12</code> v0.9.1）。
+            告别双击就一股脑解压一地的传统体验。BoltZip 基于纯正开源压缩底座（zlib · Zstandard · LZMA2 · bzip2 · LZ4 · libarchive），原生还原「包内直览与原地增删改、RAR/RAR5 解压、多核并行、自动删除 .DS_Store、GBK 乱码自愈与访达一级 Bolt › 菜单」，提供面向 Apple Silicon 的全新 v1.0.0 与全机兼容的 v0.9.1 双轨安装镜像。
           </p>
           <div class="hero-cta">
-            <a href="#downloads" class="btn btn-primary" data-i18n="heroCtaDownload">⬇ 下载 v1.0.0 Apple Silicon</a>
-            <a href="#simulator" class="btn btn-glass" data-i18n="heroCta1">▶ 体验界面交互模拟器</a>
-            <a href="#quickstart" class="btn btn-glass" data-i18n="heroCta2">克隆源码并构建</a>
+            <a href="./downloads/BoltZip-1.0.0-macOS-arm64.dmg" download="BoltZip-1.0.0-macOS-arm64.dmg" class="btn btn-primary" data-i18n="heroCtaDownload">⬇ 下载最新版 v1.0.0 (.dmg)</a>
+            <a href="#downloads" class="btn btn-glass" data-quick-track="legacy" data-i18n="heroCtaLegacy">🛡 Intel / 旧版兼容 v0.9.1</a>
+            <a href="#simulator" class="btn btn-glass" data-i18n="heroCta1">▶ 体验交互模拟器</a>
+          </div>
+          <div class="hero-track-bar">
+            <button type="button" class="track-quick-pill" data-quick-track="latest">
+              <span>⚡</span>
+              <span data-i18n-html="quickLatestPill"><strong>v1.0.0 新版</strong> · M 系列芯片 + macOS 26+</span>
+            </button>
+            <button type="button" class="track-quick-pill legacy-pill" data-quick-track="legacy">
+              <span>🛡</span>
+              <span data-i18n-html="quickLegacyPill"><strong>v0.9.1 兼容版</strong> · Intel Mac / macOS 12–15</span>
+            </button>
           </div>
           <div class="hero-stats">
             <div class="stat-item">
-              <div class="stat-val" data-i18n="stat1Val">6 大开源内核</div>
-              <div class="stat-lbl">DEFLATE · Zstd · XZ · Bzip2 · LZ4 · RAR/7z</div>
+              <div class="stat-val" data-i18n="stat1Val">全格式 + 多核并行</div>
+              <div class="stat-lbl">ZIP · RAR/RAR5 · 7z · TAR.ZST · LZ4</div>
             </div>
             <div class="stat-item">
               <div class="stat-val" data-i18n="stat2Val">一级右键 Bolt ›</div>
-              <div class="stat-lbl" data-i18n="stat2Lbl">原生 Finder Sync 扩展直达</div>
+              <div class="stat-lbl" data-i18n="stat2Lbl">FinderSync + 悬浮进度窗 + .dmg 安装</div>
             </div>
             <div class="stat-item">
               <div class="stat-val" data-i18n="stat3Val">4 语种随系统切换</div>
@@ -84,23 +94,23 @@
             <div class="card-glow"></div>
             <div class="showcase-header">
               <div class="traffic-lights"><span></span><span></span><span></span></div>
-              <span class="showcase-title" data-i18n="archTitle">BoltZip Engine · Architecture</span>
-              <span class="status-pill">macOS 26+ · arm64</span>
+              <span class="showcase-title" data-i18n="archTitle">BoltZip Engine · 分层架构</span>
+              <span class="status-pill">Swift 6.2 · Multi-Core</span>
             </div>
             <div class="arch-layers">
               <div class="arch-layer">
                 <div class="layer-tag">UI &amp; Finder</div>
                 <div class="layer-body">
                   <strong>BoltZipApp + BoltZipFinderSync.appex</strong>
-                  <span data-i18n="archLayer1">macOS 26+ 液态玻璃 / 旧版原生界面 · 访达一级 Bolt › 悬浮进度窗 · Quick Look</span>
+                  <span data-i18n="archLayer1">macOS 26+ 原生 Liquid Glass（v0.9.1 兼容 macOS 12–15）· 访达 Bolt › 悬浮窗</span>
                 </div>
               </div>
               <div class="arch-connector">▼</div>
               <div class="arch-layer">
                 <div class="layer-tag">Archive Core</div>
                 <div class="layer-body">
-                  <strong>BoltZipCore (Pure Swift 6)</strong>
-                  <span data-i18n="archLayer2">ZIP64 / 分卷 .z01 / 原地增删改 / WinZip AE-2 / GB18030 自动识别</span>
+                  <strong>BoltZipCore (Multi-Core Swift Engine)</strong>
+                  <span data-i18n="archLayer2">ZIP64 / 分卷 .z01 / 原地增删改 / RAR5 / WinZip AE-2 / GB18030 自动识别</span>
                 </div>
               </div>
               <div class="arch-connector">▼</div>
@@ -109,11 +119,107 @@
                 <div class="layer-body">
                   <strong>CBoltCompression (Static C Bridge)</strong>
                   <div class="codec-chips">
-                    <span>zlib</span><span>libzstd</span><span>liblzma</span><span>libbz2</span><span>liblz4</span>
+                    <span>zlib</span><span>libzstd</span><span>liblzma</span><span>libbz2</span><span>liblz4</span><span>libarchive</span>
                   </div>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dual-Track Downloads Hub (Prominently Placed Right Below Hero) -->
+    <section id="downloads" class="section">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">RELEASE CENTER · V1.0.0 &amp; V0.9.1</span>
+          <h2 data-i18n="dlTitle">选择适合你 Mac 的 BoltZip 版本</h2>
+          <p data-i18n="dlSub">全版本均已打包带「拖拽至 Applications」引导页面的 .dmg 安装镜像、便携 .zip 与 SHA-256 校验清单</p>
+        </div>
+
+        <div class="track-matcher-bar glass-surface">
+          <span class="matcher-label" data-i18n="matcherTitle">快速定位你的 Mac 架构与系统：</span>
+          <div class="matcher-tabs" role="tablist">
+            <button type="button" class="matcher-btn active" data-track-filter="all" data-i18n="matcherAll">对比全部版本</button>
+            <button type="button" class="matcher-btn" data-track-filter="latest" data-i18n="matcherLatest">⚡ Apple Silicon (M 系列) + macOS 26+</button>
+            <button type="button" class="matcher-btn" data-track-filter="legacy" data-i18n="matcherLegacy">🛡 Intel Mac 或 macOS 12–15</button>
+          </div>
+        </div>
+
+        <div class="track-grid">
+          <!-- Track 1: v1.0.0 Latest Apple Silicon -->
+          <article class="track-card track-latest glass-surface" id="cardLatest" data-track="latest">
+            <div class="track-badge-row">
+              <div class="track-badge-group">
+                <span class="dl-tag" data-i18n="latestTag">最新正式版 · v1.0.0</span>
+                <span class="track-match-pill" data-i18n="matchedBadge">✓ 推荐匹配你的 Mac</span>
+              </div>
+              <img src="app-icon.png" alt="BoltZip v1.0.0" class="dl-app-icon" />
+            </div>
+            <h3 data-i18n="latestTitle">BoltZip v1.0.0 — Apple Silicon 专属版</h3>
+            <div class="spec-pills">
+              <span class="spec-pill">Apple Silicon (arm64)</span>
+              <span class="spec-pill">macOS 26.0+</span>
+              <span class="spec-pill">6.5 MB .dmg</span>
+              <span class="spec-pill">Liquid Glass</span>
+            </div>
+            <ul class="track-bullets">
+              <li data-i18n="latestB1">原生纯 arm64 架构编译，安装包体积相比通用版瘦身 36%+</li>
+              <li data-i18n="latestB2">全面启用 macOS 26 原生三层液态玻璃（主工作台 / 设置 / 进度浮窗）</li>
+              <li data-i18n="latestB3">支持 RAR/RAR5 解压、多核并行压缩解压、默认文件关联管理与 .dmg 拖拽安装</li>
+            </ul>
+            <div class="dl-actions">
+              <a href="./downloads/BoltZip-1.0.0-macOS-arm64.dmg" download="BoltZip-1.0.0-macOS-arm64.dmg" class="btn btn-primary btn-dmg" data-i18n="latestDmgBtn">⬇ 下载 v1.0.0 安装镜像 (.dmg · 6.5 MB)</a>
+            </div>
+            <div class="track-sub-downloads">
+              <a href="./downloads/BoltZip-1.0.0-macOS-arm64.zip" download="BoltZip-1.0.0-macOS-arm64.zip" class="btn btn-glass btn-sm" data-i18n="dlZipArm64">便携包 (.zip · 4.0 MB)</a>
+              <a href="./downloads/BoltZip-1.0.0-source.zip" download="BoltZip-1.0.0-source.zip" class="btn btn-glass btn-sm">Source (.zip)</a>
+              <a href="./downloads/BoltZip-1.0.0-source.tar.gz" download="BoltZip-1.0.0-source.tar.gz" class="btn btn-glass btn-sm">Source (.tar.gz)</a>
+              <a href="./downloads/BoltZip-1.0.0-SHA256SUMS.txt" download="BoltZip-1.0.0-SHA256SUMS.txt" class="btn btn-glass btn-sm">SHA256SUMS</a>
+              <a href="https://github.com/hwang8859-1/BoltZip/releases/tag/v1.0.0" target="_blank" rel="noopener" class="btn btn-glass btn-sm">GitHub Release ↗</a>
+            </div>
+          </article>
+
+          <!-- Track 2: v0.9.1 Legacy Compatible Universal -->
+          <article class="track-card track-legacy glass-surface" id="cardLegacy" data-track="legacy">
+            <div class="track-badge-row">
+              <div class="track-badge-group">
+                <span class="dl-tag legacy-tag" data-i18n="legacyTag">长期兼容版 · v0.9.1</span>
+                <span class="track-match-pill" data-i18n="matchedBadge">✓ 推荐匹配你的 Mac</span>
+              </div>
+              <img src="app-icon.png" alt="BoltZip v0.9.1" class="dl-app-icon" />
+            </div>
+            <h3 data-i18n="legacyTitle">BoltZip v0.9.1 — Universal 全兼容版</h3>
+            <div class="spec-pills">
+              <span class="spec-pill">Intel x86_64 + arm64</span>
+              <span class="spec-pill">macOS 12 – 26</span>
+              <span class="spec-pill">10 MB .dmg</span>
+              <span class="spec-pill">Static libarchive 3.7.7</span>
+            </div>
+            <ul class="track-bullets">
+              <li data-i18n="legacyB1">双架构原生支持 Intel x86_64 与 M 系列，覆盖 macOS 12 Monterey ~ macOS 26</li>
+              <li data-i18n="legacyB2">静态内置 libarchive 3.7.7 + zstd/xz/lz4，旧系统同样稳健支持 RAR/RAR5 与 7z 中文包</li>
+              <li data-i18n="legacyB3">macOS 12–15 自动切换纯净原生界面，同样提供 .dmg 拖拽安装、多核并行与默认关联</li>
+            </ul>
+            <div class="dl-actions">
+              <a href="./downloads/BoltZip-0.9.1-macOS-universal.dmg" download="BoltZip-0.9.1-macOS-universal.dmg" class="btn btn-legacy-primary btn-dmg" data-i18n="legacyDmgBtn">⬇ 下载 v0.9.1 兼容镜像 (.dmg · 10 MB)</a>
+            </div>
+            <div class="track-sub-downloads">
+              <a href="./downloads/BoltZip-0.9.1-macOS-universal.zip" download="BoltZip-0.9.1-macOS-universal.zip" class="btn btn-glass btn-sm" data-i18n="dlZipUni">便携包 (.zip · 7.6 MB)</a>
+              <a href="./downloads/BoltZip-0.9.1-source.zip" download="BoltZip-0.9.1-source.zip" class="btn btn-glass btn-sm">Source (.zip)</a>
+              <a href="./downloads/BoltZip-0.9.1-source.tar.gz" download="BoltZip-0.9.1-source.tar.gz" class="btn btn-glass btn-sm">Source (.tar.gz)</a>
+              <a href="./downloads/BoltZip-0.9.1-SHA256SUMS.txt" download="BoltZip-0.9.1-SHA256SUMS.txt" class="btn btn-glass btn-sm">SHA256SUMS</a>
+              <a href="https://github.com/hwang8859-1/BoltZip/releases/tag/v0.9.1" target="_blank" rel="noopener" class="btn btn-glass btn-sm">GitHub Release ↗</a>
+            </div>
+          </article>
+        </div>
+
+        <div class="verify-strip glass-surface">
+          <span data-i18n-html="verifyTip">🛡 <strong>SHA-256 完整性校验</strong>：下载后可在终端执行 <code>shasum -a 256 -c BoltZip-1.0.0-SHA256SUMS.txt</code>（或 <code>0.9.1</code>）核对哈希。</span>
+          <div class="verify-strip-links">
+            <a href="https://github.com/hwang8859-1/BoltZip/releases" target="_blank" rel="noopener" class="btn btn-glass btn-sm" data-i18n="allReleasesBtn">所有 GitHub Releases ↗</a>
+            <a href="https://github.com/hwang8859-1/BoltZip/tree/legacy/macos-12" target="_blank" rel="noopener" class="btn btn-glass btn-sm" data-i18n="legacyBranchBtn">legacy/macos-12 分支 ↗</a>
           </div>
         </div>
       </div>
@@ -190,7 +296,7 @@
 
           <div class="app-statusbar">
             <span id="simStatusLeft">就绪 · 双击文件夹进入，单击文件查看详情</span>
-            <span id="simStatusRight" data-i18n="statusRight">macOS 26+ Apple Silicon · Liquid Glass</span>
+            <span id="simStatusRight" data-i18n="statusRight">v1.0.0 Apple Silicon · v0.9.1 LTS</span>
           </div>
 
           <div class="sim-toast hidden" id="simToast"></div>
@@ -222,8 +328,8 @@
 
           <article class="bento-card glass-surface">
             <div class="bento-icon">🧠</div>
-            <h3 data-i18n="f3Title">Smart 智能解压</h3>
-            <p data-i18n="f3Desc">自动判断包内结构：单一根目录直接释放不套娃；多文件散装包自动建立同名子目录。</p>
+            <h3 data-i18n="f3Title">Smart 智能解压 &amp; 默认文件关联</h3>
+            <p data-i18n="f3Desc">单一根目录直接释放不套娃，多文件自动建同名文件夹；设置内可一键把 ZIP/RAR/7z/TAR 设为 BoltZip 默认打开。</p>
           </article>
 
           <article class="bento-card glass-surface">
@@ -234,26 +340,26 @@
 
           <article class="bento-card glass-surface">
             <div class="bento-icon">🔐</div>
-            <h3 data-i18n="f5Title">WinZip AE-2 AES-256</h3>
-            <p data-i18n="f5Desc">PBKDF2-HMAC-SHA1 + AES-256-CTR + 10B HMAC-SHA1，与 Windows 7-Zip / WinZip 密码互通。</p>
+            <h3 data-i18n="f5Title">RAR/RAR5 + WinZip AE-2 + 多核并行</h3>
+            <p data-i18n="f5Desc">完整支持 RAR/RAR5 浏览解压、WinZip AE-2 AES-256 加密互通，并调用多核并发加速大批量条目打包与提取。</p>
           </article>
 
           <article class="bento-card glass-surface span-2">
             <div class="bento-icon">⚡</div>
-            <h3 data-i18n="f6Title">访达右键「Bolt ›」独立悬浮进度窗 &amp; Swift 6 CLI</h3>
-            <p data-i18n-html="f6Desc">原生 <code>FinderSync</code> 扩展提供「智能解压 / 压缩 ZIP / TAR.ZST / 7z」快捷动作：点击后仅在屏幕角落弹出轻量化悬浮进度卡片（含实时 ETA、暂停/继续、停止与内联密码解锁），不强行唤起主界面，任务结束自动优雅退出；同步附带 <code>boltzip</code> 命令行工具。</p>
+            <h3 data-i18n="f6Title">访达右键「Bolt ›」独立悬浮进度窗 &amp; .dmg 安装镜像</h3>
+            <p data-i18n-html="f6Desc">提供 Retina 拖拽安装 <code>.dmg</code> 镜像；原生 <code>FinderSync</code> 菜单触发快捷动作时弹出轻量化悬浮进度窗（含实时 ETA、暂停/继续、停止与内联密码解锁），同步附带 <code>boltzip</code> CLI。</p>
           </article>
 
           <article class="bento-card glass-surface span-2">
             <div class="bento-icon">💻</div>
-            <h3 data-i18n="f7Title">Apple Silicon M 系列专属优化（macOS 26.0+）</h3>
-            <p data-i18n-html="f7Desc">原生面向 M 系列芯片（<code>arm64</code>）静态编译核心压缩库，零 Homebrew 运行时依赖（Intel / macOS 12–15 见 v0.9.1）。</p>
+            <h3 data-i18n="f7Title">双轨版本：v1.0.0 Apple Silicon 与 v0.9.1 Universal</h3>
+            <p data-i18n-html="f7Desc"><code>v1.0.0</code> 面向 Apple Silicon（<code>arm64</code>）+ macOS 26+ 极致精简；Intel Mac 或 macOS 12–15 用户可随时选择内置静态 <code>libarchive 3.7.7</code> 的 <code>v0.9.1 Universal</code> 兼容版。</p>
           </article>
 
           <article class="bento-card glass-surface span-2">
             <div class="bento-icon">🪟</div>
-            <h3 data-i18n="f8Title">macOS 26+ 原生三层液态玻璃</h3>
-            <p data-i18n="f8Desc">全面采用 macOS 26 原生 Liquid Glass 架构（涵盖工作台、设置与压缩向导），支持半透明开关与模糊深度自由调节。</p>
+            <h3 data-i18n="f8Title">macOS 26+ 原生三层液态玻璃 &amp; 统一背景体系</h3>
+            <p data-i18n="f8Desc">工作台、设置、压缩向导全面采用原生 Liquid Glass，支持配色预设、透明度与模糊深度调节；v0.9.1 在 macOS 12–15 自动切换纯净原生界面。</p>
           </article>
         </div>
       </div>
@@ -292,80 +398,36 @@
       </div>
     </section>
 
-    <!-- Direct Downloads -->
-    <section id="downloads" class="section">
-      <div class="container">
-        <div class="section-head">
-          <span class="eyebrow">RELEASE ARTIFACTS · V1.0.0</span>
-          <h2 data-i18n="dlTitle">下载 BoltZip v1.0.0 安装包与源代码</h2>
-          <p data-i18n="dlSub">Apple Silicon 原生构建（M 系列 arm64 专属，macOS 26.0+），静态链接全部开源压缩库</p>
-        </div>
-
-        <div class="download-grid">
-          <article class="download-card glass-surface featured-dl">
-            <div class="dl-card-head">
-              <div class="dl-tag" data-i18n="dlAppTag">macOS App · Apple Silicon</div>
-              <img src="app-icon.png" alt="BoltZip App Icon" class="dl-app-icon" />
-            </div>
-            <h3>BoltZip v1.0.0 Apple Silicon</h3>
-            <p class="dl-meta">macOS 26.0+ (arm64) · Native Liquid Glass</p>
-            <p class="dl-desc" data-i18n="dlAppDesc">包含 BoltZip.app、内置 boltzip CLI 与 FinderSync 右键菜单扩展，开箱即用零外部依赖（旧版 Intel / macOS 12–15 见 v0.9.1）。</p>
-            <div class="dl-actions">
-              <a href="./downloads/BoltZip-1.0.0-macOS-arm64.dmg" download="BoltZip-1.0.0-macOS-arm64.dmg" class="btn btn-primary" data-i18n="dlAppBtn">⬇ 下载 macOS 安装镜像 (.dmg)</a>
-            </div>
-          </article>
-
-          <article class="download-card glass-surface">
-            <div class="dl-tag" data-i18n="dlSrcTag">MIT 完整源码归档</div>
-            <h3 data-i18n="dlSrcTitle">Source Code v1.0.0</h3>
-            <p class="dl-meta">Swift 6.2 · CBridge · FinderSync · Tests</p>
-            <p class="dl-desc" data-i18n="dlSrcDesc">包含完整 SwiftPM 工程源码、C 编解码桥接与 Apple Silicon 打包脚本。</p>
-            <div class="dl-actions dl-actions-row">
-              <a href="./downloads/BoltZip-1.0.0-source.zip" download="BoltZip-1.0.0-source.zip" class="btn btn-glass btn-sm">Source (.zip)</a>
-              <a href="./downloads/BoltZip-1.0.0-source.tar.gz" download="BoltZip-1.0.0-source.tar.gz" class="btn btn-glass btn-sm">Source (.tar.gz)</a>
-            </div>
-          </article>
-
-          <article class="download-card glass-surface">
-            <div class="dl-tag" data-i18n="dlVerifyTag">完整性校验</div>
-            <h3 data-i18n="dlVerifyTitle">SHA-256 校验清单</h3>
-            <p class="dl-meta">BoltZip-1.0.0-SHA256SUMS.txt</p>
-            <p class="dl-desc" data-i18n="dlVerifyDesc">下载后可执行 shasum -a 256 -c BoltZip-1.0.0-SHA256SUMS.txt 验证包完整性。</p>
-            <div class="dl-actions">
-              <a href="./downloads/BoltZip-1.0.0-SHA256SUMS.txt" download="BoltZip-1.0.0-SHA256SUMS.txt" class="btn btn-glass btn-sm" data-i18n="dlVerifyBtn">查看 / 下载 SHA256SUMS.txt</a>
-            </div>
-          </article>
-        </div>
-      </div>
-    </section>
-
     <!-- Quickstart (No hardcoded local paths) -->
     <section id="quickstart" class="section">
       <div class="container">
         <div class="section-head">
           <span class="eyebrow">OPEN SOURCE QUICKSTART</span>
           <h2 data-i18n="qsTitle">从 GitHub 克隆并构建 BoltZip</h2>
-          <p data-i18n="qsSub">仓库提供完整的 SwiftPM 工程、打包脚本以及面向开发者的 AGENTS.md</p>
+          <p data-i18n="qsSub">main 分支专攻 Apple Silicon (macOS 26+)，legacy/macos-12 分支保留 macOS 12–26 Universal 构建脚本</p>
         </div>
 
         <div class="quickstart-grid">
           <div class="code-card glass-surface">
             <div class="code-head">
-              <span data-i18n="qsStep1">1. 克隆并打包 BoltZip.app</span>
+              <span data-i18n="qsStep1">1. 克隆并打包 .app 与 .dmg</span>
               <button class="copy-btn" data-copy="git clone https://github.com/hwang8859-1/BoltZip.git && cd BoltZip && ./Scripts/build_app.sh" data-i18n="copyBtn">复制</button>
             </div>
             <pre><code>git clone https://github.com/hwang8859-1/BoltZip.git
 cd BoltZip
 ./Scripts/build_app.sh
-open dist/BoltZip.app</code></pre>
+open dist/BoltZip-1.0.0-macOS-arm64.dmg</code></pre>
           </div>
 
           <div class="code-card glass-surface">
             <div class="code-head">
-              <span data-i18n="qsStep2">2. 运行全套单元测试</span>
-              <button class="copy-btn" data-copy="swift test" data-i18n="copyBtn">复制</button>
+              <span data-i18n="qsStep2">2. 切换兼容分支或运行测试</span>
+              <button class="copy-btn" data-copy="git checkout legacy/macos-12 && swift test" data-i18n="copyBtn">复制</button>
             </div>
-            <pre><code>swift test</code></pre>
+            <pre><code>swift test
+# Intel / macOS 12-15 兼容线:
+git checkout legacy/macos-12
+./Scripts/build_app.sh</code></pre>
           </div>
 
           <div class="code-card glass-surface">
@@ -384,7 +446,7 @@ swift run -c release boltzip bench</code></pre>
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <div data-i18n-html="footerDesc"><strong>BoltZip v1.0.0</strong> · Open-Source Apple Silicon Archive Studio for macOS 26.0+</div>
+      <div data-i18n-html="footerDesc"><strong>BoltZip v1.0.0</strong> (Apple Silicon) · <strong>v0.9.1 LTS</strong> (macOS 12–26 Universal)</div>
       <div class="footer-note">MIT License · Swift 6.2 · zlib · Zstandard · XZ · bzip2 · LZ4 · libarchive</div>
     </div>
   </footer>
