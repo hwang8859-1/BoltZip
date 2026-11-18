@@ -4,8 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-APP_VERSION="1.0.0"
-APP_BUILD="11"
+VERSION_FILE="$ROOT_DIR/Sources/BoltZipCore/Models/BoltZipVersion.swift"
+APP_VERSION="$(sed -n 's/.*public static let current = "\([^"]*\)".*/\1/p' "$VERSION_FILE" | head -n 1)"
+APP_BUILD="$(sed -n 's/.*public static let build = "\([^"]*\)".*/\1/p' "$VERSION_FILE" | head -n 1)"
+if [ -z "$APP_VERSION" ] || [ -z "$APP_BUILD" ]; then
+    echo "Error: Failed to read BoltZipVersion from $VERSION_FILE" >&2
+    exit 1
+fi
 MIN_MACOS="26.0"
 VENDOR_LIB_DIR="$ROOT_DIR/Vendor/Compression/lib"
 

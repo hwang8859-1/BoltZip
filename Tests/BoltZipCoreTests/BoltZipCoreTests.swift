@@ -798,4 +798,10 @@ final class BoltZipCoreTests: XCTestCase {
         let report = try BoltArchiveEngine.testIntegrity(archiveURL: splitZip)
         XCTAssertTrue(report.isHealthy)
     }
+
+    func testCentralizedVersionMetadata() {
+        XCTAssertFalse(BoltZipVersion.current.isEmpty)
+        XCTAssertEqual(BoltZipVersion.current, "1.0.1")
+        XCTAssertFalse(BoltZipVersion.build.isEmpty)
+    }
 }

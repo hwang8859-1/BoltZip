@@ -1,4 +1,5 @@
 import AppKit
+import BoltZipCore
 import SwiftUI
 
 struct AboutView: View {
@@ -8,7 +9,7 @@ struct AboutView: View {
     var body: some View {
         let l = vm.l10n
         let glassEnabled = vm.effectiveWindowTranslucency
-        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? BoltZipVersion.current
 
         VStack(spacing: 12) {
             BoltLogoBadge(

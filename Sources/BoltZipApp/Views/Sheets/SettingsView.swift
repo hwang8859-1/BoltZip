@@ -57,7 +57,7 @@ struct SettingsView: View {
             BoltGlassContainer(spacing: 10) {
                 HStack {
                     Text(BoltPlatformCapabilities.runtimeVersionSummary(
-                        appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+                        appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? BoltZipVersion.current
                     ))
                     .font(BoltType.monoCaption)
                     .foregroundStyle(.secondary)
