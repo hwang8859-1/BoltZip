@@ -8,7 +8,7 @@
 
 ![macOS 26.0+](https://img.shields.io/badge/macOS-26.0%2B%20(Apple%20Silicon)-0ea5e9?style=flat-square)
 ![Swift 6.2](https://img.shields.io/badge/Swift-6.2-6366f1?style=flat-square)
-![Release v1.0.0](https://img.shields.io/badge/release-v1.0.0-facc15?style=flat-square)
+![Release v1.0.1](https://img.shields.io/badge/release-v1.0.1-facc15?style=flat-square)
 ![License MIT](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)
 
 </div>
@@ -17,7 +17,7 @@
 
 **BoltZip** 是一款专为 **macOS 26.0+（Apple Silicon M 系列 `arm64` 独占优化）** 打造的开源压缩与解压缩工作台。它融合了 Windows 经典压缩工具（7-Zip / WinZip / Bandizip）的高效交互与 macOS 26 原生 **Liquid Glass 液态玻璃** 质感，告别双击即全量解压一地的传统体验。
 
-> 💡 **Intel Mac 或 macOS 12 Monterey ~ macOS 15 用户**：长期兼容版 **v0.9.2 Universal (`arm64 + x86_64`)** 维护在 [`legacy/macos-12`](../../tree/legacy/macos-12) 分支 / `v0.9.2` Release Tag。
+> 💡 **Intel Mac 或 macOS 12 Monterey ~ macOS 15 用户**：长期兼容版 **v0.9.3 Universal (`arm64 + x86_64`)** 维护在 [`legacy/macos-12`](../../tree/legacy/macos-12) 分支 / `v0.9.3` Release Tag。
 
 > [!IMPORTANT]
 > **当前活跃开发分支：[GitHub 默认 `dev-*` 分支](../../)** · `main` 分支仅用于稳定版本发布且已受保护。提交代码或 PR 请务必保持指向当前默认开发分支，详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
@@ -66,7 +66,7 @@ swift run -c release boltzip x release.zip ./out --mode smart
 
 ## 🧩 展示页面与开发者指引
 
-- **在线产品展示与下载页**：访问公网展示站 [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/)，即可在线体验交互式界面模拟器、多语言切换、算法对比面板，并直接下载 `BoltZip v1.0.0 Apple Silicon` 安装包、源代码归档与 SHA-256 校验清单（仓库源码位于 [showcase/](showcase/)）。
+- **在线产品展示与下载页**：访问公网展示站 [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/)，即可在线体验交互式界面模拟器、多语言切换、算法对比面板，并直接下载 `BoltZip v1.0.1 Apple Silicon` 安装包、源代码归档与 SHA-256 校验清单（仓库源码位于 [showcase/](showcase/)）。
 - **AI Agent 与二次开发指引**：请参阅 [AGENTS.md](AGENTS.md)，了解模块划分、加密/分卷协议不变量及代码贡献规范。
 - **版本更新记录**：请参阅 [CHANGELOG.md](CHANGELOG.md)。
 

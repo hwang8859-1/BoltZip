@@ -2,6 +2,26 @@
 
 All notable changes to **BoltZip** will be documented in this file.
 
+## [1.0.1] - 2026-11-18 (`main`: Apple Silicon + macOS 26+ Hotfix & Quality Release)
+
+### Fixed
+- **Finder Quick-Action HUD Stack Overflow (`EXC_BAD_ACCESS / SIGSEGV`)**:
+  - Removed `hc.sizingOptions = [.preferredContentSize]` in [`QuickTaskHUDWindowController.swift`](Sources/BoltZipApp/Services/QuickTaskHUDWindowController.swift) where macOS 26's `NSHostingView.windowDidLayout() -> updateAnimatedWindowSize(_:)` caused infinite layout recursion inside the borderless `QuickHUDPanel` during Finder right-click compress & extract actions.
+  - Added coalesced `scheduleResizeToFit()` triggered by [`QuickTaskHUDModel.swift`](Sources/BoltZipApp/Models/QuickTaskHUDModel.swift) `phase` changes and password focus transitions with `ceil`-rounded bounds.
+- **Cold-Launch External URL Auto-Exit**:
+  - Removed the blind `excludingWindowID` exclusion in [`BoltZipAppDelegate.swift`](Sources/BoltZipApp/App/BoltZipAppDelegate.swift) so SwiftUI recycling and ordering front an initial `NSWindow` during cold-launch Finder actions (`boltzip://finder?op=open...` / `op=openWorkspace`) stays alive cleanly.
+- **macOS Lifecycle, 7z Levels & Split-ZIP Safety**:
+  - Deferred `NSApp` initialization out of `WorkspaceViewModel.init()`, fixed `.7z` compression level forwarding, guarded in-place editing of split-volume ZIPs, wired status bar toggle & Quick Look temp-file cleanup, and fixed multi-archive batch extraction & integrity reports.
+
+### Improved
+- **Liquid Glass Hierarchy, Localized FinderSync & Centralized Version Metadata**:
+  - Aligned toolbar, inspector, and sheet surfaces to native macOS 26 Liquid Glass hierarchy; localized `BoltZipCore` errors/metadata and embedded `.lproj` localization bundles in `BoltZipFinderSync.appex`; centralized `BoltZipVersion` (`1.0.1`) across `BoltZipCore`, `boltzip` CLI, `BoltZipApp`, and `build_app.sh`.
+
+## [0.9.3 (`legacy/macos-12`)] - 2026-11-18
+
+### Fixed
+- **Universal LTS HUD Layout & Cold-Launch URL Guards**: Backported the `QuickTaskHUDWindowController` `sizingOptions = []` resize-coalescing fix and the `BoltZipAppDelegate` `willCloseNotification` window-visibility check to `legacy/macos-12` (`v0.9.3` Universal `arm64` + `x86_64`, `minOS 12.0`).
+
 ## [1.0.0] - 2026-11-18 (`main`: Apple Silicon + macOS 26+ Exclusive)
 
 ### Changed
