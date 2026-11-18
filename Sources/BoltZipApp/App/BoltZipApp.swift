@@ -56,6 +56,8 @@ struct BoltZipApp: App {
             CommandGroup(replacing: .printItem) {}
             CommandGroup(replacing: .importExport) {}
             CommandGroup(replacing: .undoRedo) {}
+        }
+        .commands {
             CommandGroup(replacing: .pasteboard) {}
             CommandGroup(replacing: .textEditing) {}
             CommandGroup(replacing: .textFormatting) {}

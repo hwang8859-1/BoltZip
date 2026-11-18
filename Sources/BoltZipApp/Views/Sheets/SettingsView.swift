@@ -56,13 +56,13 @@ struct SettingsView: View {
             BoltGlassContainer(spacing: 10) {
                 HStack {
                     Text(BoltPlatformCapabilities.runtimeVersionSummary(
-                        appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.9.1"
+                        appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.9.2"
                     ))
                     .font(BoltType.monoCaption)
                     .foregroundStyle(.secondary)
                     Spacer()
                     Button(l.close) {
-                        NSApp.keyWindow?.performClose(nil)
+                        (NSApp as NSApplication?)?.keyWindow?.performClose(nil)
                         dismiss()
                     }
                     .boltGlassProminentButton()

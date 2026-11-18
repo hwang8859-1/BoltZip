@@ -8,7 +8,7 @@ struct AboutView: View {
     var body: some View {
         let l = vm.l10n
         let glassEnabled = vm.effectiveWindowTranslucency
-        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.9.1"
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.9.2"
 
         VStack(spacing: 12) {
             BoltLogoBadge(size: 64, whiteBackground: vm.useWhiteAppIcon)
@@ -68,7 +68,7 @@ struct AboutView: View {
                     .boltGlassButton()
 
                     Button(l.close) {
-                        NSApp.keyWindow?.performClose(nil)
+                        (NSApp as NSApplication?)?.keyWindow?.performClose(nil)
                         dismiss()
                     }
                     .boltGlassButton()

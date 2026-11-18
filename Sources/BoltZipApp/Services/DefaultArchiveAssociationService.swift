@@ -34,6 +34,18 @@ enum ArchiveAssociationGroup: String, CaseIterable, Identifiable, Sendable {
         utTypes.first
     }
 
+    var fallbackExtensions: [String] {
+        switch self {
+        case .zip: return ["zip"]
+        case .rar: return ["rar"]
+        case .sevenZip: return ["7z"]
+        case .tar: return ["tar", "tgz", "txz", "tbz2"]
+        case .singleStreams: return ["gz", "bz2", "zst", "xz", "lz4"]
+        case .cabXar: return ["cab", "xar"]
+        case .iso: return ["iso"]
+        }
+    }
+
     var utTypes: [UTType] {
         let rawIDs: [String]
         switch self {
@@ -66,7 +78,11 @@ enum ArchiveAssociationGroup: String, CaseIterable, Identifiable, Sendable {
         case .iso:
             rawIDs = ["public.iso-image"]
         }
-        return rawIDs.compactMap { UTType($0) }
+        let declared = rawIDs.compactMap { UTType($0) }
+        if !declared.isEmpty {
+            return declared
+        }
+        return fallbackExtensions.compactMap { UTType(filenameExtension: $0) }
     }
 
     var systemDefaultAppURL: URL? {

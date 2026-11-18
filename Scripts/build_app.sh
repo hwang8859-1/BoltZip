@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-APP_VERSION="0.9.1"
-APP_BUILD="10"
+APP_VERSION="0.9.2"
+APP_BUILD="11"
 MIN_MACOS="12.0"
 VENDOR_LIB_DIR="$ROOT_DIR/Vendor/Compression/lib"
 
@@ -206,6 +206,24 @@ cat <<PLIST > "$CONTENTS/Info.plist"
         </dict>
         <dict>
             <key>UTTypeIdentifier</key>
+            <string>org.7-zip.7-zip-archive</string>
+            <key>UTTypeDescription</key>
+            <string>7-Zip Archive</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.archive</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>7z</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
             <string>com.facebook.zstandard-archive</string>
             <key>UTTypeDescription</key>
             <string>Zstandard Archive</string>
@@ -220,7 +238,63 @@ cat <<PLIST > "$CONTENTS/Info.plist"
                 <array>
                     <string>zst</string>
                     <string>zstd</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.facebook.zstandard-tar-archive</string>
+            <key>UTTypeDescription</key>
+            <string>TAR + Zstandard Archive</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.archive</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
                     <string>tzst</string>
+                    <string>tar.zst</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>org.tukaani.xz-archive</string>
+            <key>UTTypeDescription</key>
+            <string>XZ / LZMA Archive</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.archive</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>xz</string>
+                    <string>lzma</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>org.tukaani.tar-xz-archive</string>
+            <key>UTTypeDescription</key>
+            <string>TAR + XZ Archive</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.archive</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>txz</string>
+                    <string>tar.xz</string>
                 </array>
             </dict>
         </dict>
@@ -239,7 +313,25 @@ cat <<PLIST > "$CONTENTS/Info.plist"
                 <key>public.filename-extension</key>
                 <array>
                     <string>lz4</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>public.lz4-tar-archive</string>
+            <key>UTTypeDescription</key>
+            <string>TAR + LZ4 Archive</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.archive</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
                     <string>tlz4</string>
+                    <string>tar.lz4</string>
                 </array>
             </dict>
         </dict>

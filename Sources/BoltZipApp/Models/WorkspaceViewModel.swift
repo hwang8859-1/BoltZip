@@ -27,7 +27,7 @@ final class WorkspaceViewModel: ObservableObject {
 
     @Published var recentArchivePaths: [String] = []
     @Published var defaultStripMacJunk: Bool = true
-    @Published var quickActionsInstalled: Bool = QuickActionInstaller.isExtensionEnabled()
+    @Published var quickActionsInstalled: Bool = false
     @Published var associationStatuses: [ArchiveAssociationStatus] = []
     @Published var isUpdatingAssociations: Bool = false
 
@@ -41,7 +41,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var appTheme: AppTheme = .system {
         didSet {
             UserDefaults.standard.set(appTheme.rawValue, forKey: Keys.appTheme)
-            NSApp.appearance = appTheme.nsAppearance
+            (NSApp as NSApplication?)?.appearance = appTheme.nsAppearance
         }
     }
     @Published var isWindowTranslucent: Bool = true {
@@ -147,7 +147,8 @@ final class WorkspaceViewModel: ObservableObject {
     var isCompressWindowVisible: Bool { compressWindowController.isVisible }
 
     var hasVisibleMainWindow: Bool {
-        NSApp.windows.contains { window in
+        guard let app = NSApp as NSApplication? else { return false }
+        return app.windows.contains { window in
             let id = window.identifier?.rawValue ?? ""
             let isMainID = id == "boltzip.main" || id.hasPrefix("main")
             return isMainID
@@ -182,7 +183,6 @@ final class WorkspaceViewModel: ObservableObject {
         if let rawTheme = defaults.string(forKey: Keys.appTheme), let parsedTheme = AppTheme(rawValue: rawTheme) {
             self.appTheme = parsedTheme
         }
-        NSApp.appearance = self.appTheme.nsAppearance
         if defaults.object(forKey: Keys.windowTranslucent) != nil {
             self.isWindowTranslucent = defaults.bool(forKey: Keys.windowTranslucent)
         }
@@ -216,7 +216,6 @@ final class WorkspaceViewModel: ObservableObject {
         if defaults.object(forKey: Keys.whiteAppIcon) != nil {
             self.useWhiteAppIcon = defaults.bool(forKey: Keys.whiteAppIcon)
         }
-        BoltAppIconRenderer.apply(whiteBackground: self.useWhiteAppIcon)
         self.statusMessage = L10n(language: self.appLanguage).readyStatus
     }
 

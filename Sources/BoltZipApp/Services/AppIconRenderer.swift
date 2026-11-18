@@ -9,7 +9,8 @@ enum BoltAppIconRenderer {
     private static var cachedWhiteIcon: NSImage?
 
     static func apply(whiteBackground: Bool) {
-        NSApp.applicationIconImage = appIconImage(whiteBackground: whiteBackground, size: 512)
+        guard let app = NSApp as NSApplication? else { return }
+        app.applicationIconImage = appIconImage(whiteBackground: whiteBackground, size: 512)
     }
 
     static func appIconImage(whiteBackground: Bool, size: CGFloat = 512) -> NSImage {

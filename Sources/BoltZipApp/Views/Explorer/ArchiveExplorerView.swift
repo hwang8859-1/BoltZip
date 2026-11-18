@@ -565,7 +565,8 @@ private struct BoltExplorerKeyNavigationModifier: ViewModifier {
                 .onAppear {
                     guard monitorToken == nil else { return }
                     monitorToken = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                        guard let keyWin = NSApp.keyWindow,
+                        guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+                              let keyWin = (NSApp as NSApplication?)?.keyWindow,
                               keyWin.attachedSheet == nil,
                               !(keyWin.firstResponder is NSTextView) else {
                             return event
