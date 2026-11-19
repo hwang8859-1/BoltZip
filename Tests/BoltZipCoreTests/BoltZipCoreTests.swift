@@ -1390,8 +1390,11 @@ final class BoltZipCoreTests: XCTestCase {
     func testAppIconGoldSweepMovesWithoutChangingItsSilhouette() throws {
         #if canImport(AppKit)
         let size = 128
+        func render(white: Bool, progress: CGFloat?) throws -> Data {
+            try XCTUnwrap(BoltIconArtwork.renderAppIconPNG(pixelSize: size, whiteBackground: white, goldSweepProgress: progress))
+        }
         func measure(white: Bool, progress: CGFloat?) throws -> (meanX: Double, meanY: Double, silhouette: [Bool]) {
-            let png = try XCTUnwrap(BoltIconArtwork.renderAppIconPNG(pixelSize: size, whiteBackground: white, goldSweepProgress: progress))
+            let png = try render(white: white, progress: progress)
             let bitmap = try XCTUnwrap(NSBitmapImageRep(data: png))
             var points = 0
             var sumX = 0
@@ -1414,6 +1417,17 @@ final class BoltZipCoreTests: XCTestCase {
             return (Double(sumX) / count, Double(sumY) / count, silhouette)
         }
 
+        func pixelDistance(_ lhs: Data, _ rhs: Data) throws -> Int {
+            let left = try XCTUnwrap(NSBitmapImageRep(data: lhs))
+            let right = try XCTUnwrap(NSBitmapImageRep(data: rhs))
+            let leftBytes = try XCTUnwrap(left.bitmapData)
+            let rightBytes = try XCTUnwrap(right.bitmapData)
+            XCTAssertEqual(left.bytesPerPlane, right.bytesPerPlane)
+            return (0..<min(left.bytesPerPlane, right.bytesPerPlane)).reduce(0) { sum, index in
+                sum + abs(Int(leftBytes[index]) - Int(rightBytes[index]))
+            }
+        }
+
         for white in [true, false] {
             let head = try measure(white: white, progress: 0.12)
             let middle = try measure(white: white, progress: 0.52)
@@ -1425,6 +1439,12 @@ final class BoltZipCoreTests: XCTestCase {
             XCTAssertEqual(head.silhouette, resting.silhouette)
             XCTAssertEqual(middle.silhouette, resting.silhouette)
             XCTAssertEqual(tail.silhouette, resting.silhouette)
+
+            let restingPNG = try render(white: white, progress: nil)
+            let enteringTail = try render(white: white, progress: 0.76)
+            let lastSweepFrame = try render(white: white, progress: 0.96)
+            XCTAssertLessThan(try pixelDistance(lastSweepFrame, restingPNG) * 4, try pixelDistance(enteringTail, restingPNG))
+            XCTAssertEqual(try render(white: white, progress: 1), restingPNG)
         }
         #endif
     }

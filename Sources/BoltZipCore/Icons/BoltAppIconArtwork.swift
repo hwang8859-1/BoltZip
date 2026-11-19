@@ -336,31 +336,38 @@ extension BoltIconArtwork {
         let tiltedBolt = zBolt.copy(using: &xform) ?? zBolt
 
         // Keep the shape and first three gradient stops identical between states.
-        let blueStops: [CGColor] = whiteBackdrop
+        let blueStops: [NSColor] = whiteBackdrop
             ? [
-                NSColor(srgbRed: 0.000, green: 0.796, blue: 0.961, alpha: 1.0).cgColor,
-                NSColor(srgbRed: 0.231, green: 0.635, blue: 1.000, alpha: 1.0).cgColor,
-                NSColor(srgbRed: 0.353, green: 0.486, blue: 1.000, alpha: 1.0).cgColor
+                NSColor(srgbRed: 0.000, green: 0.796, blue: 0.961, alpha: 1.0),
+                NSColor(srgbRed: 0.231, green: 0.635, blue: 1.000, alpha: 1.0),
+                NSColor(srgbRed: 0.353, green: 0.486, blue: 1.000, alpha: 1.0)
             ]
             : [
-                NSColor(srgbRed: 0.498, green: 0.941, blue: 1.000, alpha: 1.0).cgColor,
-                NSColor(srgbRed: 0.486, green: 0.784, blue: 1.000, alpha: 1.0).cgColor,
-                NSColor(srgbRed: 0.471, green: 0.698, blue: 1.000, alpha: 1.0).cgColor
+                NSColor(srgbRed: 0.498, green: 0.941, blue: 1.000, alpha: 1.0),
+                NSColor(srgbRed: 0.486, green: 0.784, blue: 1.000, alpha: 1.0),
+                NSColor(srgbRed: 0.471, green: 0.698, blue: 1.000, alpha: 1.0)
             ]
-        let tailStops: [CGColor]
-        if goldSweepProgress == nil {
-            tailStops = [
-                NSColor(srgbRed: 0.849, green: 0.686, blue: 0.285, alpha: 1.0).cgColor,
-                NSColor(srgbRed: 0.969, green: 0.789, blue: 0.202, alpha: 1.0).cgColor,
-                NSColor(srgbRed: 1.000, green: 0.839, blue: 0.161, alpha: 1.0).cgColor
-            ]
-        } else {
-            let tail = whiteBackdrop
+        let goldTailStops = [
+            NSColor(srgbRed: 0.849, green: 0.686, blue: 0.285, alpha: 1.0),
+            NSColor(srgbRed: 0.969, green: 0.789, blue: 0.202, alpha: 1.0),
+            NSColor(srgbRed: 1.000, green: 0.839, blue: 0.161, alpha: 1.0)
+        ]
+        let progress = min(max(goldSweepProgress ?? 1, 0), 1)
+        // Fade the moving highlight into the resting tail over the final third of the sweep.
+        let transition = max(0, (progress - 0.68) / 0.32)
+        let settling = transition * transition * (3 - 2 * transition)
+        let tailStops: [NSColor]
+        if progress < 1 {
+            let blueTail = whiteBackdrop
                 ? NSColor(srgbRed: 0.224, green: 0.337, blue: 0.863, alpha: 1.0)
                 : NSColor(srgbRed: 0.322, green: 0.553, blue: 0.961, alpha: 1.0)
-            tailStops = [blueStops[2], tail.cgColor, tail.cgColor]
+            tailStops = zip([blueStops[2], blueTail, blueTail], goldTailStops).map { blue, gold in
+                blue.blended(withFraction: settling, of: gold) ?? gold
+            }
+        } else {
+            tailStops = goldTailStops
         }
-        let boltStops = blueStops + tailStops
+        let boltStops = (blueStops + tailStops).map(\.cgColor)
         guard let bGrad = CGGradient(
             colorsSpace: colorSpace,
             colors: boltStops as CFArray,
@@ -383,18 +390,19 @@ extension BoltIconArtwork {
             )
         }
 
-        let sweepGradient = goldSweepProgress.flatMap { _ in
-            CGGradient(
+        // Let the highlight retain its warmth as the gold tail appears underneath it.
+        let sweepOpacity = 1 - settling * settling
+        let sweepGradient = progress < 1
+            ? CGGradient(
                 colorsSpace: colorSpace,
                 colors: [
                     NSColor(srgbRed: 1, green: 0.79, blue: 0.15, alpha: 0).cgColor,
-                    NSColor(srgbRed: 1, green: 0.83, blue: 0.19, alpha: 1).cgColor,
-                    NSColor(srgbRed: 1, green: 0.92, blue: 0.53, alpha: 1).cgColor,
+                    NSColor(srgbRed: 1, green: 0.83, blue: 0.19, alpha: sweepOpacity).cgColor,
+                    NSColor(srgbRed: 1, green: 0.92, blue: 0.53, alpha: sweepOpacity).cgColor,
                     NSColor(srgbRed: 1, green: 0.79, blue: 0.15, alpha: 0).cgColor
                 ] as CFArray,
                 locations: [0, 0.36, 0.62, 1]
-            )
-        }
+            ) : nil
 
         func paint(_ path: CGPath) {
             ctx.saveGState()
@@ -404,12 +412,11 @@ extension BoltIconArtwork {
                 bGrad, start: gradStart, end: gradEnd,
                 options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
             )
-            if let progress = goldSweepProgress, let sweepGradient {
-                let center = min(max(progress, 0), 1)
+            if let sweepGradient {
                 let dx = gradEnd.x - gradStart.x
                 let dy = gradEnd.y - gradStart.y
-                let start = CGPoint(x: gradStart.x + dx * (center - 0.16), y: gradStart.y + dy * (center - 0.16))
-                let end = CGPoint(x: gradStart.x + dx * (center + 0.16), y: gradStart.y + dy * (center + 0.16))
+                let start = CGPoint(x: gradStart.x + dx * (progress - 0.16), y: gradStart.y + dy * (progress - 0.16))
+                let end = CGPoint(x: gradStart.x + dx * (progress + 0.16), y: gradStart.y + dy * (progress + 0.16))
                 ctx.drawLinearGradient(sweepGradient, start: start, end: end, options: [])
             }
             ctx.restoreGState()
