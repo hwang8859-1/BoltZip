@@ -50,7 +50,7 @@ struct BoltZipApp: App {
                     }
                 )
         }
-        .defaultSize(width: 680, height: 430)
+        .defaultSize(width: 720, height: 520)
         .windowToolbarStyle(.unifiedCompact)
         .handlesExternalEvents(matching: Set(["*"]))
         .commands {

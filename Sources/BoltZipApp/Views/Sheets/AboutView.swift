@@ -58,6 +58,15 @@ struct AboutView: View {
             }
             .padding(.top, 2)
 
+            Button {
+                dismiss()
+                vm.onRequestShowMainWindow?()
+                vm.activeSheet = .benchmark
+            } label: {
+                Label(l.benchmark, systemImage: "gauge.with.dots.needle.67percent")
+            }
+            .buttonStyle(.link)
+
             BoltGlassContainer(spacing: 8) {
                 HStack(spacing: 8) {
                     Button {

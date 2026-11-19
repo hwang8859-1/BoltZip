@@ -70,15 +70,7 @@ struct L10n: Sendable {
 
     // MARK: - General & Welcome
     var readyStatus: String { t("就绪 · 拖入压缩包浏览，或拖入文件立即打包", "就緒 · 拖入封存檔瀏覽，或拖入檔案立即打包", "Ready — Drop an archive to browse, or files to compress", "準備完了 — 書庫をドロップして閲覧、またはファイルを圧縮") }
-    var dropZoneTitle: String { t("拖放压缩包直接浏览，或拖入文件立即打包", "拖放封存檔直接瀏覽，或拖入檔案立即打包", "Drop an archive to browse, or files to compress", "書庫を開いて閲覧、またはファイルをここにドロップ") }
-    var dropZoneSubtitle: String {
-        t(
-            "macOS 液态玻璃原生体验 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · 自动清理 .DS_Store 与 GBK 乱码修复",
-            "macOS 液態玻璃原生體驗 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · 自動清除 .DS_Store 與編碼自動修正",
-            "Native macOS Liquid Glass · ZIP, RAR, 7z, TAR.ZST, XZ, LZ4 · Auto-remove .DS_Store & CJK fix",
-            "macOS Liquid Glass 対応 · ZIP / RAR / 7z / TAR.ZST / XZ / LZ4 · .DS_Store 自動除外＆文字コード補正"
-        )
-    }
+    var dropZoneTitle: String { t("拖入压缩包浏览，或拖入文件打包", "拖入封存檔瀏覽，或拖入檔案壓縮", "Drop an archive to browse, or files to compress", "書庫をドラッグして閲覧、ファイルをドラッグして圧縮") }
 
     var newArchive: String { t("新建压缩包", "新增封存檔", "New Archive", "新規圧縮") }
     var openArchive: String { t("打开压缩包", "開啟封存檔", "Open Archive", "書庫を開く") }
@@ -86,28 +78,32 @@ struct L10n: Sendable {
     var showcasePage: String { t("展示页面", "產品展示頁", "Showcase", "紹介ページ") }
 
     // MARK: - Finder Banner
-    var finderBannerEnabledTitle: String { t("访达一级右键目录「Bolt >」已启用", "Finder 第一層右鍵選單「Bolt >」已啟用", "Finder top-level menu “Bolt ›” is active", "Finder 第一階層メニュー「Bolt ›」が有効です") }
-    var finderBannerDisabledTitle: String { t("将高频操作添加到访达右键一级目录「Bolt >」", "將常用功能加入 Finder 右鍵第一層選單「Bolt >」", "Add quick actions to Finder’s top-level “Bolt ›” menu", "よく使う操作を Finder 右クリック第一階層「Bolt ›」へ追加") }
-    var finderBannerSubtitle: String { t("右键顶层直达：智能解压 · 解压到文件夹 · 压缩 ZIP / TAR.ZST / 7z · 加密打包", "右鍵頂層直達：智慧解壓 · 解壓至資料夾 · 壓縮 ZIP / TAR.ZST / 7z · 加密打包", "Right-click anywhere in Finder: Smart Extract, Compress ZIP / TAR.ZST / 7z & Encrypt", "右クリック最上位から即実行：スマート展開・ZIP/TAR.ZST/7z圧縮・暗号化") }
+    var finderBannerEnabledTitle: String { t("访达快捷菜单已启用", "Finder 快捷選單已啟用", "Finder quick actions are enabled", "Finder クイック操作は有効です") }
+    var finderBannerDisabledTitle: String { t("启用访达快捷菜单", "啟用 Finder 快捷選單", "Enable Finder quick actions", "Finder クイック操作を有効にする") }
     var extensionSettings: String { t("扩展设置", "延伸功能設定", "Extensions", "拡張設定") }
     var resync: String { t("同步", "同步", "Sync", "同期") }
     var enableBoltMenu: String { t("一键启用", "一鍵啟用", "Enable", "有効にする") }
     var hideThisSection: String { t("隐藏此模块", "隱藏此區塊", "Hide section", "この項目を隠す") }
 
     // MARK: - Feature & Recents Cards
-    var featuresTitle: String { t("Windows Zip 经典效率特性", "Windows Zip 經典效率功能", "Desktop-Class Archive Workflow", "Windows Zip 級の快適操作") }
-    var featBrowseTitle: String { t("包内直览 & 全能右键", "封存檔內建瀏覽與右鍵選單", "Browse Inside & Context Actions", "展開せずに中身を閲覧＆編集") }
-    var featBrowseDesc: String { t("双击/空格预览，右键直接解压、单独导出 ZIP、重命名与删改", "雙擊或空白鍵預覽，右鍵快速解壓、匯出新 ZIP、重新命名與編輯", "Double-click or press Space to Quick Look; add, rename, or delete inside ZIPs", "スペースキーでプレビュー、右クリックで直接編集や個別ZIP書き出し") }
-    var featSmartTitle: String { t("智能解压 (Smart Extract)", "智慧解壓縮 (Smart Extract)", "Smart Extract", "スマート展開（二重フォルダ防止）") }
-    var featSmartDesc: String { t("单目录不套娃，多文件自动归入同名子目录", "單一資料夾直接釋放，多項目自動建立同名資料夾", "Avoids nested duplicate folders automatically", "単一フォルダはそのまま、複数項目は同名フォルダを作成して展開") }
-    var featMacJunkTitle: String { t("自动删除 .DS_Store 等垃圾文件", "自動清除 .DS_Store 等隱藏檔", "Auto-Remove .DS_Store & Metadata", ".DS_Store などの不要ファイルを自動除去") }
-    var featMacJunkDesc: String { t("打包、包内追加与解压时自动剔除 .DS_Store、__MACOSX 与 ._*，跨平台干干净净", "壓縮、加入與解壓時自動剔除 .DS_Store、__MACOSX 與 ._*，跨平台分享更乾淨", "Automatically strips .DS_Store, __MACOSX, and ._* when packing, adding, or extracting", "圧縮・追加・展開時に .DS_Store / __MACOSX / ._* を自動除外してクリーンに共有") }
-    var featEncodingTitle: String { t("Windows 中文编码自愈", "Windows 編碼亂碼自動修正", "Auto-Fix CJK Filenames", "文字化け自動補正 (GBK / Shift-JIS)") }
-    var featEncodingDesc: String { t("自动识别 GB18030 / Big5 / Shift-JIS，彻底告别乱码", "自動辨識 GB18030 / Big5 / Shift-JIS，徹底告別亂碼", "Detects GB18030, Big5 & Shift-JIS archives created on Windows", "Windows 製アーカイブの日本語・中国語ファイル名を自動判別") }
-    var featCryptoTitle: String { t("AE-2 AES-256 & 分卷压缩", "AE-2 AES-256 與分卷壓縮", "WinZip AE-2 & Split Volumes", "AES-256 暗号化 ＆ 分割圧縮") }
-    var featCryptoDesc: String { t("支持密码跨平台互通与 .z01/.zip 分卷切分", "支援跨平台密碼互通與 .z01/.zip 分卷切分", "Standard AE-2 encryption & .z01 multi-volume archives", "WinZip/7-Zip互換暗号化と .z01 分割ボリュームに対応") }
+    var featuresTitle: String { t("功能特性", "功能特色", "Features", "機能") }
+    var featFormatsTitle: String { t("多格式支持", "支援多種格式", "Multiple archive formats", "さまざまな書庫形式") }
+    var featFormatsDesc: String { t("支持 ZIP、RAR、7z、TAR.ZST、XZ 和 LZ4 等格式。", "支援 ZIP、RAR、7z、TAR.ZST、XZ 和 LZ4 等格式。", "Supports ZIP, RAR, 7z, TAR.ZST, XZ, LZ4, and more.", "ZIP、RAR、7z、TAR.ZST、XZ、LZ4 などに対応。") }
+    var featBrowseTitle: String { t("包内浏览与编辑", "在封存檔內瀏覽與編輯", "Browse and edit archives", "書庫の閲覧と編集") }
+    var featBrowseDesc: String { t("用快速查看预览文件，直接编辑 ZIP。", "使用快速查看預覽檔案，直接編輯 ZIP。", "Preview files with Quick Look and edit ZIPs in place.", "クイックルックでプレビューし、ZIP を直接編集。") }
+    var featSmartTitle: String { t("智能解压", "智慧解壓縮", "Smart extract", "スマート展開") }
+    var featSmartDesc: String { t("保留单个根目录，多项内容归入同名文件夹。", "保留單一根目錄，多個項目歸入同名資料夾。", "Keeps a single root folder and groups multiple items.", "単一フォルダはそのまま、複数項目は同名フォルダに展開。") }
+    var featMacJunkTitle: String { t("清理系统文件", "清除系統檔案", "Clean up metadata", "不要なメタデータを除外") }
+    var featMacJunkDesc: String { t("自动排除 .DS_Store 和 __MACOSX 等文件。", "自動排除 .DS_Store 和 __MACOSX 等檔案。", "Automatically excludes .DS_Store, __MACOSX, and similar files.", ".DS_Store や __MACOSX などを自動で除外。") }
+    var featEncodingTitle: String { t("自动识别文件名编码", "自動辨識檔名編碼", "Detect filename encodings", "ファイル名の文字コードを自動判別") }
+    var featEncodingDesc: String { t("识别 GB18030、Big5 和 Shift-JIS 等编码。", "辨識 GB18030、Big5 和 Shift-JIS 等編碼。", "Detects GB18030, Big5, Shift-JIS, and more.", "GB18030、Big5、Shift-JIS などに対応。") }
+    var featCryptoTitle: String { t("加密与分卷", "加密與分卷", "Encryption and split volumes", "暗号化と分割圧縮") }
+    var featCryptoDesc: String { t("支持 AES-256 加密和 .z01/.zip 分卷。", "支援 AES-256 加密和 .z01/.zip 分卷。", "Supports AES-256 encryption and .z01/.zip volumes.", "AES-256 暗号化と .z01/.zip の分割に対応。") }
 
-    var recentsTitle: String { t("最近打开（右键快捷操作）", "最近開啟（右鍵快速操作）", "Recent Archives (Right-Click)", "最近の書庫（右クリック対応）") }
+    var featGlassTitle: String { t("液态玻璃", "液態玻璃", "Liquid Glass", "Liquid Glass") }
+    var featGlassDesc: String { t("原生界面，可调整窗口通透度。", "原生介面，可調整視窗通透度。", "Native controls with adjustable window translucency.", "ウインドウの透過度を調整できるネイティブ UI。") }
+
+    var recentsTitle: String { t("最近打开", "最近開啟", "Recent archives", "最近開いた書庫") }
     var noRecents: String { t("暂无最近打开的压缩包", "尚無最近開啟的封存檔", "No recent archives yet", "最近開いた書庫はありません") }
     func itemCount(_ n: Int) -> String { t("\(n) 项", "\(n) 項", "\(n) items", "\(n) 項目") }
 
