@@ -5,6 +5,7 @@ import SwiftUI
 struct AboutView: View {
     @Bindable var vm: WorkspaceViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let l = vm.l10n
@@ -14,7 +15,7 @@ struct AboutView: View {
         VStack(spacing: 12) {
             BoltLogoBadge(
                 size: 64,
-                whiteBackground: vm.useWhiteAppIcon,
+                whiteBackground: vm.effectiveWhiteAppIcon(for: colorScheme),
                 glassEnabled: glassEnabled
             )
 
@@ -32,10 +33,13 @@ struct AboutView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .boltLayeredSurface(
-                    glassEnabled: glassEnabled,
-                    tone: .regular,
+                .background(
+                    Color.primary.opacity(0.05),
                     in: RoundedRectangle(cornerRadius: BoltRadius.bar, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: BoltRadius.bar, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
                 )
 
             Text(l.aboutDesc)
@@ -55,7 +59,7 @@ struct AboutView: View {
             .padding(.top, 2)
 
             BoltGlassContainer(spacing: 8) {
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     Button {
                         if let url = URL(string: "https://github.com/hwang8859-1/BoltZip") {
                             NSWorkspace.shared.open(url)
@@ -72,6 +76,15 @@ struct AboutView: View {
                     }
                     .boltGlassButton()
 
+                    Button {
+                        dismiss()
+                        vm.onRequestShowMainWindow?()
+                        vm.checkForUpdates(userInitiated: true)
+                    } label: {
+                        Label(l.checkForUpdatesBtn, systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .boltGlassButton()
+
                     Button(l.close) {
                         NSApp.keyWindow?.performClose(nil)
                         dismiss()
@@ -82,7 +95,7 @@ struct AboutView: View {
             }
         }
         .padding(18)
-        .frame(width: 380)
+        .frame(width: 440)
         .background(BoltUnifiedWindowBacking(vm: vm))
         .background(
             BoltAuxiliaryWindowStyleBridge(

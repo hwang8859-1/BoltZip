@@ -4,17 +4,19 @@ import SwiftUI
 struct GlassFolderTreeRow: View {
     let node: FolderTreeNode
     let depth: Int
-    @Bindable var vm: WorkspaceViewModel
+    let selectedFolder: String
+    let l: L10n
     let canEditZip: Bool
     let glassEnabled: Bool
     @Binding var expandedPaths: Set<String>
+    let vm: WorkspaceViewModel
     @State private var isHovered = false
 
-    private var isSelected: Bool { vm.currentFolder == node.path }
+    private var isSelected: Bool { selectedFolder == node.path }
     private var isExpanded: Bool { expandedPaths.contains(node.path) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        LazyVStack(alignment: .leading, spacing: 2) {
             rowView
 
             if isExpanded && !node.children.isEmpty {
@@ -22,10 +24,12 @@ struct GlassFolderTreeRow: View {
                     GlassFolderTreeRow(
                         node: child,
                         depth: depth + 1,
-                        vm: vm,
+                        selectedFolder: selectedFolder,
+                        l: l,
                         canEditZip: canEditZip,
                         glassEnabled: glassEnabled,
-                        expandedPaths: $expandedPaths
+                        expandedPaths: $expandedPaths,
+                        vm: vm
                     )
                 }
             }
@@ -33,8 +37,7 @@ struct GlassFolderTreeRow: View {
     }
 
     private var rowView: some View {
-        let l = vm.l10n
-        return HStack(spacing: 4) {
+        HStack(spacing: 4) {
             if !node.children.isEmpty {
                 Button {
                     withAnimation(.easeInOut(duration: 0.14)) {
@@ -220,6 +223,7 @@ struct ExplorerFileRow: View {
     let cols: ExplorerColumnMetrics
     let dateString: String
     let iconName: String
+    let pointerTracker: ExplorerPointerTracker
     let onTap: () -> Void
     @State private var isHovered = false
 
@@ -285,8 +289,8 @@ struct ExplorerFileRow: View {
                 .frame(width: cols.modW, alignment: .trailing)
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 5.5)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 30)
         .background {
             if isSelected {
                 RoundedRectangle(cornerRadius: BoltRadius.row, style: .continuous)
@@ -297,8 +301,14 @@ struct ExplorerFileRow: View {
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: BoltRadius.row, style: .continuous))
-        .help(entry.path)
-        .onHover { isHovered = $0 }
+        .onHover { hovered in
+            isHovered = hovered
+            if hovered {
+                pointerTracker.hoveredEntry = entry
+            } else if pointerTracker.hoveredEntry?.id == entry.id {
+                pointerTracker.hoveredEntry = nil
+            }
+        }
         .onTapGesture(perform: onTap)
     }
 }

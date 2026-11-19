@@ -8,14 +8,48 @@ import SwiftUI
 @MainActor
 final class WorkspaceViewModel {
     var listing: ArchiveListing?
+    var navigationIndex: ArchiveNavigationIndex?
+    var folderTree: FolderTreeNode = FolderTreeNode(id: "", name: "", path: "", children: [], fileCount: 0)
+    var visibleEntries: [ArchiveEntry] = []
+    var visibleEntryByID: [String: ArchiveEntry] = [:]
+    var breadcrumbComponents: [(title: String, path: String)] = []
+    var selectedEntriesCache: [ArchiveEntry] = []
+    var selectedTotalUncompressedBytes: UInt64 = 0
+    @ObservationIgnored var isBatchUpdatingNavigation: Bool = false
+
     var openedArchiveFromHome: Bool = false
-    var currentFolder: String = ""
+    var currentFolder: String = "" {
+        didSet {
+            guard !isBatchUpdatingNavigation, oldValue != currentFolder else { return }
+            rebuildNavigationViews()
+        }
+    }
     var folderForwardStack: [String] = []
-    var selectedEntryIDs: Set<String> = []
-    var searchText: String = ""
+    var selectedEntryIDs: Set<String> = [] {
+        didSet {
+            guard !isBatchUpdatingNavigation, oldValue != selectedEntryIDs else { return }
+            refreshSelectionCache()
+        }
+    }
+    var searchText: String = "" {
+        didSet {
+            guard !isBatchUpdatingNavigation, oldValue != searchText else { return }
+            refreshVisibleEntries()
+        }
+    }
     var encodingOption: FilenameEncodingOption = .auto
-    var sortColumn: SortColumn = .name
-    var sortAscending: Bool = true
+    var sortColumn: SortColumn = .name {
+        didSet {
+            guard !isBatchUpdatingNavigation, oldValue != sortColumn else { return }
+            refreshVisibleEntries()
+        }
+    }
+    var sortAscending: Bool = true {
+        didSet {
+            guard !isBatchUpdatingNavigation, oldValue != sortAscending else { return }
+            refreshVisibleEntries()
+        }
+    }
     var columnVisibility: NavigationSplitViewVisibility = .all
 
     var isBusy: Bool = false
@@ -23,11 +57,61 @@ final class WorkspaceViewModel {
     var statusMessage: String = ""
     var alertMessage: String?
     var pendingExtractConflict: PendingExtractConflict?
+    var pendingBatchArchiveDrop: PendingBatchArchivePrompt?
+    var pendingDeleteConfirmation: PendingDeleteConfirmation?
     var activeSheet: ActiveSheet?
     var savedPassword: String?
+    var preferredZipEditAlgorithm: CompressionAlgorithm = .deflate
+
+    var archiveBackStack: [ArchiveNavigationFrame] = []
+    var nestedTempDirs: [URL] = []
+    var trashAfterSuccessByOpID: [UUID: [URL]] = [:]
+    var quickLookRefreshTask: Task<Void, Never>?
 
     var recentArchivePaths: [String] = []
     var defaultStripMacJunk: Bool = true
+    var defaultExtractDestination: DefaultExtractDestination = .sameFolder {
+        didSet {
+            UserDefaults.standard.set(defaultExtractDestination.rawValue, forKey: Keys.defaultExtractDest)
+        }
+    }
+    var defaultExtractMode: DefaultExtractModePreference = .smart {
+        didSet {
+            UserDefaults.standard.set(defaultExtractMode.rawValue, forKey: Keys.defaultExtractMode)
+        }
+    }
+    var preserveSymlinksOnCreate: Bool = true {
+        didSet {
+            UserDefaults.standard.set(preserveSymlinksOnCreate, forKey: Keys.preserveSymlinks)
+        }
+    }
+    var restoreSymlinksOnExtract: Bool = true {
+        didSet {
+            UserDefaults.standard.set(restoreSymlinksOnExtract, forKey: Keys.restoreSymlinks)
+        }
+    }
+    var autoCheckForUpdates: Bool = true {
+        didSet {
+            UserDefaults.standard.set(autoCheckForUpdates, forKey: Keys.autoCheckUpdates)
+        }
+    }
+    var skippedUpdateVersion: String = "" {
+        didSet {
+            UserDefaults.standard.set(skippedUpdateVersion, forKey: Keys.skippedUpdateVersion)
+        }
+    }
+    var lastUpdateCheckTimestamp: TimeInterval = 0 {
+        didSet {
+            UserDefaults.standard.set(lastUpdateCheckTimestamp, forKey: Keys.lastUpdateCheck)
+        }
+    }
+    var lastUpdateETag: String = "" {
+        didSet {
+            UserDefaults.standard.set(lastUpdateETag, forKey: Keys.lastUpdateETag)
+        }
+    }
+    var isCheckingUpdates: Bool = false
+
     var quickActionsInstalled: Bool = false
     var associationStatuses: [ArchiveAssociationStatus] = []
     var isUpdatingAssociations: Bool = false
@@ -37,6 +121,7 @@ final class WorkspaceViewModel {
         didSet {
             UserDefaults.standard.set(appLanguage.rawValue, forKey: Keys.appLanguage)
             onLanguageChanged?()
+            rebuildNavigationViews()
         }
     }
     var appTheme: AppTheme = .system {
@@ -98,12 +183,38 @@ final class WorkspaceViewModel {
             UserDefaults.standard.set(showStatusBar, forKey: Keys.showStatusBar)
         }
     }
-    var useWhiteAppIcon: Bool = false {
+    var appIconStyle: AppIconStyle = .system {
         didSet {
-            UserDefaults.standard.set(useWhiteAppIcon, forKey: Keys.whiteAppIcon)
-            BoltAppIconRenderer.apply(whiteBackground: useWhiteAppIcon)
+            UserDefaults.standard.set(appIconStyle.rawValue, forKey: Keys.appIconStyle)
+            BoltAppIconRenderer.apply(style: appIconStyle)
         }
     }
+
+    func effectiveWhiteAppIcon(for colorScheme: ColorScheme) -> Bool {
+        switch appIconStyle {
+        case .system:
+            switch appTheme {
+            case .light: return true
+            case .dark: return false
+            case .system: return colorScheme != .dark
+            }
+        case .light:
+            return true
+        case .dark:
+            return false
+        }
+    }
+    var multiCorePreference: MultiCorePreference = .auto {
+        didSet {
+            BoltConcurrency.setPreference(multiCorePreference, persist: true)
+            if case .fixed(let count) = multiCorePreference {
+                let clamped = min(max(1, count), BoltConcurrency.hardwareCoreCount)
+                lastManualCoreCount = clamped
+                UserDefaults.standard.set(clamped, forKey: Keys.lastManualCoreCount)
+            }
+        }
+    }
+    var lastManualCoreCount: Int = BoltConcurrency.autoWorkerCount
 
     // HUD & Lifecycle Coordination
     let hudModel = QuickTaskHUDModel()
@@ -138,12 +249,51 @@ final class WorkspaceViewModel {
         static let showRecents = "BoltZip.ShowRecentArchives"
         static let showInspector = "BoltZip.ShowSidebarInspector"
         static let showStatusBar = "BoltZip.ShowStatusBar"
+        static let appIconStyle = "BoltZip.AppIconStyle"
         static let whiteAppIcon = "BoltZip.UseWhiteAppIcon"
+        static let workerCoreCount = BoltConcurrency.userDefaultsKey
+        static let lastManualCoreCount = "BoltZip.LastManualCoreCount"
+        static let defaultExtractDest = "BoltZip.DefaultExtractDestination"
+        static let defaultExtractMode = "BoltZip.DefaultExtractMode"
+        static let preserveSymlinks = "BoltZip.PreserveSymlinks"
+        static let restoreSymlinks = "BoltZip.RestoreSymlinks"
+        static let autoCheckUpdates = "BoltZip.AutoCheckForUpdates"
+        static let skippedUpdateVersion = "BoltZip.SkippedUpdateVersion"
+        static let lastUpdateCheck = "BoltZip.LastUpdateCheckTimestamp"
+        static let lastUpdateETag = "BoltZip.LastUpdateETag"
     }
 
     var supportsLiquidGlass: Bool { BoltPlatformCapabilities.supportsLiquidGlass }
     var effectiveWindowTranslucency: Bool { supportsLiquidGlass && isWindowTranslucent }
     var l10n: L10n { L10n(language: appLanguage) }
+    var hardwareCoreCount: Int { BoltConcurrency.hardwareCoreCount }
+    var autoWorkerCount: Int { BoltConcurrency.autoWorkerCount }
+    var effectiveWorkerCount: Int { BoltConcurrency.resolvedWorkerCount() }
+    var isMultiCoreAuto: Bool { multiCorePreference.isAuto }
+    var selectedManualCoreCount: Int {
+        get {
+            if case .fixed(let count) = multiCorePreference {
+                return min(max(1, count), hardwareCoreCount)
+            }
+            return min(max(1, lastManualCoreCount), hardwareCoreCount)
+        }
+        set {
+            let clamped = min(max(1, newValue), hardwareCoreCount)
+            multiCorePreference = .fixed(clamped)
+        }
+    }
+
+    func setMultiCoreAuto(_ isAuto: Bool) {
+        if isAuto {
+            multiCorePreference = .auto
+        } else {
+            multiCorePreference = .fixed(min(max(1, lastManualCoreCount), hardwareCoreCount))
+        }
+    }
+
+    func multiCoreStatusSummary(_ l: L10n) -> String {
+        isMultiCoreAuto ? l.multiCoreBadgeAuto(autoWorkerCount) : l.multiCoreBadgeManual(effectiveWorkerCount)
+    }
     var isHUDWindowVisible: Bool { hudWindowController.isVisible }
     var isCompressWindowVisible: Bool { compressWindowController.isVisible }
 
@@ -214,10 +364,105 @@ final class WorkspaceViewModel {
         if defaults.object(forKey: Keys.showStatusBar) != nil {
             self.showStatusBar = defaults.bool(forKey: Keys.showStatusBar)
         }
-        if defaults.object(forKey: Keys.whiteAppIcon) != nil {
-            self.useWhiteAppIcon = defaults.bool(forKey: Keys.whiteAppIcon)
+        if let rawIconStyle = defaults.string(forKey: Keys.appIconStyle),
+           let parsedIconStyle = AppIconStyle(rawValue: rawIconStyle) {
+            self.appIconStyle = parsedIconStyle
+        } else if defaults.object(forKey: Keys.whiteAppIcon) != nil, defaults.bool(forKey: Keys.whiteAppIcon) {
+            self.appIconStyle = .light
         }
+        let hwCores = BoltConcurrency.hardwareCoreCount
+        let savedManual = defaults.integer(forKey: Keys.lastManualCoreCount)
+        self.lastManualCoreCount = savedManual >= 1 ? min(savedManual, hwCores) : BoltConcurrency.autoWorkerCount
+        if defaults.object(forKey: Keys.workerCoreCount) != nil {
+            let rawCores = defaults.integer(forKey: Keys.workerCoreCount)
+            let loadedPref = MultiCorePreference(rawStorageValue: rawCores)
+            self.multiCorePreference = loadedPref
+            BoltConcurrency.setPreference(loadedPref, persist: false)
+            if case .fixed(let count) = loadedPref {
+                self.lastManualCoreCount = min(max(1, count), hwCores)
+            }
+        }
+        if let rawDest = defaults.string(forKey: Keys.defaultExtractDest),
+           let parsedDest = DefaultExtractDestination(rawValue: rawDest) {
+            self.defaultExtractDestination = parsedDest
+        }
+        if let rawMode = defaults.string(forKey: Keys.defaultExtractMode),
+           let parsedMode = DefaultExtractModePreference(rawValue: rawMode) {
+            self.defaultExtractMode = parsedMode
+        }
+        if defaults.object(forKey: Keys.preserveSymlinks) != nil {
+            self.preserveSymlinksOnCreate = defaults.bool(forKey: Keys.preserveSymlinks)
+        }
+        if defaults.object(forKey: Keys.restoreSymlinks) != nil {
+            self.restoreSymlinksOnExtract = defaults.bool(forKey: Keys.restoreSymlinks)
+        }
+        if defaults.object(forKey: Keys.autoCheckUpdates) != nil {
+            self.autoCheckForUpdates = defaults.bool(forKey: Keys.autoCheckUpdates)
+        }
+        self.skippedUpdateVersion = defaults.string(forKey: Keys.skippedUpdateVersion) ?? ""
+        self.lastUpdateCheckTimestamp = defaults.double(forKey: Keys.lastUpdateCheck)
+        self.lastUpdateETag = defaults.string(forKey: Keys.lastUpdateETag) ?? ""
         self.statusMessage = L10n(language: self.appLanguage).readyStatus
+    }
+
+    func clearRecents() {
+        recentArchivePaths.removeAll()
+        UserDefaults.standard.set([String](), forKey: Keys.recents)
+    }
+
+    func skipUpdateVersion(_ version: String) {
+        skippedUpdateVersion = version
+    }
+
+    func resolveDefaultExtractDirectory(for archiveURL: URL) -> URL? {
+        switch defaultExtractDestination {
+        case .sameFolder:
+            return archiveURL.deletingLastPathComponent()
+        case .downloads:
+            return FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+                ?? archiveURL.deletingLastPathComponent()
+        case .ask:
+            return nil
+        }
+    }
+
+    func checkForUpdates(userInitiated: Bool) {
+        guard userInitiated || autoCheckForUpdates else { return }
+        guard !isCheckingUpdates else { return }
+        isCheckingUpdates = true
+
+        let force = userInitiated
+        let etag = lastUpdateETag
+        let skipped = skippedUpdateVersion
+        let lastTS = lastUpdateCheckTimestamp
+
+        Task { @MainActor in
+            defer { self.isCheckingUpdates = false }
+            do {
+                let res = try await UpdateCheckerService.checkForUpdates(
+                    force: force,
+                    savedETag: etag,
+                    skippedVersion: skipped,
+                    lastCheckTimestamp: lastTS
+                )
+                self.lastUpdateCheckTimestamp = Date().timeIntervalSince1970
+                if let newETag = res.newETag {
+                    self.lastUpdateETag = newETag
+                }
+                switch res.outcome {
+                case .updateAvailable(let info):
+                    self.activeSheet = .updateAvailable(info)
+                case .upToDate(let curVer):
+                    if userInitiated {
+                        self.alertMessage = self.l10n.updateUpToDateMessage(curVer)
+                    }
+                }
+            } catch {
+                if userInitiated {
+                    self.alertMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     func updateDefaultStripMacJunk(_ value: Bool) {
@@ -248,7 +493,18 @@ final class WorkspaceViewModel {
     }
 
     func cleanupPreviewTempFiles() {
+        quickLookRefreshTask?.cancel()
+        quickLookRefreshTask = nil
         activePreviewTempDir = nil
+        nestedTempDirs.removeAll()
         try? FileManager.default.removeItem(at: previewTempRoot)
+    }
+
+    func applyTrashCleanupIfScheduled(for operationID: UUID) {
+        guard let urls = trashAfterSuccessByOpID.removeValue(forKey: operationID), !urls.isEmpty else { return }
+        let fm = FileManager.default
+        for url in urls where fm.fileExists(atPath: url.path) {
+            try? fm.trashItem(at: url, resultingItemURL: nil)
+        }
     }
 }

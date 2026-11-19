@@ -74,6 +74,18 @@ bolt_status_t bolt_compress_buffer_mt(
     void *ctx
 );
 
+bolt_status_t bolt_compress_buffer_workers(
+    bolt_algo_t algo,
+    bolt_container_t container,
+    int32_t level,
+    const uint8_t *input,
+    size_t input_len,
+    bolt_buffer_t *output,
+    int32_t max_workers, /* 0 = auto, 1 = single-threaded, >1 = explicit thread cap */
+    bolt_control_cb control_cb,
+    void *ctx
+);
+
 uint32_t bolt_active_cores(void);
 
 bolt_status_t bolt_decompress_buffer(
@@ -109,12 +121,42 @@ bolt_status_t bolt_compress_file(
     void *ctx
 );
 
+bolt_status_t bolt_compress_file_workers(
+    bolt_algo_t algo,
+    bolt_container_t container,
+    int32_t level,
+    const char *src_path,
+    const char *dst_path,
+    int32_t max_workers,
+    bolt_control_cb control_cb,
+    void *ctx
+);
+
 bolt_status_t bolt_decompress_file(
     bolt_algo_t algo,
     bolt_container_t container,
     const char *src_path,
     const char *dst_path,
     bolt_progress_cb progress_cb,
+    void *ctx
+);
+
+bolt_status_t bolt_decompress_file_ex(
+    bolt_algo_t algo,
+    bolt_container_t container,
+    const char *src_path,
+    const char *dst_path,
+    bolt_control_cb control_cb,
+    void *ctx
+);
+
+bolt_status_t bolt_verify_file(
+    bolt_algo_t algo,
+    bolt_container_t container,
+    const char *src_path,
+    uint32_t *out_crc32,
+    uint64_t *out_uncompressed_size,
+    bolt_control_cb control_cb,
     void *ctx
 );
 
@@ -146,6 +188,7 @@ typedef struct {
     int64_t mtime;
     uint16_t permissions;
     const char *format_name;
+    const char *symlink_target;
 } bolt_la_entry_info_t;
 
 typedef int (*bolt_la_entry_cb)(const bolt_la_entry_info_t *info, void *ctx);

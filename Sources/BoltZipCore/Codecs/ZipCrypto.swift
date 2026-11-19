@@ -300,4 +300,321 @@ public enum ZipCrypto {
         }
         return output
     }
+
+    /// WinZip AES-CTR stream cipher with a 128-bit little-endian counter starting at 1.
+    public final class AESCTRStream {
+        private var cryptor: CCCryptorRef?
+        private var counter: [UInt8] = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        private var partialKeystream = [UInt8](repeating: 0, count: 16)
+        private var partialOffset: Int = 16
+        private let batchBlocks = 256
+        private var counterBatch: [UInt8]
+        private var keystreamBatch: [UInt8]
+
+        public init(key: Data) throws {
+            self.counterBatch = [UInt8](repeating: 0, count: 256 * 16)
+            self.keystreamBatch = [UInt8](repeating: 0, count: 256 * 16)
+            var ref: CCCryptorRef?
+            let status = key.withUnsafeBytes { keyBuf in
+                CCCryptorCreate(
+                    CCOperation(kCCEncrypt),
+                    CCAlgorithm(kCCAlgorithmAES),
+                    CCOptions(kCCOptionECBMode),
+                    keyBuf.baseAddress,
+                    key.count,
+                    nil,
+                    &ref
+                )
+            }
+            guard status == kCCSuccess, let validRef = ref else {
+                throw BoltZipError.compressionFailed(BoltCoreLocalization.t("无法初始化 AES-CTR 加密器", "無法初始化 AES-CTR 加密器", "Failed to initialize AES-CTR cipher", "AES-CTR 暗号化器の初期化に失敗しました"))
+            }
+            self.cryptor = validRef
+        }
+
+        deinit {
+            if let cryptor {
+                CCCryptorRelease(cryptor)
+            }
+        }
+
+        public func transform(_ chunk: Data) -> Data {
+            if chunk.isEmpty { return Data() }
+            guard let cryptorRef = cryptor else { return Data() }
+
+            var output = Data(count: chunk.count)
+            chunk.withUnsafeBytes { inRaw in
+                output.withUnsafeMutableBytes { outRaw in
+                    guard let inPtr = inRaw.bindMemory(to: UInt8.self).baseAddress,
+                          let outPtr = outRaw.bindMemory(to: UInt8.self).baseAddress else { return }
+
+                    var offset = 0
+                    while offset < chunk.count && partialOffset < 16 {
+                        outPtr[offset] = inPtr[offset] ^ partialKeystream[partialOffset]
+                        offset += 1
+                        partialOffset += 1
+                    }
+
+                    while offset < chunk.count {
+                        let remaining = chunk.count - offset
+                        let fullOrPartialBlocks = (remaining + 15) / 16
+                        let blocksNeeded = min(batchBlocks, fullOrPartialBlocks)
+                        let bytesNeeded = blocksNeeded * 16
+
+                        for b in 0..<blocksNeeded {
+                            let dstOffset = b * 16
+                            for j in 0..<16 {
+                                counterBatch[dstOffset + j] = counter[j]
+                            }
+                            for j in 0..<16 {
+                                counter[j] &+= 1
+                                if counter[j] != 0 { break }
+                            }
+                        }
+
+                        var moved = 0
+                        CCCryptorUpdate(cryptorRef, counterBatch, bytesNeeded, &keystreamBatch, bytesNeeded, &moved)
+
+                        let take = min(remaining, bytesNeeded)
+                        for i in 0..<take {
+                            outPtr[offset + i] = inPtr[offset + i] ^ keystreamBatch[i]
+                        }
+                        if take < bytesNeeded {
+                            let lastBlockBase = (blocksNeeded - 1) * 16
+                            let usedInLast = take - lastBlockBase
+                            if usedInLast < 16 {
+                                for j in 0..<16 {
+                                    partialKeystream[j] = keystreamBatch[lastBlockBase + j]
+                                }
+                                partialOffset = usedInLast
+                            }
+                        }
+                        offset += take
+                    }
+                }
+            }
+            return output
+        }
+    }
+
+    public static func encryptAES256Stream(
+        from sourceURL: URL,
+        to destinationURL: URL,
+        password: String,
+        chunkSize: Int = 1024 * 1024,
+        controller: ArchiveTaskController? = nil
+    ) throws {
+        let strength = AESStrength.aes256
+        var salt = Data(count: strength.saltLength)
+        let secStatus = salt.withUnsafeMutableBytes { buf in
+            SecRandomCopyBytes(kSecRandomDefault, strength.saltLength, buf.baseAddress!)
+        }
+        guard secStatus == errSecSuccess else {
+            throw BoltZipError.compressionFailed(BoltCoreLocalization.t("无法生成加密随机盐", "無法產生加密隨機鹽", "Failed to generate random encryption salt", "暗号化ソルトの生成に失敗しました"))
+        }
+
+        let (encKey, authKey, pwVerify) = try deriveWinZipAESKeys(
+            password: password,
+            salt: salt,
+            keyLength: strength.keyLength
+        )
+        let cipher = try AESCTRStream(key: encKey)
+        var hmac = HMAC<Insecure.SHA1>(key: SymmetricKey(data: authKey))
+
+        let inHandle = try FileHandle(forReadingFrom: sourceURL)
+        defer { try? inHandle.close() }
+        FileManager.default.createFile(atPath: destinationURL.path, contents: nil)
+        let outHandle = try FileHandle(forWritingTo: destinationURL)
+        var closeOut = true
+        defer { if closeOut { try? outHandle.close() } }
+
+        try outHandle.write(contentsOf: salt)
+        try outHandle.write(contentsOf: pwVerify)
+
+        while true {
+            try controller?.checkpoint()
+            let plainChunk = try inHandle.read(upToCount: chunkSize) ?? Data()
+            if plainChunk.isEmpty { break }
+            let encChunk = cipher.transform(plainChunk)
+            hmac.update(data: encChunk)
+            try outHandle.write(contentsOf: encChunk)
+        }
+
+        let fullTag = Data(hmac.finalize())
+        try outHandle.write(contentsOf: fullTag.prefix(10))
+        try outHandle.close()
+        closeOut = false
+    }
+
+    public static func decryptAESStream(
+        payloadLength: UInt64,
+        password: String,
+        strength: AESStrength,
+        entryName: String,
+        chunkSize: Int = 1024 * 1024,
+        controller: ArchiveTaskController? = nil,
+        readBytes: (Int) throws -> Data,
+        writePlaintextChunk: (Data) throws -> Void
+    ) throws {
+        let minOverhead = UInt64(strength.saltLength + 2 + 10)
+        guard payloadLength >= minOverhead else {
+            throw BoltZipError.corruptedEntry(entry: entryName, detail: BoltCoreLocalization.t("AES 加密数据长度不足", "AES 加密資料長度不足", "AES encrypted payload is truncated", "AES 暗号化データの長さが不足しています"))
+        }
+
+        let salt = try readBytes(strength.saltLength)
+        let pwVerify = try readBytes(2)
+        guard salt.count == strength.saltLength, pwVerify.count == 2 else {
+            throw BoltZipError.corruptedEntry(entry: entryName, detail: BoltCoreLocalization.t("AES 加密数据长度不足", "AES 加密資料長度不足", "AES encrypted payload is truncated", "AES 暗号化データの長さが不足しています"))
+        }
+
+        let (encKey, authKey, derivedVerify) = try deriveWinZipAESKeys(
+            password: password,
+            salt: salt,
+            keyLength: strength.keyLength
+        )
+        guard constantTimeEqual(pwVerify, derivedVerify) else {
+            throw BoltZipError.wrongPassword(entryName)
+        }
+
+        let cipher = try AESCTRStream(key: encKey)
+        var hmac = HMAC<Insecure.SHA1>(key: SymmetricKey(data: authKey))
+        var remainingCipher = payloadLength - minOverhead
+
+        while remainingCipher > 0 {
+            try controller?.checkpoint()
+            let want = Int(min(UInt64(chunkSize), remainingCipher))
+            let encChunk = try readBytes(want)
+            guard !encChunk.isEmpty else {
+                throw BoltZipError.corruptedEntry(entry: entryName, detail: BoltCoreLocalization.t("AES 加密数据长度不足", "AES 加密資料長度不足", "AES encrypted payload is truncated", "AES 暗号化データの長さが不足しています"))
+            }
+            hmac.update(data: encChunk)
+            let decChunk = cipher.transform(encChunk)
+            try writePlaintextChunk(decChunk)
+            remainingCipher -= UInt64(encChunk.count)
+        }
+
+        let authTag = try readBytes(10)
+        guard authTag.count == 10 else {
+            throw BoltZipError.corruptedEntry(entry: entryName, detail: BoltCoreLocalization.t("AES 加密数据长度不足", "AES 加密資料長度不足", "AES encrypted payload is truncated", "AES 暗号化データの長さが不足しています"))
+        }
+        let computedTag = Data(hmac.finalize()).prefix(10)
+        guard constantTimeEqual(authTag, computedTag) else {
+            throw BoltZipError.corruptedEntry(entry: entryName, detail: BoltCoreLocalization.t("AES HMAC-SHA1 完整性校验未通过", "AES HMAC-SHA1 完整性驗證未通過", "AES HMAC-SHA1 integrity verification failed", "AES HMAC-SHA1 の整合性検証に失敗しました"))
+        }
+    }
+
+    public static func encryptZipCryptoStream(
+        from sourceURL: URL,
+        to destinationURL: URL,
+        crc32: UInt32,
+        password: String,
+        chunkSize: Int = 1024 * 1024,
+        controller: ArchiveTaskController? = nil
+    ) throws {
+        var state = ZipCryptoState(password: password)
+        var header = [UInt8](repeating: 0, count: 12)
+        let sec = SecRandomCopyBytes(kSecRandomDefault, 11, &header)
+        guard sec == errSecSuccess else {
+            throw BoltZipError.compressionFailed(BoltCoreLocalization.t("无法生成 ZipCrypto 随机数", "無法產生 ZipCrypto 隨機數", "Failed to generate ZipCrypto random header", "ZipCrypto 乱数ヘッダの生成に失敗しました"))
+        }
+        header[11] = UInt8((crc32 >> 24) & 0xFF)
+
+        var encHeader = Data(capacity: 12)
+        for b in header {
+            let t = state.decryptByte()
+            state.updateKeys(b)
+            encHeader.append(b ^ t)
+        }
+
+        let inHandle = try FileHandle(forReadingFrom: sourceURL)
+        defer { try? inHandle.close() }
+        FileManager.default.createFile(atPath: destinationURL.path, contents: nil)
+        let outHandle = try FileHandle(forWritingTo: destinationURL)
+        var closeOut = true
+        defer { if closeOut { try? outHandle.close() } }
+
+        try outHandle.write(contentsOf: encHeader)
+
+        while true {
+            try controller?.checkpoint()
+            let chunk = try inHandle.read(upToCount: chunkSize) ?? Data()
+            if chunk.isEmpty { break }
+            var outChunk = Data(count: chunk.count)
+            chunk.withUnsafeBytes { inRaw in
+                outChunk.withUnsafeMutableBytes { outRaw in
+                    guard let inPtr = inRaw.bindMemory(to: UInt8.self).baseAddress,
+                          let outPtr = outRaw.bindMemory(to: UInt8.self).baseAddress else { return }
+                    for i in 0..<chunk.count {
+                        let b = inPtr[i]
+                        let t = state.decryptByte()
+                        state.updateKeys(b)
+                        outPtr[i] = b ^ t
+                    }
+                }
+            }
+            try outHandle.write(contentsOf: outChunk)
+        }
+        try outHandle.close()
+        closeOut = false
+    }
+
+    public static func decryptZipCryptoStream(
+        payloadLength: UInt64,
+        crc32: UInt32,
+        dosTime: UInt16,
+        hasDataDescriptor: Bool,
+        password: String,
+        entryName: String,
+        chunkSize: Int = 1024 * 1024,
+        controller: ArchiveTaskController? = nil,
+        readBytes: (Int) throws -> Data,
+        writePlaintextChunk: (Data) throws -> Void
+    ) throws {
+        guard payloadLength >= 12 else {
+            throw BoltZipError.corruptedEntry(entry: entryName, detail: BoltCoreLocalization.t("ZipCrypto 数据头部不完整", "ZipCrypto 資料標頭不完整", "Incomplete ZipCrypto encryption header", "ZipCrypto データヘッダが不完全です"))
+        }
+
+        let header = try readBytes(12)
+        guard header.count == 12 else {
+            throw BoltZipError.corruptedEntry(entry: entryName, detail: BoltCoreLocalization.t("ZipCrypto 数据头部不完整", "ZipCrypto 資料標頭不完整", "Incomplete ZipCrypto encryption header", "ZipCrypto データヘッダが不完全です"))
+        }
+
+        var state = ZipCryptoState(password: password)
+        var lastDecryptedByte: UInt8 = 0
+        for b in header {
+            let c = b ^ state.decryptByte()
+            state.updateKeys(c)
+            lastDecryptedByte = c
+        }
+
+        let expectedByte = hasDataDescriptor ? UInt8((dosTime >> 8) & 0xFF) : UInt8((crc32 >> 24) & 0xFF)
+        let altExpected = UInt8((crc32 >> 24) & 0xFF)
+        if lastDecryptedByte != expectedByte && lastDecryptedByte != altExpected {
+            throw BoltZipError.wrongPassword(entryName)
+        }
+
+        var remaining = payloadLength - 12
+        while remaining > 0 {
+            try controller?.checkpoint()
+            let want = Int(min(UInt64(chunkSize), remaining))
+            let encChunk = try readBytes(want)
+            guard !encChunk.isEmpty else {
+                throw BoltZipError.corruptedEntry(entry: entryName, detail: BoltCoreLocalization.t("ZipCrypto 数据长度不足", "ZipCrypto 資料長度不足", "Truncated ZipCrypto encrypted payload", "ZipCrypto 暗号化データが途中で終了しています"))
+            }
+            var decChunk = Data(count: encChunk.count)
+            encChunk.withUnsafeBytes { inRaw in
+                decChunk.withUnsafeMutableBytes { outRaw in
+                    guard let inPtr = inRaw.bindMemory(to: UInt8.self).baseAddress,
+                          let outPtr = outRaw.bindMemory(to: UInt8.self).baseAddress else { return }
+                    for i in 0..<encChunk.count {
+                        let c = inPtr[i] ^ state.decryptByte()
+                        state.updateKeys(c)
+                        outPtr[i] = c
+                    }
+                }
+            }
+            try writePlaintextChunk(decChunk)
+            remaining -= UInt64(encChunk.count)
+        }
+    }
 }

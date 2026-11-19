@@ -2,6 +2,27 @@
 
 All notable changes to **BoltZip** will be documented in this file.
 
+## [1.0.2] - 2026-11-19 (`dev-1.0.2`: Streaming Engine, Symlinks, Drag-Out, Updater, Adaptive Icons & Reliability Hardening)
+
+### Core Engine & Format Support
+- **Chunked Streaming I/O & Large-File Encryption**: Files `>= 64 MB` stream in `1 MB` chunks across ZIP, WinZip AE-2 (AES-256-CTR + incremental HMAC-SHA1), ZipCrypto, and TAR/TAR.{gz,zst,xz,bz2,lz4} (`bolt_compress_file_workers`, `bolt_decompress_file_ex`, `bolt_verify_file`, `ZipSpanningCursor`, `SplitVolumeSink.writeFile`) to keep peak memory flat on multi-GB archives.
+- **Symbolic Link Preservation & Traversal Protection**: Added optional symlink preservation (`preserveSymlinks`) and safe restoration (`restoreSymlinks`) for ZIP, TAR, and 7z, rejecting empty, absolute, or escaping symlink targets and intermediate symlink traversal (`assertNoSymlinkTraversal`, `createSafeSymlink`), plus file-vs-directory `.overwrite` collision protection across extractor and drag-out promises.
+- **APFS/HFS+ Hardlink `.7z` Staging & ZIP Comments**: Staged 7z creation via `FileManager.linkItem` (falling back to copy) for near-instant multi-GB staging, plus in-place ZIP archive comment editing (`ZipEditOperation.setComment`).
+- **ZIP Container Formats, Bit-3 Edit & Legacy Method Fallback**: Added `.ipa`, `.apk`, `.jar`, `.epub`, and `.whl` recognition, pre-edit password unlock, bit-3 Data Descriptor preservation on in-place legacy ZipCrypto edits, and read-only `libarchive` fallback for ZIP Deflate64 (method 9) and LZMA (method 14).
+- **Thread-Safe Multi-Core Control & Boundary Hardening**: Wired user-selectable Auto or fixed worker core counts across ZIP parallel entries and C codec workers (`Zstandard` / `XZ`), added concurrent stdout/stderr pipe draining in `ExtendedArchiveDriver`, empty-buffer `bolt_crc32` preservation, bounded Central Directory allocations, trailing-byte EOCD scan fallback, single-entry disk-streaming extraction (`extractSingleEntryToFile`), and TAR truncated-block detection.
+
+### Desktop App & Liquid Glass UI
+- **Finder Drag-Out (`NSFilePromiseProvider`)**: Drag single or multiple files/folders directly out of the archive explorer into Finder or apps, with single batch password prompt and background progress.
+- **In-App GitHub Releases Updater**: Added `UpdateCheckerService` (ETag caching, 24h automatic check throttling, `1.x` track isolation, Skip Version persistence, and `SHA256SUMS.txt` DMG verification) and `Check for Updates...` menu bar command.
+- **Nested Archive Navigation & Batch Drop**: Double-click archives embedded inside archives to drill in with breadcrumb back-navigation (`archiveBackStack`) and automatic temp cleanup; dropping multiple archives on Welcome offers opening all or batch extraction.
+- **Adaptive macOS 26 AppIcon (`Assets.car`) & 17 Per-Format Document Icons**: Compiled Icon Composer `AppIcon.icon` into `Assets.car` + `CFBundleIconName` so Light/Dark Dock & Finder icons switch automatically even when closed, alongside a 3-mode `AppIconStyle` (`System` / `Light` / `Dark`) setting with live `dockTile.display()` refresh and 17 crisp `.icns` document icons.
+- **Settings, Quick Look, Sheet Unification & Shortcuts**: Added default extraction mode & conflict policy preferences, symlink switches, Trash-source-on-completion toggles, full CJK encodings (`Big5`, `Shift-JIS`, `EUC-KR`, `GB18030`), 128 MB explicit / 50 MB debounced Quick Look streaming previews, `⌘A` / `⌘C` / `Delete` shortcuts with confirmation, unified `BoltSheetFooterBar`, and tightened `BoltGlassContainer` & `BoltReadOnlyBadge` consistency.
+
+### CLI, Finder Extension & Release Infra
+- **`boltzip` CLI Upgrade**: Added in-place ZIP subcommands (`add`, `rm`, `mkdir`, `mv`), flat extraction (`e`), `--overwrite overwrite|skip|rename`, `--comment`, `--no-symlinks`, `--json` machine-readable output on `l`/`t`/`bench`, and `stderr` TTY progress bar.
+- **`BoltZipFinderSync` Extension Upgrade**: Added "Compress Each to ZIP" on multi-selection, "Extract to..." picker action, container extensions, and 4-language localized strings.
+- **Release Tooling & CI**: Added `CODESIGN_IDENTITY` / `BOLTZIP_NOTARY_PROFILE` signing and notarization hooks in `Scripts/build_app.sh`, automated `Scripts/verify_release.sh` and `Scripts/e2e_finder_ui.sh`, and extended `.github/workflows/ci.yml`.
+
 ## [1.0.1] - 2026-11-18 (`main`: Apple Silicon + macOS 26+ Hotfix & Quality Release)
 
 ### Fixed

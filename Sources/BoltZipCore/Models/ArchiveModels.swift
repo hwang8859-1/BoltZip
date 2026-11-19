@@ -97,7 +97,7 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
 
         let ext = url.pathExtension.lowercased()
         switch ext {
-        case "zip", "zipx", "cbz": return .zip
+        case "zip", "zipx", "cbz", "ipa", "apk", "jar", "epub", "whl": return .zip
         case "rar", "cbr": return .rar
         case "7z", "cb7": return .sevenZip
         case "tar": return .tar
@@ -287,6 +287,31 @@ public enum FilenameEncodingOption: String, CaseIterable, Identifiable, Codable,
     }
 }
 
+public enum MultiCorePreference: Equatable, Hashable, Sendable {
+    case auto
+    case fixed(Int)
+
+    public var rawStorageValue: Int {
+        switch self {
+        case .auto: return 0
+        case .fixed(let count): return max(1, count)
+        }
+    }
+
+    public init(rawStorageValue: Int) {
+        if rawStorageValue <= 0 {
+            self = .auto
+        } else {
+            self = .fixed(rawStorageValue)
+        }
+    }
+
+    public var isAuto: Bool {
+        if case .auto = self { return true }
+        return false
+    }
+}
+
 public enum ExtractMode: Equatable, Sendable {
     case smart
     case here
@@ -390,6 +415,16 @@ public struct ArchiveEntry: Identifiable, Hashable, Sendable {
     }
 
     public static func normalizePath(_ raw: String, isDirectory: Bool) -> String {
+        if !raw.isEmpty,
+           !raw.contains("\\"),
+           !raw.hasPrefix("/"),
+           !raw.hasPrefix("./"),
+           !raw.contains("//") {
+            let hasTrailingSlash = raw.hasSuffix("/")
+            if hasTrailingSlash == isDirectory {
+                return raw
+            }
+        }
         var cleaned = raw.replacingOccurrences(of: "\\", with: "/")
         while cleaned.hasPrefix("/") { cleaned.removeFirst() }
         while cleaned.hasPrefix("./") { cleaned.removeFirst(2) }
@@ -412,6 +447,9 @@ public struct CreateArchiveOptions: Sendable {
     public var excludeMacJunk: Bool
     public var encoding: FilenameEncodingOption
     public var archiveComment: String
+    /// `nil` = follow global `BoltConcurrency.preference`; `0` = auto; `>= 1` = explicit core cap.
+    public var workerCount: Int?
+    public var preserveSymlinks: Bool
 
     public init(
         format: ArchiveFormat = .zip,
@@ -422,7 +460,9 @@ public struct CreateArchiveOptions: Sendable {
         splitVolumeSizeBytes: UInt64? = nil,
         excludeMacJunk: Bool = true,
         encoding: FilenameEncodingOption = .utf8,
-        archiveComment: String = ""
+        archiveComment: String = "",
+        workerCount: Int? = nil,
+        preserveSymlinks: Bool = true
     ) {
         self.format = format
         self.algorithm = algorithm
@@ -433,6 +473,8 @@ public struct CreateArchiveOptions: Sendable {
         self.excludeMacJunk = excludeMacJunk
         self.encoding = encoding
         self.archiveComment = archiveComment
+        self.workerCount = workerCount
+        self.preserveSymlinks = preserveSymlinks
     }
 }
 
@@ -443,6 +485,9 @@ public struct ExtractOptions: Sendable {
     public var password: String?
     public var encoding: FilenameEncodingOption
     public var stripMacJunk: Bool
+    /// `nil` = follow global `BoltConcurrency.preference`; `0` = auto; `>= 1` = explicit core cap.
+    public var workerCount: Int?
+    public var restoreSymlinks: Bool
 
     public init(
         destinationURL: URL,
@@ -450,7 +495,9 @@ public struct ExtractOptions: Sendable {
         overwritePolicy: OverwritePolicy = .overwrite,
         password: String? = nil,
         encoding: FilenameEncodingOption = .auto,
-        stripMacJunk: Bool = true
+        stripMacJunk: Bool = true,
+        workerCount: Int? = nil,
+        restoreSymlinks: Bool = true
     ) {
         self.destinationURL = destinationURL
         self.mode = mode
@@ -458,6 +505,8 @@ public struct ExtractOptions: Sendable {
         self.password = password
         self.encoding = encoding
         self.stripMacJunk = stripMacJunk
+        self.workerCount = workerCount
+        self.restoreSymlinks = restoreSymlinks
     }
 }
 

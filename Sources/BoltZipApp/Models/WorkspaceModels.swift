@@ -43,6 +43,22 @@ enum AppTheme: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum AppIconStyle: String, CaseIterable, Identifiable, Sendable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    func title(_ l: L10n) -> String {
+        switch self {
+        case .system: return l.themeSystem
+        case .light: return l.themeLight
+        case .dark: return l.themeDark
+        }
+    }
+}
+
 enum AppBackgroundColor: String, CaseIterable, Identifiable, Sendable {
     case pureWhite
     case iceBlue
@@ -136,6 +152,8 @@ enum ActiveSheet: Identifiable {
     case createFolder(parentFolder: String)
     case renamePath(oldPath: String, currentName: String)
     case entryProperties(ArchiveEntry)
+    case editArchiveComment(current: String)
+    case updateAvailable(UpdateReleaseInfo)
 
     var id: String {
         switch self {
@@ -147,15 +165,76 @@ enum ActiveSheet: Identifiable {
         case .createFolder(let parent): return "createFolder-\(parent)"
         case .renamePath(let oldPath, _): return "rename-\(oldPath)"
         case .entryProperties(let entry): return "props-\(entry.id)"
+        case .editArchiveComment: return "editArchiveComment"
+        case .updateAvailable(let info): return "update-\(info.version)"
         }
     }
 }
 
 enum PasswordPurpose {
     case openArchive(url: URL, fromExternalFinder: Bool)
+    case openNested(ArchiveEntry)
     case preview(ArchiveEntry)
     case extract(archiveURL: URL, options: ExtractOptions)
     case testIntegrity(archiveURL: URL)
+    case unlockForEdit(urls: [URL], targetFolder: String)
+}
+
+enum DefaultExtractDestination: String, CaseIterable, Identifiable, Sendable {
+    case sameFolder
+    case downloads
+    case ask
+
+    var id: String { rawValue }
+
+    func title(_ l: L10n) -> String {
+        switch self {
+        case .sameFolder: return l.extractDestSameFolder
+        case .downloads: return l.extractDestDownloads
+        case .ask: return l.extractDestAsk
+        }
+    }
+}
+
+enum DefaultExtractModePreference: String, CaseIterable, Identifiable, Sendable {
+    case smart
+    case subfolder
+
+    var id: String { rawValue }
+
+    var extractMode: ExtractMode {
+        switch self {
+        case .smart: return .smart
+        case .subfolder: return .subfolder
+        }
+    }
+
+    func title(_ l: L10n) -> String {
+        switch self {
+        case .smart: return l.extractModeSmart
+        case .subfolder: return l.extractModeSubfolder
+        }
+    }
+}
+
+struct ArchiveNavigationFrame: Identifiable, Sendable {
+    let id = UUID()
+    let archiveURL: URL
+    let savedPassword: String?
+    let encoding: FilenameEncodingOption
+    let currentFolder: String
+    let openedFromHome: Bool
+    let nestedTempDirToCleanup: URL?
+}
+
+struct PendingBatchArchivePrompt: Identifiable {
+    let id = UUID()
+    let urls: [URL]
+}
+
+struct PendingDeleteConfirmation: Identifiable {
+    let id = UUID()
+    let paths: Set<String>
 }
 
 struct PendingExtractConflict: Identifiable {
@@ -164,4 +243,5 @@ struct PendingExtractConflict: Identifiable {
     let options: ExtractOptions
     let destinationRoot: URL
     let conflictingNames: [String]
+    let trashArchiveOnCompletion: Bool
 }

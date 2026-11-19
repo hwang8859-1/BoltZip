@@ -227,6 +227,7 @@ public enum ExtendedArchiveDriver {
         password: String? = nil,
         encoding: FilenameEncodingOption = .auto,
         stripMacJunk: Bool = true,
+        restoreSymlinks: Bool = true,
         expectedTotalBytes: UInt64 = 0,
         topLevelDirRenameMap: [String: String] = [:],
         controller: ArchiveTaskController? = nil,
@@ -242,6 +243,7 @@ public enum ExtendedArchiveDriver {
             let overwritePolicy: OverwritePolicy
             let encoding: FilenameEncodingOption
             let stripMacJunk: Bool
+            let restoreSymlinks: Bool
             let expectedTotalBytes: UInt64
             let renameMap: [String: String]
             let controller: ArchiveTaskController?
@@ -263,6 +265,7 @@ public enum ExtendedArchiveDriver {
                 overwritePolicy: OverwritePolicy,
                 encoding: FilenameEncodingOption,
                 stripMacJunk: Bool,
+                restoreSymlinks: Bool,
                 expectedTotalBytes: UInt64,
                 renameMap: [String: String],
                 controller: ArchiveTaskController?,
@@ -273,6 +276,7 @@ public enum ExtendedArchiveDriver {
                 self.overwritePolicy = overwritePolicy
                 self.encoding = encoding
                 self.stripMacJunk = stripMacJunk
+                self.restoreSymlinks = restoreSymlinks
                 self.expectedTotalBytes = expectedTotalBytes
                 self.renameMap = renameMap
                 self.controller = controller
@@ -297,6 +301,7 @@ public enum ExtendedArchiveDriver {
             overwritePolicy: overwritePolicy,
             encoding: encoding,
             stripMacJunk: stripMacJunk,
+            restoreSymlinks: restoreSymlinks,
             expectedTotalBytes: expectedTotalBytes,
             renameMap: topLevelDirRenameMap,
             controller: controller,
@@ -342,26 +347,30 @@ public enum ExtendedArchiveDriver {
                                 let fm = FileManager.default
 
                                 if isDir {
+                                    try BoltArchiveEngine.assertNoSymlinkTraversal(at: initialDest, under: st.destinationURL)
                                     try fm.createDirectory(at: initialDest, withIntermediateDirectories: true)
                                     return 0
                                 }
                                 if info.is_symlink != 0 {
+                                    if st.restoreSymlinks, let symPtr = info.symlink_target {
+                                        let target = String(cString: symPtr)
+                                        try BoltArchiveEngine.createSafeSymlink(
+                                            at: initialDest,
+                                            target: target,
+                                            under: st.destinationURL,
+                                            overwritePolicy: st.overwritePolicy
+                                        )
+                                    }
                                     return 0
                                 }
 
-                                var finalDest = initialDest
-                                if fm.fileExists(atPath: finalDest.path) {
-                                    switch st.overwritePolicy {
-                                    case .skip:
-                                        return 0
-                                    case .overwrite:
-                                        try fm.removeItem(at: finalDest)
-                                    case .rename:
-                                        finalDest = BoltArchiveEngine.uniqueNonCollidingURL(for: initialDest)
-                                    }
+                                guard let finalDest = try BoltArchiveEngine.prepareExtractTargetURL(
+                                    initialURL: initialDest,
+                                    under: st.destinationURL,
+                                    policy: st.overwritePolicy
+                                ) else {
+                                    return 0
                                 }
-
-                                try fm.createDirectory(at: finalDest.deletingLastPathComponent(), withIntermediateDirectories: true)
                                 st.activeTargetURL = finalDest
                                 st.activeFileHandle = nil
                                 st.activeEntryCreated = false
@@ -615,6 +624,7 @@ public enum ExtendedArchiveDriver {
         algorithm: CompressionAlgorithm = .xz,
         level: Int? = nil,
         excludeMacJunk: Bool,
+        preserveSymlinks: Bool = true,
         controller: ArchiveTaskController? = nil,
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
@@ -624,7 +634,11 @@ public enum ExtendedArchiveDriver {
         try fm.createDirectory(at: staging, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: staging) }
 
-        let items = try ZipWriter.collectInputItems(from: inputURLs, excludeMacJunk: excludeMacJunk)
+        let items = try ZipWriter.collectInputItems(
+            from: inputURLs,
+            excludeMacJunk: excludeMacJunk,
+            preserveSymlinks: preserveSymlinks
+        )
         let totalBytes = items.reduce(UInt64(0)) { $0 + $1.fileSize }
         var stagedBytes: UInt64 = 0
         var topLevelNames: [String] = []
@@ -634,9 +648,9 @@ public enum ExtendedArchiveDriver {
             try controller?.checkpoint()
             let stageFrac = totalBytes > 0 ? Double(stagedBytes) / Double(totalBytes) : 0
             progress?(OperationProgress(
-                fractionCompleted: stageFrac * 0.2,
+                fractionCompleted: stageFrac * 0.08,
                 currentItem: item.archivePath,
-                processedBytes: UInt64(Double(totalBytes) * stageFrac * 0.2),
+                processedBytes: UInt64(Double(totalBytes) * stageFrac * 0.08),
                 totalBytes: totalBytes
             ))
 
@@ -644,9 +658,17 @@ public enum ExtendedArchiveDriver {
             let dest = staging.appendingPathComponent(clean)
             if item.isDirectory {
                 try fm.createDirectory(at: dest, withIntermediateDirectories: true)
+            } else if item.isSymbolicLink, let target = item.symlinkTarget {
+                try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fm.createSymbolicLink(atPath: dest.path, withDestinationPath: target)
             } else if let src = item.fileURL {
                 try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try fm.copyItem(at: src, to: dest)
+                // Prefer APFS/HFS+ hardlink to eliminate duplicate disk I/O; fallback to copy only across volumes.
+                do {
+                    try fm.linkItem(at: src, to: dest)
+                } catch {
+                    try fm.copyItem(at: src, to: dest)
+                }
             }
             stagedBytes += item.fileSize
             if let first = clean.split(separator: "/").first.map(String.init), !seenTop.contains(first) {
@@ -669,13 +691,16 @@ public enum ExtendedArchiveDriver {
         args.append(contentsOf: topLevelNames.isEmpty ? ["."] : topLevelNames)
         let outName = outputURL.lastPathComponent
         let compressStart = CFAbsoluteTimeGetCurrent()
+        let estCompressedTarget = algorithm == .store ? max(1, totalBytes) : max(1, totalBytes / 3)
         do {
             _ = try runTar(arguments: args, controller: controller) {
                 let writtenBytes = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? NSNumber)?.uint64Value ?? 0
                 let elapsed = CFAbsoluteTimeGetCurrent() - compressStart
-                let sizeFrac = totalBytes > 0 ? min(0.95, 0.2 + 0.75 * min(1.0, Double(writtenBytes) / Double(max(1, totalBytes / 2)))) : 0.0
-                let timeFrac = 0.2 + 0.72 * (1.0 - exp(-elapsed * 0.45))
-                let frac = min(0.95, max(sizeFrac, timeFrac))
+                let sizeFrac = totalBytes > 0
+                    ? min(0.96, 0.08 + 0.88 * min(1.0, Double(writtenBytes) / Double(estCompressedTarget)))
+                    : 0.5
+                let timeFrac = 0.08 + 0.86 * (1.0 - exp(-elapsed * 0.45))
+                let frac = min(0.96, max(sizeFrac, timeFrac))
                 let estProcessed = totalBytes > 0 ? UInt64(Double(totalBytes) * frac) : writtenBytes
                 progress?(OperationProgress(
                     fractionCompleted: frac,
@@ -896,9 +921,30 @@ public enum ExtendedArchiveDriver {
         }
         defer { ticker?.cancel() }
 
-        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+        final class PipeBuffer: @unchecked Sendable {
+            var data = Data()
+        }
+        let outBuffer = PipeBuffer()
+        let errBuffer = PipeBuffer()
+        let drainGroup = DispatchGroup()
+
+        drainGroup.enter()
+        DispatchQueue.global(qos: .utility).async {
+            outBuffer.data = outPipe.fileHandleForReading.readDataToEndOfFile()
+            drainGroup.leave()
+        }
+
+        drainGroup.enter()
+        DispatchQueue.global(qos: .utility).async {
+            errBuffer.data = errPipe.fileHandleForReading.readDataToEndOfFile()
+            drainGroup.leave()
+        }
+
+        drainGroup.wait()
         proc.waitUntilExit()
+
+        let outData = outBuffer.data
+        let errData = errBuffer.data
 
         if controller?.isCancelled == true {
             throw BoltZipError.cancelled

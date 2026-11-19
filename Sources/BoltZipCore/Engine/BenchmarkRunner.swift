@@ -25,7 +25,7 @@ public enum BenchmarkRunner {
         return buf.prefix(sizeBytes)
     }
 
-    public static func run(on sampleData: Data? = nil) throws -> [BenchmarkEntryResult] {
+    public static func run(on sampleData: Data? = nil, workerCount: Int? = nil) throws -> [BenchmarkEntryResult] {
         let data = sampleData ?? generateMixedSampleData()
         let configs: [(CompressionAlgorithm, Int)] = [
             (.lz4, 3),
@@ -40,7 +40,13 @@ public enum BenchmarkRunner {
 
         for (algo, level) in configs {
             let t0 = CFAbsoluteTimeGetCurrent()
-            let compressed = try CompressionCodec.compress(data: data, algorithm: algo, gzipContainer: false, level: level)
+            let compressed = try CompressionCodec.compress(
+                data: data,
+                algorithm: algo,
+                gzipContainer: false,
+                level: level,
+                workerCount: workerCount
+            )
             let compSec = max(0.0001, CFAbsoluteTimeGetCurrent() - t0)
 
             let t1 = CFAbsoluteTimeGetCurrent()

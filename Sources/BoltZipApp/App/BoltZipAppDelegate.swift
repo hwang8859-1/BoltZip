@@ -50,7 +50,7 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         let app = (notification.object as? NSApplication) ?? (NSApp as NSApplication?)
         app?.setActivationPolicy(.regular)
         app?.appearance = viewModel.appTheme.nsAppearance
-        BoltAppIconRenderer.apply(whiteBackground: viewModel.useWhiteAppIcon)
+        BoltAppIconRenderer.apply(style: viewModel.appIconStyle)
         wireLifecycleCallbacks()
         viewModel.configureHUD()
         installWindowObservers()
@@ -66,7 +66,7 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         let app = (notification.object as? NSApplication) ?? (NSApp as NSApplication?)
         app?.setActivationPolicy(.regular)
         app?.appearance = viewModel.appTheme.nsAppearance
-        BoltAppIconRenderer.apply(whiteBackground: viewModel.useWhiteAppIcon)
+        BoltAppIconRenderer.apply(style: viewModel.appIconStyle)
         viewModel.refreshQuickActionsStatus()
         wireLifecycleCallbacks()
         viewModel.configureHUD()
@@ -88,6 +88,10 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
                 guard let self, !self.suppressMainWindowOnLaunch else { return }
                 self.didSettleNormalLaunch = true
                 self.menuManager.pruneIfNeeded(using: self.viewModel.l10n)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                guard let self, !self.suppressMainWindowOnLaunch else { return }
+                self.viewModel.checkForUpdates(userInitiated: false)
             }
         }
     }
@@ -154,6 +158,11 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.activate(ignoringOtherApps: true)
                 self?.viewModel.openArchivePanel()
             },
+            onCheckUpdates: { [weak self] in
+                NSApp.activate(ignoringOtherApps: true)
+                self?.showMainWindow()
+                self?.viewModel.checkForUpdates(userInitiated: true)
+            },
             onOpenAbout: { [weak self] in
                 self?.openAboutWindow()
             }
@@ -178,16 +187,44 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard mods == .command,
-                  event.charactersIgnoringModifiers?.lowercased() == "w" else {
-                return event
-            }
-            if let keyWin = NSApp.keyWindow, self.isMainAppWindow(keyWin), self.viewModel.shouldReturnHomeOnWindowClose() {
-                self.viewModel.closeArchive()
+            let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
+
+            if mods == .command, key == "w" {
+                if let keyWin = NSApp.keyWindow, self.isMainAppWindow(keyWin), self.viewModel.shouldReturnHomeOnWindowClose() {
+                    self.viewModel.closeArchive()
+                    return nil
+                }
+                NSApp.keyWindow?.performClose(nil)
                 return nil
             }
-            NSApp.keyWindow?.performClose(nil)
-            return nil
+
+            // Explorer shortcuts (only when main window is active, archive open, no modal/text input focused)
+            guard let keyWin = NSApp.keyWindow,
+                  self.isMainAppWindow(keyWin),
+                  self.viewModel.listing != nil,
+                  self.viewModel.activeSheet == nil,
+                  self.viewModel.pendingExtractConflict == nil,
+                  self.viewModel.pendingBatchArchiveDrop == nil,
+                  self.viewModel.pendingDeleteConfirmation == nil,
+                  !self.viewModel.isBusy,
+                  !(keyWin.firstResponder is NSTextView) else {
+                return event
+            }
+
+            if mods == .command && key == "a" {
+                self.viewModel.selectAllVisibleEntries()
+                return nil
+            }
+            if mods == .command && key == "c" && !self.viewModel.selectedEntryIDs.isEmpty {
+                self.viewModel.copySelectedEntryNames()
+                return nil
+            }
+            let isDeleteKey = event.keyCode == 51 || event.keyCode == 117
+            if isDeleteKey && (mods.isEmpty || mods == .command) && !self.viewModel.selectedEntryIDs.isEmpty {
+                self.viewModel.requestDeleteSelectedEntries()
+                return nil
+            }
+            return event
         }
     }
 

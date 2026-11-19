@@ -11,7 +11,7 @@ on:
 
 jobs:
   swift-test:
-    name: Build & Run BoltZipCoreTests
+    name: Build, Test & Static Checks
     runs-on: macos-latest
     steps:
       - name: Checkout repository
@@ -26,3 +26,37 @@ jobs:
 
       - name: Run unit tests
         run: swift test
+
+      - name: Build release CLI & macOS app binaries
+        run: |
+          swift build -c release --product boltzip
+          swift build -c release --product BoltZipApp
+
+      - name: Typecheck FinderSync extension
+        run: |
+          swiftc -module-name BoltZipFinderSync -parse-as-library -typecheck \
+            Sources/BoltZipFinderSync/FinderSync.swift \
+            -framework AppKit -framework FinderSync \
+            -sdk "$(xcrun --show-sdk-path)" \
+            -target arm64-apple-macos26.0
+
+      - name: Validate showcase JS, i18n keys & path safety
+        run: |
+          if command -v node >/dev/null 2>&1; then
+            node --check showcase/app.js
+          fi
+          python3 - <<'PY'
+          import pathlib, re
+          html = pathlib.Path("showcase/index.html").read_text(encoding="utf-8")
+          js = pathlib.Path("showcase/app.js").read_text(encoding="utf-8")
+          keys = set(re.findall(r'data-i18n(?:-html|-placeholder)?="([^"]+)"', html))
+          langs = ["zh-Hans", "zh-Hant", "en", "ja"]
+          for i, lang in enumerate(langs):
+              start = js.index(f'"{lang}": {{')
+              end = js.index(f'"{langs[i + 1]}": {{') if i + 1 < len(langs) else js.index("let currentLang")
+              block = js[start:end]
+              missing = [k for k in sorted(keys) if f"{k}:" not in block]
+              assert not missing, f"Missing keys in {lang}: {missing}"
+          print(f"SHOWCASE_CI_OK ({len(keys)} keys x 4 langs)")
+          PY
+          ! grep -rn "/Users/" Sources showcase Scripts

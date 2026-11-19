@@ -1,5 +1,78 @@
+import CBoltCompression
 import Foundation
 import os
+
+/// Thread-safe global concurrency settings for multi-core archive operations and C codec threads.
+public enum BoltConcurrency: Sendable {
+    public static let userDefaultsKey = "BoltZip.WorkerCoreCount"
+    public static let defaultStreamThresholdBytes: UInt64 = 64 * 1024 * 1024
+    public static let streamChunkSize: Int = 1024 * 1024
+
+    private static let preferenceLock = OSAllocatedUnfairLock<MultiCorePreference?>(initialState: nil)
+    private static let streamThresholdLock = OSAllocatedUnfairLock<UInt64>(initialState: 64 * 1024 * 1024)
+
+    public static var streamingThresholdBytes: UInt64 {
+        get { streamThresholdLock.withLock { $0 } }
+        set { streamThresholdLock.withLock { $0 = max(4096, newValue) } }
+    }
+
+    public static var hardwareCoreCount: Int {
+        max(1, Int(bolt_active_cores()))
+    }
+
+    public static var autoWorkerCount: Int {
+        min(12, max(1, hardwareCoreCount))
+    }
+
+    public static var preference: MultiCorePreference {
+        get {
+            if let cached = preferenceLock.withLock({ $0 }) {
+                return cached
+            }
+            let raw = UserDefaults.standard.integer(forKey: userDefaultsKey)
+            let loaded = MultiCorePreference(rawStorageValue: raw)
+            preferenceLock.withLock { stored in
+                if stored == nil {
+                    stored = loaded
+                }
+            }
+            return preferenceLock.withLock({ $0 }) ?? loaded
+        }
+        set {
+            setPreference(newValue, persist: true)
+        }
+    }
+
+    public static func setPreference(_ newValue: MultiCorePreference, persist: Bool = true) {
+        let normalized: MultiCorePreference
+        switch newValue {
+        case .auto:
+            normalized = .auto
+        case .fixed(let count):
+            normalized = .fixed(max(1, count))
+        }
+        preferenceLock.withLock { $0 = normalized }
+        if persist {
+            UserDefaults.standard.set(normalized.rawStorageValue, forKey: userDefaultsKey)
+        }
+    }
+
+    public static func resolvedWorkerCount(override: Int? = nil) -> Int {
+        let hw = hardwareCoreCount
+        if let override {
+            if override <= 0 {
+                return autoWorkerCount
+            }
+            return min(override, hw)
+        }
+        switch preference {
+        case .auto:
+            return autoWorkerCount
+        case .fixed(let count):
+            return min(max(1, count), hw)
+        }
+    }
+}
 
 private final class OrderedCoordinatorState<Output: Sendable>: @unchecked Sendable {
     let cond = NSCondition()
@@ -13,7 +86,7 @@ private final class OrderedCoordinatorState<Output: Sendable>: @unchecked Sendab
 
 enum ParallelExecutor {
     static var defaultWorkerCount: Int {
-        min(12, max(2, ProcessInfo.processInfo.activeProcessorCount))
+        BoltConcurrency.resolvedWorkerCount()
     }
 
     static func forEachBounded<T: Sendable>(

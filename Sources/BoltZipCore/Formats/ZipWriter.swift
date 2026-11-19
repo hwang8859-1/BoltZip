@@ -6,6 +6,7 @@ public enum ZipEditOperation: Sendable {
     case createFolder(path: String)
     case deletePaths(Set<String>)
     case renamePath(oldPath: String, newPath: String)
+    case setComment(String)
 }
 
 private final class SplitVolumeSink {
@@ -84,6 +85,21 @@ private final class SplitVolumeSink {
         }
     }
 
+    func writeFile(
+        from fileURL: URL,
+        chunkSize: Int = BoltConcurrency.streamChunkSize,
+        controller: ArchiveTaskController? = nil
+    ) throws {
+        let fh = try FileHandle(forReadingFrom: fileURL)
+        defer { try? fh.close() }
+        while true {
+            try controller?.checkpoint()
+            let chunk = try fh.read(upToCount: chunkSize) ?? Data()
+            if chunk.isEmpty { break }
+            try writeData(chunk)
+        }
+    }
+
     func finalizeAll() throws -> [URL] {
         try currentHandle?.close()
         currentHandle = nil
@@ -116,11 +132,25 @@ private final class SplitVolumeSink {
 public enum ZipWriter {
     struct InputItem: Sendable {
         let archivePath: String
-        let fileURL: URL? // nil if synthetic directory
+        let fileURL: URL? // nil if synthetic directory or symlink
         let isDirectory: Bool
+        let isSymbolicLink: Bool
+        let symlinkTarget: String?
         let modifiedDate: Date
         let permissions: UInt16
         let fileSize: UInt64
+    }
+
+    private enum PreparedPayload: @unchecked Sendable {
+        case memory(Data)
+        case file(url: URL, size: UInt64, deleteAfterWrite: Bool)
+
+        var compressedSize: UInt64 {
+            switch self {
+            case .memory(let data): return UInt64(data.count)
+            case .file(_, let size, _): return size
+            }
+        }
     }
 
     private struct PreparedZipItem: Sendable {
@@ -130,11 +160,17 @@ public enum ZipWriter {
         let dosTime: UInt16
         let dosDate: UInt16
         let crc32: UInt32
-        let compressedPayload: Data
+        let payload: PreparedPayload
         let uncompressedSize: UInt64
         let externalAttrs: UInt32
         let extraWithoutZip64: Data
         let commentData: Data
+
+        func cleanupTempIfNeeded() {
+            if case .file(let url, _, let shouldDelete) = payload, shouldDelete {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
     }
 
     struct CentralDirEntry {
@@ -162,7 +198,11 @@ public enum ZipWriter {
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws -> [URL] {
         try controller?.checkpoint()
-        let items = try collectInputItems(from: inputURLs, excludeMacJunk: options.excludeMacJunk)
+        let items = try collectInputItems(
+            from: inputURLs,
+            excludeMacJunk: options.excludeMacJunk,
+            preserveSymlinks: options.preserveSymlinks
+        )
         let sink = try SplitVolumeSink(outputURL: outputURL, splitLimit: options.splitVolumeSizeBytes)
         do {
             let totalBytes = items.reduce(UInt64(0)) { $0 + $1.fileSize }
@@ -225,6 +265,7 @@ public enum ZipWriter {
         }
         var itemsToAdd: [(targetFolder: String, url: URL)] = []
         var foldersToCreate: [String] = []
+        var resolvedComment = parsed.comment
 
         for op in operations {
             switch op {
@@ -267,6 +308,8 @@ public enum ZipWriter {
                 for url in urls {
                     itemsToAdd.append((targetFolder: prefix, url: url))
                 }
+            case .setComment(let newComment):
+                resolvedComment = newComment
             }
         }
 
@@ -278,6 +321,8 @@ public enum ZipWriter {
                     archivePath: folder,
                     fileURL: nil,
                     isDirectory: true,
+                    isSymbolicLink: false,
+                    symlinkTarget: nil,
                     modifiedDate: Date(),
                     permissions: 0o755,
                     fileSize: 0
@@ -285,13 +330,19 @@ public enum ZipWriter {
             }
         }
         for pair in itemsToAdd {
-            let collected = try collectInputItems(from: [pair.url], excludeMacJunk: options.excludeMacJunk)
+            let collected = try collectInputItems(
+                from: [pair.url],
+                excludeMacJunk: options.excludeMacJunk,
+                preserveSymlinks: options.preserveSymlinks
+            )
             for var item in collected {
                 let prefixed = pair.targetFolder.isEmpty ? item.archivePath : (pair.targetFolder + item.archivePath)
                 item = InputItem(
                     archivePath: prefixed,
                     fileURL: item.fileURL,
                     isDirectory: item.isDirectory,
+                    isSymbolicLink: item.isSymbolicLink,
+                    symlinkTarget: item.symlinkTarget,
                     modifiedDate: item.modifiedDate,
                     permissions: item.permissions,
                     fileSize: item.fileSize
@@ -313,11 +364,14 @@ public enum ZipWriter {
                     fractionCompleted: totalCount > 0 ? Double(idx) / Double(totalCount) : 0,
                     currentItem: ex.decodedPath
                 ))
-                let rawPayload = try reader.readRawPayload(for: ex.record, accessor: accessor)
                 let pathEncoded = FilenameEncoding.encode(ex.decodedPath, option: .utf8)
                 let flags = ex.record.flags | (pathEncoded.isUTF8 ? 0x0800 : 0)
-                // Remove old bit 3 data descriptor flag since we know compressedSize & crc32
-                let cleanFlags = flags & ~UInt16(0x0008)
+                // Preserve bit 3 for untouched legacy ZipCrypto entries encrypted with the data-descriptor header byte
+                // so 7-Zip/WinRAR continue validating (dosTime >> 8) properly; emit a compliant Data Descriptor below.
+                let isLegacyDataDescCrypto = (ex.record.flags & 0x0001 != 0)
+                    && (ex.record.compressionMethod != 99)
+                    && (ex.record.flags & 0x0008 != 0)
+                let cleanFlags = isLegacyDataDescCrypto ? flags : (flags & ~UInt16(0x0008))
 
                 let entry = try writeRawEntry(
                     rawPathBytes: pathEncoded.data,
@@ -326,13 +380,23 @@ public enum ZipWriter {
                     dosTime: ex.record.dosTime,
                     dosDate: ex.record.dosDate,
                     crc32: ex.record.crc32,
-                    compressedPayload: rawPayload,
+                    compressedSize: ex.record.compressedSize,
                     uncompressedSize: ex.record.uncompressedSize,
                     externalAttrs: ex.record.externalAttributes,
                     extraWithoutZip64: stripZip64Extra(ex.record.extraData),
                     commentData: ex.record.commentData,
+                    emitDataDescriptor: isLegacyDataDescCrypto,
                     sink: sink
-                )
+                ) { outSink in
+                    if ex.record.compressedSize < BoltConcurrency.streamingThresholdBytes {
+                        let rawPayload = try reader.readRawPayload(for: ex.record, accessor: accessor)
+                        try outSink.writeData(rawPayload)
+                    } else {
+                        try reader.streamRawPayload(for: ex.record, accessor: accessor) { chunk in
+                            try outSink.writeData(chunk)
+                        }
+                    }
+                }
                 cdEntries.append(entry)
                 idx += 1
             }
@@ -340,14 +404,21 @@ public enum ZipWriter {
             if !newInputs.isEmpty {
                 let baseCount = idx
                 let newTotalBytes = newInputs.reduce(UInt64(0)) { $0 + $1.fileSize }
-                let maxWorkers = newInputs.filter { !$0.isDirectory }.count >= 2 ? ParallelExecutor.defaultWorkerCount : 1
+                let resolvedWorkers = BoltConcurrency.resolvedWorkerCount(override: options.workerCount)
+                let maxWorkers = newInputs.filter { !$0.isDirectory }.count >= 2 ? resolvedWorkers : 1
                 try ParallelExecutor.orderedMap(
                     newInputs,
                     maxWorkers: maxWorkers,
-                    byteCost: { $0.fileSize }
+                    byteCost: { max(1, $0.fileSize) }
                 ) { _, newItem in
-                    try prepareItem(newItem, options: options, allowCodecMT: maxWorkers == 1)
+                    try prepareItem(
+                        newItem,
+                        options: options,
+                        allowCodecMT: maxWorkers == 1 && resolvedWorkers > 1,
+                        workerCount: resolvedWorkers
+                    )
                 } consumeInOrder: { offsetIdx, newItem, prepared in
+                    defer { prepared.cleanupTempIfNeeded() }
                     let overallIdx = baseCount + offsetIdx
                     progress?(OperationProgress(
                         fractionCompleted: totalCount > 0 ? Double(overallIdx) / Double(totalCount) : 0,
@@ -355,25 +426,12 @@ public enum ZipWriter {
                         processedBytes: 0,
                         totalBytes: newTotalBytes
                     ))
-                    let entry = try writeRawEntry(
-                        rawPathBytes: prepared.rawPathBytes,
-                        flags: prepared.flags,
-                        method: prepared.method,
-                        dosTime: prepared.dosTime,
-                        dosDate: prepared.dosDate,
-                        crc32: prepared.crc32,
-                        compressedPayload: prepared.compressedPayload,
-                        uncompressedSize: prepared.uncompressedSize,
-                        externalAttrs: prepared.externalAttrs,
-                        extraWithoutZip64: prepared.extraWithoutZip64,
-                        commentData: prepared.commentData,
-                        sink: sink
-                    )
+                    let entry = try writePreparedEntry(prepared, sink: sink)
                     cdEntries.append(entry)
                 }
             }
 
-            try finishCentralDirectory(entries: cdEntries, comment: parsed.comment, sink: sink)
+            try finishCentralDirectory(entries: cdEntries, comment: resolvedComment, sink: sink)
             _ = try sink.finalizeAll()
             progress?(OperationProgress(fractionCompleted: 1.0, currentItem: archiveURL.lastPathComponent))
         } catch {
@@ -384,13 +442,19 @@ public enum ZipWriter {
 
     // MARK: - Helpers
 
-    static func collectInputItems(from inputURLs: [URL], excludeMacJunk: Bool) throws -> [InputItem] {
+    static func collectInputItems(
+        from inputURLs: [URL],
+        excludeMacJunk: Bool,
+        preserveSymlinks: Bool = true
+    ) throws -> [InputItem] {
         let fm = FileManager.default
         var items: [InputItem] = []
 
         for rootURL in inputURLs {
-            var isDirObj: ObjCBool = false
-            guard fm.fileExists(atPath: rootURL.path, isDirectory: &isDirObj) else {
+            let rootAttrs: [FileAttributeKey: Any]
+            do {
+                rootAttrs = try fm.attributesOfItem(atPath: rootURL.path)
+            } catch {
                 throw BoltZipError.ioError(BoltCoreLocalization.t(
                     "找不到文件或文件夹：\(rootURL.path)",
                     "找不到檔案或資料夾：\(rootURL.path)",
@@ -404,16 +468,37 @@ public enum ZipWriter {
                 continue
             }
 
-            let rootAttrs = try fm.attributesOfItem(atPath: rootURL.path)
+            let fileType = rootAttrs[.type] as? FileAttributeType
             let rootMod = (rootAttrs[.modificationDate] as? Date) ?? Date()
-            let rootPerms = UInt16((rootAttrs[.posixPermissions] as? NSNumber)?.uint16Value ?? (isDirObj.boolValue ? 0o755 : 0o644))
 
-            if !isDirObj.boolValue {
+            if fileType == .typeSymbolicLink {
+                guard preserveSymlinks else { continue }
+                let target = try fm.destinationOfSymbolicLink(atPath: rootURL.path)
+                let rootPerms = UInt16((rootAttrs[.posixPermissions] as? NSNumber)?.uint16Value ?? 0o777)
+                items.append(InputItem(
+                    archivePath: rootName,
+                    fileURL: nil,
+                    isDirectory: false,
+                    isSymbolicLink: true,
+                    symlinkTarget: target,
+                    modifiedDate: rootMod,
+                    permissions: rootPerms,
+                    fileSize: UInt64(target.utf8.count)
+                ))
+                continue
+            }
+
+            let isRootDir = (fileType == .typeDirectory)
+            let rootPerms = UInt16((rootAttrs[.posixPermissions] as? NSNumber)?.uint16Value ?? (isRootDir ? 0o755 : 0o644))
+
+            if !isRootDir {
                 let sz = (rootAttrs[.size] as? NSNumber)?.uint64Value ?? 0
                 items.append(InputItem(
                     archivePath: rootName,
                     fileURL: rootURL,
                     isDirectory: false,
+                    isSymbolicLink: false,
+                    symlinkTarget: nil,
                     modifiedDate: rootMod,
                     permissions: rootPerms,
                     fileSize: sz
@@ -426,21 +511,34 @@ public enum ZipWriter {
                 archivePath: rootName + "/",
                 fileURL: nil,
                 isDirectory: true,
+                isSymbolicLink: false,
+                symlinkTarget: nil,
                 modifiedDate: rootMod,
                 permissions: rootPerms,
                 fileSize: 0
             ))
 
+            let canonicalRoot = rootURL.resolvingSymlinksInPath().standardizedFileURL
             guard let enumerator = fm.enumerator(
-                at: rootURL,
+                at: canonicalRoot,
                 includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey],
                 options: []
             ) else { continue }
 
-            let basePath = rootURL.standardizedFileURL.path
+            let basePrefix = canonicalRoot.path.hasSuffix("/") ? canonicalRoot.path : (canonicalRoot.path + "/")
             for case let childURL as URL in enumerator {
-                let childStd = childURL.standardizedFileURL.path
-                let rel = String(childStd.dropFirst(basePath.count + (basePath.hasSuffix("/") ? 0 : 1)))
+                let childParent = childURL.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL.path
+                let childParentPrefix = childParent.hasSuffix("/") ? childParent : (childParent + "/")
+                let canonicalChildPath = childParentPrefix + childURL.lastPathComponent
+                let rel: String
+                if canonicalChildPath.hasPrefix(basePrefix) {
+                    rel = String(canonicalChildPath.dropFirst(basePrefix.count))
+                } else {
+                    let fallbackPath = childURL.standardizedFileURL.path
+                    rel = fallbackPath.hasPrefix(basePrefix)
+                        ? String(fallbackPath.dropFirst(basePrefix.count))
+                        : childURL.lastPathComponent
+                }
                 let archiveRel = "\(rootName)/\(rel)"
 
                 if excludeMacJunk && MacJunkFilter.isJunk(path: archiveRel) {
@@ -451,17 +549,36 @@ public enum ZipWriter {
                 }
 
                 let rv = try childURL.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey])
-                if rv.isSymbolicLink == true { continue }
-                let isSubDir = rv.isDirectory == true
                 let attrs = try? fm.attributesOfItem(atPath: childURL.path)
-                let perms = UInt16((attrs?[.posixPermissions] as? NSNumber)?.uint16Value ?? (isSubDir ? 0o755 : 0o644))
                 let mod = rv.contentModificationDate ?? Date()
+
+                if rv.isSymbolicLink == true {
+                    guard preserveSymlinks else { continue }
+                    let target = try fm.destinationOfSymbolicLink(atPath: childURL.path)
+                    let perms = UInt16((attrs?[.posixPermissions] as? NSNumber)?.uint16Value ?? 0o777)
+                    items.append(InputItem(
+                        archivePath: archiveRel,
+                        fileURL: nil,
+                        isDirectory: false,
+                        isSymbolicLink: true,
+                        symlinkTarget: target,
+                        modifiedDate: mod,
+                        permissions: perms,
+                        fileSize: UInt64(target.utf8.count)
+                    ))
+                    continue
+                }
+
+                let isSubDir = rv.isDirectory == true
+                let perms = UInt16((attrs?[.posixPermissions] as? NSNumber)?.uint16Value ?? (isSubDir ? 0o755 : 0o644))
                 let sz = isSubDir ? 0 : UInt64(rv.fileSize ?? 0)
 
                 items.append(InputItem(
                     archivePath: isSubDir ? (archiveRel + "/") : archiveRel,
                     fileURL: isSubDir ? nil : childURL,
                     isDirectory: isSubDir,
+                    isSymbolicLink: false,
+                    symlinkTarget: nil,
                     modifiedDate: mod,
                     permissions: perms,
                     fileSize: sz
@@ -481,7 +598,9 @@ public enum ZipWriter {
         progress: (@Sendable (OperationProgress) -> Void)?
     ) throws {
         let nonDirCount = items.reduce(0) { $0 + ($1.isDirectory ? 0 : 1) }
-        if nonDirCount <= 1 {
+        let resolvedWorkers = BoltConcurrency.resolvedWorkerCount(override: options.workerCount)
+        if nonDirCount <= 1 || resolvedWorkers <= 1 {
+            let allowCodecMT = (nonDirCount <= 1) && (resolvedWorkers > 1)
             var processedBytes: UInt64 = 0
             for item in items {
                 try controller?.checkpoint()
@@ -495,7 +614,8 @@ public enum ZipWriter {
                 let prepared = try prepareItem(
                     item,
                     options: options,
-                    allowCodecMT: true,
+                    allowCodecMT: allowCodecMT,
+                    workerCount: resolvedWorkers,
                     controller: controller
                 ) { itemRead, _ in
                     let currentTotal = min(totalBytes, base + itemRead)
@@ -506,20 +626,8 @@ public enum ZipWriter {
                         totalBytes: totalBytes
                     ))
                 }
-                let entry = try writeRawEntry(
-                    rawPathBytes: prepared.rawPathBytes,
-                    flags: prepared.flags,
-                    method: prepared.method,
-                    dosTime: prepared.dosTime,
-                    dosDate: prepared.dosDate,
-                    crc32: prepared.crc32,
-                    compressedPayload: prepared.compressedPayload,
-                    uncompressedSize: prepared.uncompressedSize,
-                    externalAttrs: prepared.externalAttrs,
-                    extraWithoutZip64: prepared.extraWithoutZip64,
-                    commentData: prepared.commentData,
-                    sink: sink
-                )
+                defer { prepared.cleanupTempIfNeeded() }
+                let entry = try writePreparedEntry(prepared, controller: controller, sink: sink)
                 cdEntries.append(entry)
                 processedBytes += item.fileSize
             }
@@ -529,16 +637,21 @@ public enum ZipWriter {
         let completedBytesLock = OSAllocatedUnfairLock(initialState: UInt64(0))
         try ParallelExecutor.orderedMap(
             items,
-            maxWorkers: ParallelExecutor.defaultWorkerCount,
+            maxWorkers: resolvedWorkers,
             byteCost: { max(1, $0.fileSize) },
             controller: controller
         ) { _, item in
-            let prepared = try prepareItem(
+            try prepareItem(
                 item,
                 options: options,
                 allowCodecMT: false,
+                workerCount: 1,
                 controller: controller
             )
+        } consumeInOrder: { _, item, prepared in
+            defer { prepared.cleanupTempIfNeeded() }
+            let entry = try writePreparedEntry(prepared, controller: controller, sink: sink)
+            cdEntries.append(entry)
             let completedNow = completedBytesLock.withLock { total -> UInt64 in
                 total = min(totalBytes, total + item.fileSize)
                 return total
@@ -549,23 +662,34 @@ public enum ZipWriter {
                 processedBytes: completedNow,
                 totalBytes: totalBytes
             ))
-            return prepared
-        } consumeInOrder: { _, _, prepared in
-            let entry = try writeRawEntry(
-                rawPathBytes: prepared.rawPathBytes,
-                flags: prepared.flags,
-                method: prepared.method,
-                dosTime: prepared.dosTime,
-                dosDate: prepared.dosDate,
-                crc32: prepared.crc32,
-                compressedPayload: prepared.compressedPayload,
-                uncompressedSize: prepared.uncompressedSize,
-                externalAttrs: prepared.externalAttrs,
-                extraWithoutZip64: prepared.extraWithoutZip64,
-                commentData: prepared.commentData,
-                sink: sink
-            )
-            cdEntries.append(entry)
+        }
+    }
+
+    private static func writePreparedEntry(
+        _ prepared: PreparedZipItem,
+        controller: ArchiveTaskController? = nil,
+        sink: SplitVolumeSink
+    ) throws -> CentralDirEntry {
+        try writeRawEntry(
+            rawPathBytes: prepared.rawPathBytes,
+            flags: prepared.flags,
+            method: prepared.method,
+            dosTime: prepared.dosTime,
+            dosDate: prepared.dosDate,
+            crc32: prepared.crc32,
+            compressedSize: prepared.payload.compressedSize,
+            uncompressedSize: prepared.uncompressedSize,
+            externalAttrs: prepared.externalAttrs,
+            extraWithoutZip64: prepared.extraWithoutZip64,
+            commentData: prepared.commentData,
+            sink: sink
+        ) { outSink in
+            switch prepared.payload {
+            case .memory(let data):
+                try outSink.writeData(data)
+            case .file(let url, _, _):
+                try outSink.writeFile(from: url, controller: controller)
+            }
         }
     }
 
@@ -573,12 +697,20 @@ public enum ZipWriter {
         _ item: InputItem,
         options: CreateArchiveOptions,
         allowCodecMT: Bool,
+        workerCount: Int? = nil,
         controller: ArchiveTaskController? = nil,
         progress: ((UInt64, UInt64) -> Void)? = nil
     ) throws -> PreparedZipItem {
         let pathEnc = FilenameEncoding.encode(item.archivePath, option: options.encoding)
         let (dosTime, dosDate) = ZipBinary.dosDateTime(from: item.modifiedDate)
-        let unixMode = UInt32(item.isDirectory ? (0o040000 | item.permissions) : (0o100000 | item.permissions))
+        let unixMode: UInt32
+        if item.isSymbolicLink {
+            unixMode = UInt32(0o120000 | (item.permissions & 0o0777))
+        } else if item.isDirectory {
+            unixMode = UInt32(0o040000 | item.permissions)
+        } else {
+            unixMode = UInt32(0o100000 | item.permissions)
+        }
         let extAttrs = (unixMode << 16) | (item.isDirectory ? 0x10 : 0x00)
 
         var flags: UInt16 = pathEnc.isUTF8 ? 0x0800 : 0x0000
@@ -592,11 +724,48 @@ public enum ZipWriter {
                 dosTime: dosTime,
                 dosDate: dosDate,
                 crc32: 0,
-                compressedPayload: Data(),
+                payload: .memory(Data()),
                 uncompressedSize: 0,
                 externalAttrs: extAttrs,
                 extraWithoutZip64: buildExtendedTimestampExtra(date: item.modifiedDate),
                 commentData: Data()
+            )
+        }
+
+        // Symbolic links store their UTF-8 target path with mode 0o120000
+        if item.isSymbolicLink {
+            let targetData = Data((item.symlinkTarget ?? "").utf8)
+            let crc = CompressionCodec.crc32(targetData)
+            return PreparedZipItem(
+                rawPathBytes: pathEnc.data,
+                flags: flags,
+                method: 0,
+                dosTime: dosTime,
+                dosDate: dosDate,
+                crc32: crc,
+                payload: .memory(targetData),
+                uncompressedSize: UInt64(targetData.count),
+                externalAttrs: extAttrs,
+                extraWithoutZip64: buildExtendedTimestampExtra(date: item.modifiedDate),
+                commentData: Data()
+            )
+        }
+
+        // Large files exceeding streaming threshold bypass whole-file RAM buffers via temporary chunked files
+        if let fileURL = item.fileURL, item.fileSize >= BoltConcurrency.streamingThresholdBytes {
+            return try prepareStreamingFileItem(
+                fileURL: fileURL,
+                fileSize: item.fileSize,
+                pathEnc: pathEnc,
+                dosTime: dosTime,
+                dosDate: dosDate,
+                extAttrs: extAttrs,
+                modifiedDate: item.modifiedDate,
+                options: options,
+                allowCodecMT: allowCodecMT,
+                workerCount: workerCount,
+                controller: controller,
+                progress: progress
             )
         }
 
@@ -615,6 +784,7 @@ public enum ZipWriter {
             gzipContainer: false,
             level: options.level,
             allowMultiThread: allowCodecMT,
+            workerCount: allowCodecMT ? workerCount : 1,
             controller: controller,
             progress: progress
         )
@@ -651,8 +821,110 @@ public enum ZipWriter {
             dosTime: dosTime,
             dosDate: dosDate,
             crc32: headerCRC,
-            compressedPayload: finalPayload,
+            payload: .memory(finalPayload),
             uncompressedSize: UInt64(plainData.count),
+            externalAttrs: extAttrs,
+            extraWithoutZip64: extra,
+            commentData: Data()
+        )
+    }
+
+    private static func prepareStreamingFileItem(
+        fileURL: URL,
+        fileSize: UInt64,
+        pathEnc: (data: Data, isUTF8: Bool),
+        dosTime: UInt16,
+        dosDate: UInt16,
+        extAttrs: UInt32,
+        modifiedDate: Date,
+        options: CreateArchiveOptions,
+        allowCodecMT: Bool,
+        workerCount: Int?,
+        controller: ArchiveTaskController?,
+        progress: ((UInt64, UInt64) -> Void)?
+    ) throws -> PreparedZipItem {
+        let fm = FileManager.default
+        let isEncrypted = options.encryption != .none && !(options.password ?? "").isEmpty
+        let needsHeaderCRC = !(isEncrypted && options.encryption == .aes256)
+        let crc = needsHeaderCRC ? try CompressionCodec.crc32File(at: fileURL, controller: controller) : 0
+
+        let method = options.algorithm.zipMethodCode
+        let compURL: URL
+        let compSize: UInt64
+        let deleteCompAfter: Bool
+
+        if options.algorithm == .store {
+            compURL = fileURL
+            compSize = fileSize
+            deleteCompAfter = false
+        } else {
+            compURL = fm.temporaryDirectory.appendingPathComponent("boltzip-stream-c-\(UUID().uuidString).tmp")
+            do {
+                try CompressionCodec.compressFile(
+                    sourceURL: fileURL,
+                    destinationURL: compURL,
+                    algorithm: options.algorithm,
+                    gzipContainer: false,
+                    level: options.level,
+                    allowMultiThread: allowCodecMT,
+                    workerCount: allowCodecMT ? workerCount : 1,
+                    controller: controller,
+                    progress: progress
+                )
+                let attrs = try fm.attributesOfItem(atPath: compURL.path)
+                compSize = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
+                deleteCompAfter = true
+            } catch {
+                try? fm.removeItem(at: compURL)
+                throw error
+            }
+        }
+
+        var flags: UInt16 = pathEnc.isUTF8 ? 0x0800 : 0x0000
+        var extra = buildExtendedTimestampExtra(date: modifiedDate)
+        var headerCRC = crc
+        var headerMethod = method
+        var payload: PreparedPayload = .file(url: compURL, size: compSize, deleteAfterWrite: deleteCompAfter)
+
+        if isEncrypted, let password = options.password, !password.isEmpty {
+            flags |= 0x0001
+            let encURL = fm.temporaryDirectory.appendingPathComponent("boltzip-stream-e-\(UUID().uuidString).tmp")
+            do {
+                switch options.encryption {
+                case .aes256:
+                    try ZipCrypto.encryptAES256Stream(from: compURL, to: encURL, password: password, controller: controller)
+                    headerMethod = 99
+                    headerCRC = 0
+                    extra.append(buildWinZipAESExtra(actualMethod: method))
+                case .zipCrypto:
+                    try ZipCrypto.encryptZipCryptoStream(from: compURL, to: encURL, crc32: crc, password: password, controller: controller)
+                case .none:
+                    break
+                }
+                if deleteCompAfter {
+                    try? fm.removeItem(at: compURL)
+                }
+                let attrs = try fm.attributesOfItem(atPath: encURL.path)
+                let encSize = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
+                payload = .file(url: encURL, size: encSize, deleteAfterWrite: true)
+            } catch {
+                try? fm.removeItem(at: encURL)
+                if deleteCompAfter {
+                    try? fm.removeItem(at: compURL)
+                }
+                throw error
+            }
+        }
+
+        return PreparedZipItem(
+            rawPathBytes: pathEnc.data,
+            flags: flags,
+            method: headerMethod,
+            dosTime: dosTime,
+            dosDate: dosDate,
+            crc32: headerCRC,
+            payload: payload,
+            uncompressedSize: fileSize,
             externalAttrs: extAttrs,
             extraWithoutZip64: extra,
             commentData: Data()
@@ -666,24 +938,25 @@ public enum ZipWriter {
         dosTime: UInt16,
         dosDate: UInt16,
         crc32: UInt32,
-        compressedPayload: Data,
+        compressedSize compSize: UInt64,
         uncompressedSize: UInt64,
         externalAttrs: UInt32,
         extraWithoutZip64: Data,
         commentData: Data,
-        sink: SplitVolumeSink
+        emitDataDescriptor: Bool = false,
+        sink: SplitVolumeSink,
+        writePayloadBody: (SplitVolumeSink) throws -> Void
     ) throws -> CentralDirEntry {
         try sink.ensureRoomBeforeHeader()
         let localDisk = UInt32(sink.currentDisk)
         let localOffset = sink.currentOffset
-        let compSize = UInt64(compressedPayload.count)
 
         let needsZip64Sizes = compSize >= 0xFFFFFFFF || uncompressedSize >= 0xFFFFFFFF
         let needsZip64Offset = localOffset >= 0xFFFFFFFF
         let needsZip64Disk = localDisk >= 0xFFFF
 
         var localExtra = extraWithoutZip64
-        if needsZip64Sizes {
+        if needsZip64Sizes && !emitDataDescriptor {
             var z64 = Data()
             ZipBinary.appendUInt64LE(&z64, uncompressedSize)
             ZipBinary.appendUInt64LE(&z64, compSize)
@@ -713,16 +986,36 @@ public enum ZipWriter {
         ZipBinary.appendUInt16LE(&lh, method)
         ZipBinary.appendUInt16LE(&lh, dosTime)
         ZipBinary.appendUInt16LE(&lh, dosDate)
-        ZipBinary.appendUInt32LE(&lh, crc32)
-        ZipBinary.appendUInt32LE(&lh, compSize >= 0xFFFFFFFF ? 0xFFFFFFFF : UInt32(compSize))
-        ZipBinary.appendUInt32LE(&lh, uncompressedSize >= 0xFFFFFFFF ? 0xFFFFFFFF : UInt32(uncompressedSize))
+        if emitDataDescriptor {
+            ZipBinary.appendUInt32LE(&lh, 0)
+            ZipBinary.appendUInt32LE(&lh, 0)
+            ZipBinary.appendUInt32LE(&lh, 0)
+        } else {
+            ZipBinary.appendUInt32LE(&lh, crc32)
+            ZipBinary.appendUInt32LE(&lh, compSize >= 0xFFFFFFFF ? 0xFFFFFFFF : UInt32(compSize))
+            ZipBinary.appendUInt32LE(&lh, uncompressedSize >= 0xFFFFFFFF ? 0xFFFFFFFF : UInt32(uncompressedSize))
+        }
         ZipBinary.appendUInt16LE(&lh, UInt16(rawPathBytes.count))
         ZipBinary.appendUInt16LE(&lh, UInt16(localExtra.count))
         lh.append(rawPathBytes)
         lh.append(localExtra)
 
         try sink.writeData(lh)
-        try sink.writeData(compressedPayload)
+        try writePayloadBody(sink)
+
+        if emitDataDescriptor {
+            var dd = Data(capacity: needsZip64Sizes ? 24 : 16)
+            ZipBinary.appendUInt32LE(&dd, ZipSignature.dataDescriptor)
+            ZipBinary.appendUInt32LE(&dd, crc32)
+            if needsZip64Sizes {
+                ZipBinary.appendUInt64LE(&dd, compSize)
+                ZipBinary.appendUInt64LE(&dd, uncompressedSize)
+            } else {
+                ZipBinary.appendUInt32LE(&dd, UInt32(compSize))
+                ZipBinary.appendUInt32LE(&dd, UInt32(uncompressedSize))
+            }
+            try sink.writeData(dd)
+        }
 
         return CentralDirEntry(
             rawPathBytes: rawPathBytes,
@@ -777,7 +1070,9 @@ public enum ZipWriter {
             cdBuffer.append(e.rawPathBytes)
             cdBuffer.append(e.cdExtra)
             cdBuffer.append(e.commentData)
-            entriesOnStartDisk += 1
+            if e.diskStart == cdStartDisk {
+                entriesOnStartDisk += 1
+            }
         }
 
         try sink.writeData(cdBuffer)

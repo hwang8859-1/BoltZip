@@ -14,7 +14,7 @@ struct RecentArchiveRow: View {
                 vm.openArchive(url: url)
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "doc.zipper")
+                    Image(systemName: BoltFileIconCatalog.sfSymbolName(forFilename: url.lastPathComponent))
                         .font(BoltType.body)
                         .foregroundStyle(.cyan)
                         .frame(width: 18)

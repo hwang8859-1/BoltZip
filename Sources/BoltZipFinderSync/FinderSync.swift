@@ -67,6 +67,12 @@ private enum FinderL10n {
     static var compress7z: String {
         tr("finder.compress7z", "压缩为 7z", "壓縮為 7z", "Compress to 7z", "7z に圧縮")
     }
+    static var compressEachZip: String {
+        tr("finder.compressEachZip", "分别压缩为独立 ZIP", "分別壓縮為獨立 ZIP", "Compress Each to ZIP", "個別に ZIP へ圧縮")
+    }
+    static var extractTo: String {
+        tr("finder.extractTo", "解压到指定文件夹...", "解壓至指定資料夾...", "Extract To...", "場所を指定して展開...")
+    }
     static var encryptSplitCompress: String {
         tr("finder.encryptSplitCompress", "加密 / 分卷高级压缩...", "加密 / 分卷進階壓縮...", "Encrypt & Split Archive...", "暗号化・分割して圧縮...")
     }
@@ -78,7 +84,8 @@ private enum FinderL10n {
 @objc(FinderSync)
 final class FinderSync: FIFinderSync {
     private static let archiveExtensions: Set<String> = [
-        "zip", "zipx", "z01", "cbz", "rar", "r00", "r01", "cbr", "7z", "cb7",
+        "zip", "zipx", "z01", "cbz", "ipa", "apk", "jar", "epub", "whl",
+        "rar", "r00", "r01", "cbr", "7z", "cb7",
         "tar", "gz", "gzip", "tgz", "zst", "zstd", "tzst", "xz", "txz", "lzma",
         "bz2", "bzip2", "tbz2", "tbz", "lz4", "tlz4", "iso", "cab", "xar", "pkg"
     ]
@@ -118,6 +125,7 @@ final class FinderSync: FIFinderSync {
             if hasArchives {
                 addItem(to: submenu, title: FinderL10n.smartExtract, icon: "arrow.down.doc.fill", action: #selector(smartExtractAction(_:)))
                 addItem(to: submenu, title: FinderL10n.extractSubfolder, icon: "folder.badge.gearshape", action: #selector(extractSubfolderAction(_:)))
+                addItem(to: submenu, title: FinderL10n.extractTo, icon: "folder.badge.plus", action: #selector(extractToAction(_:)))
                 if targets.count == 1 {
                     addItem(to: submenu, title: FinderL10n.openInBoltZip, icon: "eye.fill", action: #selector(openArchiveAction(_:)))
                 }
@@ -132,6 +140,9 @@ final class FinderSync: FIFinderSync {
             if !onlyArchives {
                 if hasArchives { submenu.addItem(.separator()) }
                 addItem(to: submenu, title: FinderL10n.compressZip, icon: "doc.zipper", action: #selector(compressZipAction(_:)))
+                if targets.count > 1 {
+                    addItem(to: submenu, title: FinderL10n.compressEachZip, icon: "rectangle.stack.fill", action: #selector(compressEachZipAction(_:)))
+                }
                 addItem(to: submenu, title: FinderL10n.compressTarZst, icon: "bolt.fill", action: #selector(compressTarZstAction(_:)))
                 addItem(to: submenu, title: FinderL10n.compress7z, icon: "archivebox.fill", action: #selector(compress7zAction(_:)))
                 submenu.addItem(.separator())
@@ -247,9 +258,11 @@ final class FinderSync: FIFinderSync {
 
     @objc private func smartExtractAction(_ sender: Any?) { dispatch(op: "smartExtract", host: "hud") }
     @objc private func extractSubfolderAction(_ sender: Any?) { dispatch(op: "extractSubfolder", host: "hud") }
+    @objc private func extractToAction(_ sender: Any?) { dispatch(op: "extractTo", host: "finder") }
     @objc private func openArchiveAction(_ sender: Any?) { dispatch(op: "open", host: "finder") }
     @objc private func testIntegrityAction(_ sender: Any?) { dispatch(op: "testIntegrity", host: "finder") }
     @objc private func compressZipAction(_ sender: Any?) { dispatch(op: "compressZip", host: "hud") }
+    @objc private func compressEachZipAction(_ sender: Any?) { dispatch(op: "compressEachZip", host: "hud") }
     @objc private func compressTarZstAction(_ sender: Any?) { dispatch(op: "compressTarZst", host: "hud") }
     @objc private func compress7zAction(_ sender: Any?) { dispatch(op: "compress7z", host: "hud") }
     @objc private func compressWizardAction(_ sender: Any?) { dispatch(op: "compressWizard", host: "finder") }

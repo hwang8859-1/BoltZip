@@ -26,7 +26,7 @@ struct WelcomeDropZoneView: View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
-            let topOffset = max(36, titlebarHeight)
+            let topOffset = max(42, titlebarHeight)
             let isNarrow = w < 540
             let isCompactHeight = h < (topOffset + 345)
             let showBannerHere = vm.showFinderBanner && h >= (topOffset + 330)
@@ -45,11 +45,13 @@ struct WelcomeDropZoneView: View {
                         }
                         .frame(width: contentWidth, alignment: .topLeading)
                         .padding(.horizontal, 12)
-                        .padding(.top, topOffset + 4)
+                        .padding(.top, 4)
                         .padding(.bottom, 12)
                     }
-                    .contentMargins(.top, topOffset, for: .scrollIndicators)
-                    .boltSoftTopScrollEdgeEffect()
+                    .boltTitlebarScrollEdgeBar(
+                        height: topOffset,
+                        glassEnabled: vm.effectiveWindowTranslucency
+                    )
                     .frame(width: w, height: h)
                 } else {
                     VStack(spacing: 10) {
@@ -63,8 +65,6 @@ struct WelcomeDropZoneView: View {
                     .padding(.bottom, 12)
                     .frame(width: w, height: h)
                 }
-
-                titlebarGlassOverlay(width: w, height: topOffset)
             }
         }
         .ignoresSafeArea(.container, edges: .top)
@@ -72,14 +72,6 @@ struct WelcomeDropZoneView: View {
         .onAppear {
             vm.refreshQuickActionsStatus()
         }
-    }
-
-    @ViewBuilder
-    private func titlebarGlassOverlay(width: CGFloat, height: CGFloat) -> some View {
-        Color.clear
-            .frame(width: width, height: height)
-            .boltWithinWindowGlassCover(glassEnabled: vm.effectiveWindowTranslucency, dividerEdge: .bottom)
-            .allowsHitTesting(false)
     }
 
     @ViewBuilder
@@ -172,7 +164,7 @@ struct WelcomeDropZoneView: View {
             VStack(spacing: isCompactHeight ? 7 : 10) {
                 BoltLogoBadge(
                     size: isCompactHeight ? 42 : 52,
-                    whiteBackground: vm.useWhiteAppIcon,
+                    whiteBackground: vm.effectiveWhiteAppIcon(for: colorScheme),
                     glassEnabled: vm.effectiveWindowTranslucency
                 )
 
@@ -349,6 +341,13 @@ struct WelcomeDropZoneView: View {
                         .font(BoltType.caption)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
+                    Button(l.clearRecentsBtn) {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            vm.clearRecents()
+                        }
+                    }
+                    .controlSize(.mini)
+                    .boltGlassButton()
                 }
                 BoltCloseIconButton(helpText: l.hideThisSection) {
                     withAnimation(.easeInOut(duration: 0.16)) {

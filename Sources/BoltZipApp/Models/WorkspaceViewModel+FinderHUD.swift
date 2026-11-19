@@ -75,6 +75,9 @@ extension WorkspaceViewModel {
         hudWindowController.onDidHide = { [weak self] in
             self?.onHUDDidHide?()
         }
+        hudModel.onOperationSucceeded = { [weak self] operation, _ in
+            self?.applyTrashCleanupIfScheduled(for: operation.id)
+        }
     }
 
     func configureInAppHUD() {
@@ -84,6 +87,7 @@ extension WorkspaceViewModel {
         inAppTaskHUD.cancelledAutoDismissDelay = 0.75
         inAppTaskHUD.onOperationSucceeded = { [weak self] operation, resultURL in
             guard let self else { return }
+            self.applyTrashCleanupIfScheduled(for: operation.id)
             switch operation {
             case .compress(_, _, _, let options):
                 self.statusMessage = resultURL.lastPathComponent
@@ -91,12 +95,14 @@ extension WorkspaceViewModel {
                 let fromHomeOrigin = (self.listing == nil) ? true : self.openedArchiveFromHome
                 Task.detached(priority: .userInitiated) {
                     if let refreshed = try? BoltArchiveEngine.inspect(archiveURL: resultURL, encoding: encoding) {
+                        let navIndex = ArchiveNavigationIndex.build(from: refreshed, rootTitle: refreshed.archiveURL.lastPathComponent)
                         await MainActor.run {
-                            self.listing = refreshed
-                            self.openedArchiveFromHome = fromHomeOrigin
-                            self.currentFolder = ""
-                            self.selectedEntryIDs.removeAll()
-                            self.searchText = ""
+                            self.applyLoadedListing(
+                                refreshed,
+                                prebuiltIndex: navIndex,
+                                openedFromHome: fromHomeOrigin,
+                                initialFolder: ""
+                            )
                             self.recordRecent(resultURL)
                             self.statusMessage = "\(resultURL.lastPathComponent) · \(self.l10n.itemCount(refreshed.entries.count))"
                         }
@@ -119,7 +125,7 @@ extension WorkspaceViewModel {
               let op = comps.queryItems?.first(where: { $0.name == "op" })?.value else {
             return false
         }
-        return ["smartExtract", "extractSubfolder", "compressZip", "compressTarZst", "compress7z"].contains(op)
+        return ["smartExtract", "extractSubfolder", "compressZip", "compressEachZip", "compressTarZst", "compress7z"].contains(op)
     }
 
     static func isStandaloneCompressURL(_ url: URL) -> Bool {
@@ -177,8 +183,23 @@ extension WorkspaceViewModel {
         case "extractSubfolder":
             let archives = BoltArchiveEngine.filterArchiveURLs(paths)
             if !archives.isEmpty { quickExtractBatchInHUD(mode: .subfolder, archiveURLs: archives) }
+        case "extractTo":
+            let archives = BoltArchiveEngine.filterArchiveURLs(paths)
+            if !archives.isEmpty {
+                NSApp.activate(ignoringOtherApps: true)
+                let panel = NSOpenPanel()
+                panel.title = l10n.selectExtractDestTitle
+                panel.canChooseDirectories = true
+                panel.canChooseFiles = false
+                panel.allowsMultipleSelection = false
+                if panel.runModal() == .OK, let dest = panel.url {
+                    quickExtractBatchInHUD(mode: defaultExtractMode.extractMode, archiveURLs: archives, destinationOverride: dest)
+                }
+            }
         case "compressZip":
             if !paths.isEmpty { quickCompressInHUD(inputs: paths, format: .zip, algorithm: .deflate) }
+        case "compressEachZip":
+            if !paths.isEmpty { quickCompressEachToZipInHUD(inputs: paths) }
         case "compressTarZst":
             if !paths.isEmpty { quickCompressInHUD(inputs: paths, format: .tarZst, algorithm: .zstd) }
         case "compress7z":
@@ -209,30 +230,57 @@ extension WorkspaceViewModel {
             encryption: .none,
             password: nil,
             splitVolumeSizeBytes: nil,
-            excludeMacJunk: defaultStripMacJunk
+            excludeMacJunk: defaultStripMacJunk,
+            preserveSymlinks: preserveSymlinksOnCreate
         )
         hudModel.enqueue(.compress(inputs: inputs, outputURL: outputURL, options: options))
+    }
+
+    func quickCompressEachToZipInHUD(inputs: [URL]) {
+        guard !inputs.isEmpty else { return }
+        configureHUD()
+        let options = CreateArchiveOptions(
+            format: .zip,
+            algorithm: .deflate,
+            level: nil,
+            encryption: .none,
+            password: nil,
+            splitVolumeSizeBytes: nil,
+            excludeMacJunk: defaultStripMacJunk,
+            preserveSymlinks: preserveSymlinksOnCreate
+        )
+        for item in inputs {
+            let outURL = QuickTaskHUDModel.computeQuickCompressDestination(inputs: [item], format: .zip)
+            hudModel.enqueue(.compress(inputs: [item], outputURL: outURL, options: options))
+        }
     }
 
     func quickExtractInHUD(mode: ExtractMode, archiveURL: URL) {
         quickExtractBatchInHUD(mode: mode, archiveURLs: [archiveURL])
     }
 
-    func quickExtractBatchInHUD(mode: ExtractMode, archiveURLs: [URL]) {
+    func quickExtractBatchInHUD(mode: ExtractMode, archiveURLs: [URL], destinationOverride: URL? = nil, useInAppHUD: Bool = false) {
         guard !archiveURLs.isEmpty else { return }
-        configureHUD()
-        isPreparingHUDExtract = true
+        if useInAppHUD {
+            configureInAppHUD()
+        } else {
+            configureHUD()
+            isPreparingHUDExtract = true
+        }
         let enc = encodingOption
         let strip = defaultStripMacJunk
+        let restoreLinks = restoreSymlinksOnExtract
 
         let initialPlans: [(archiveURL: URL, options: ExtractOptions)] = archiveURLs.map { archiveURL in
+            let dest = destinationOverride ?? archiveURL.deletingLastPathComponent()
             let options = ExtractOptions(
-                destinationURL: archiveURL.deletingLastPathComponent(),
+                destinationURL: dest,
                 mode: mode,
                 overwritePolicy: .overwrite,
                 password: nil,
                 encoding: enc,
-                stripMacJunk: strip
+                stripMacJunk: strip,
+                restoreSymlinks: restoreLinks
             )
             return (archiveURL, options)
         }
@@ -272,28 +320,29 @@ extension WorkspaceViewModel {
                     alert.addButton(withTitle: l.cancel)
 
                     let response = alert.runModal()
-                    self.isPreparingHUDExtract = false
+                    if !useInAppHUD { self.isPreparingHUDExtract = false }
                     switch response {
                     case .alertFirstButtonReturn:
                         chosenOverwritePolicy = .overwrite
                     case .alertSecondButtonReturn:
                         chosenOverwritePolicy = .rename
                     default:
-                        if self.hudModel.phase == .idle && !self.hasVisibleMainWindow {
+                        if !useInAppHUD && self.hudModel.phase == .idle && !self.hasVisibleMainWindow {
                             self.onHUDDidHide?()
                         }
                         return
                     }
                 } else {
-                    self.isPreparingHUDExtract = false
+                    if !useInAppHUD { self.isPreparingHUDExtract = false }
                 }
 
+                let targetHUD = useInAppHUD ? self.inAppTaskHUD : self.hudModel
                 for item in checked {
                     var finalOpts = item.options
                     if item.conflicts?.hasConflicts == true && chosenOverwritePolicy == .rename {
                         finalOpts.overwritePolicy = .rename
                     }
-                    self.hudModel.enqueue(.extract(archiveURL: item.archiveURL, options: finalOpts))
+                    targetHUD.enqueue(.extract(archiveURL: item.archiveURL, options: finalOpts))
                 }
             }
         }
@@ -303,9 +352,28 @@ extension WorkspaceViewModel {
         guard let first = urls.first else { return }
         if urls.count == 1, ArchiveFormat.detect(from: first) != nil, !isDirectory(first) {
             openArchive(url: first, fromExternalFinder: fromExternalFinder)
+        } else if urls.count > 1, urls.allSatisfy({ ArchiveFormat.detect(from: $0) != nil && !isDirectory($0) }) {
+            pendingBatchArchiveDrop = PendingBatchArchivePrompt(urls: urls)
         } else {
             presentStandaloneCompressWizard(inputs: urls)
         }
+    }
+
+    func executeBatchArchiveDropAction(urls: [URL], mode: ExtractMode) {
+        guard let first = urls.first else { return }
+        let dest: URL
+        if let resolved = resolveDefaultExtractDirectory(for: first) {
+            dest = resolved
+        } else {
+            let panel = NSOpenPanel()
+            panel.title = l10n.selectExtractDestTitle
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.allowsMultipleSelection = false
+            guard panel.runModal() == .OK, let chosen = panel.url else { return }
+            dest = chosen
+        }
+        quickExtractBatchInHUD(mode: mode, archiveURLs: urls, destinationOverride: dest, useInAppHUD: true)
     }
 
     private func isDirectory(_ url: URL) -> Bool {

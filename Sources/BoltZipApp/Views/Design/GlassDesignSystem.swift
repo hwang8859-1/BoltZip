@@ -52,40 +52,61 @@ enum BoltGlassMetrics: Sendable {
 
     static func windowGlassTintAlpha(intensity: Double) -> CGFloat {
         let t = clamped(intensity)
-        return CGFloat(0.20 - t * 0.08)
+        return CGFloat(0.24 - t * 0.08)
     }
 
     static func windowVeilAlpha(intensity: Double, isDark: Bool, isColoredPreset: Bool) -> Double {
         let t = clamped(intensity)
         if isColoredPreset {
-            let minAlpha = isDark ? 0.24 : 0.28
-            return 0.86 - t * (0.86 - minAlpha)
+            let minAlpha = isDark ? 0.36 : 0.40
+            return 0.90 - t * (0.90 - minAlpha)
         }
-        return 0.82 - t * 0.56
+        let minAlpha = isDark ? 0.44 : 0.48
+        return 0.88 - t * (0.88 - minAlpha)
     }
 
     // MARK: L2 — Sheet single material + veil
 
     static func sheetVeilAlpha(intensity: Double, isDark: Bool, isColoredPreset: Bool) -> Double {
         let t = clamped(intensity)
-        let minAlpha = isColoredPreset ? (isDark ? 0.30 : 0.32) : (isDark ? 0.28 : 0.26)
-        return 0.84 - t * (0.84 - minAlpha)
+        let minAlpha = isColoredPreset ? (isDark ? 0.42 : 0.44) : (isDark ? 0.42 : 0.46)
+        return 0.88 - t * (0.88 - minAlpha)
     }
 
     // MARK: L3 — Content cards (fill + hairline only, never glass)
 
     static func cardFillAlpha(intensity: Double, isDark: Bool) -> Double {
         let t = clamped(intensity)
-        let base = isDark ? 0.12 : 0.10
+        let base = isDark ? 0.16 : 0.15
         return base - t * 0.04
     }
 
-    // MARK: L4' — Pinned bars / sticky covers (material + light scrim)
+    // MARK: L4' — Pinned bars / sticky covers (frosted material + calibrated readable veil)
 
     static func coverScrimAlpha(intensity: Double, isDark: Bool) -> Double {
         let t = clamped(intensity)
-        let base = isDark ? 0.36 : 0.34
-        return base - t * 0.14
+        let base = isDark ? 0.64 : 0.66
+        let minAlpha = isDark ? 0.36 : 0.38
+        return base - t * (base - minAlpha)
+    }
+
+    /// Lightweight within-card veil paired with `.safeAreaBar` + `.scrollEdgeEffectStyle(.soft, for: .top)`
+    /// so scrolled rows remain softly discernible ("半遮挡 / 玻璃进入效果") without sharp text collision.
+    static func scrollHeaderVeilAlpha(intensity: Double, isDark: Bool) -> Double {
+        let t = clamped(intensity)
+        let base = isDark ? 0.38 : 0.40
+        let minAlpha = isDark ? 0.14 : 0.16
+        return base - t * (base - minAlpha)
+    }
+
+    /// Calibrated glass veil for the Welcome screen's titlebar scroll pocket (`0..topOffset`)
+    /// paired with `.scrollEdgeEffectStyle(.hard, for: .top)` so scrolled cards blur cleanly behind
+    /// the traffic lights, window title, and toolbar capsule without bleeding sharp characters through.
+    static func titlebarScrollVeilAlpha(intensity: Double, isDark: Bool) -> Double {
+        let t = clamped(intensity)
+        let base = isDark ? 0.36 : 0.38
+        let minAlpha = isDark ? 0.14 : 0.16
+        return base - t * (base - minAlpha)
     }
 
     static func borderOpacity(level: BoltGlassLevel, isDark: Bool, increasedContrast: Bool) -> Double {
@@ -115,11 +136,15 @@ extension EnvironmentValues {
 }
 
 enum BoltRadius {
+    static func nested(in outer: CGFloat, padding: CGFloat) -> CGFloat {
+        max(6, outer - padding)
+    }
+
     static let hero: CGFloat = 16
+    static let bar: CGFloat = nested(in: hero, padding: 4)
     static let card: CGFloat = 14
-    static let bar: CGFloat = 12
-    static let badge: CGFloat = 10
-    static let row: CGFloat = 8
+    static let row: CGFloat = nested(in: card, padding: 6)
+    static let badge: CGFloat = nested(in: bar, padding: 2)
 }
 
 enum BoltType {
@@ -176,24 +201,30 @@ struct BoltGlassContainer<Content: View>: View {
 struct BoltGlassSectionCard<Content: View>: View {
     let title: String?
     var icon: String? = nil
+    var iconColor: Color = .cyan
     let glassEnabled: Bool
     var level: BoltGlassLevel = .card
     var tint: Color? = nil
+    var contentSpacing: CGFloat = 8
     @ViewBuilder let content: () -> Content
 
     init(
         _ title: String? = nil,
         icon: String? = nil,
+        iconColor: Color = .cyan,
         glassEnabled: Bool,
         level: BoltGlassLevel = .card,
         tint: Color? = nil,
+        contentSpacing: CGFloat = 8,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
         self.icon = icon
+        self.iconColor = iconColor
         self.glassEnabled = glassEnabled
         self.level = level
         self.tint = tint
+        self.contentSpacing = contentSpacing
         self.content = content
     }
 
@@ -204,7 +235,7 @@ struct BoltGlassSectionCard<Content: View>: View {
                     if let icon {
                         Image(systemName: icon)
                             .font(BoltType.captionMedium)
-                            .foregroundStyle(.cyan)
+                            .foregroundStyle(iconColor)
                     }
                     Text(title)
                         .font(BoltType.cardEyebrow)
@@ -213,7 +244,7 @@ struct BoltGlassSectionCard<Content: View>: View {
                 .padding(.horizontal, 4)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: contentSpacing) {
                 content()
             }
             .font(BoltType.subbody)
@@ -329,6 +360,40 @@ extension View {
 
     func boltSoftTopScrollEdgeEffect() -> some View {
         self.scrollEdgeEffectStyle(.soft, for: .top)
+    }
+
+    /// Pairs `.scrollEdgeEffectStyle(.soft, for: .top)` with `.safeAreaBar(edge: .top)` so macOS 26
+    /// progressively blurs scrolling rows as they glide beneath sticky headers ("半遮挡 / 玻璃进入效果").
+    func boltTopScrollHeaderBar<Header: View>(
+        glassEnabled: Bool,
+        dividerEdge: Edge? = .bottom,
+        @ViewBuilder header: @escaping () -> Header
+    ) -> some View {
+        self.modifier(
+            BoltTopScrollHeaderBarModifier(
+                glassEnabled: glassEnabled,
+                dividerEdge: dividerEdge,
+                header: header
+            )
+        )
+    }
+
+    /// Pairs `.scrollEdgeEffectStyle(.hard, for: .top)` with a uniform glass `.safeAreaBar` across `0..topOffset`
+    /// so Welcome page cards are frosted and blurred smoothly behind the window titlebar and toolbar capsules.
+    func boltTitlebarScrollEdgeBar(
+        height: CGFloat,
+        glassEnabled: Bool
+    ) -> some View {
+        self.modifier(
+            BoltTitlebarScrollEdgeBarModifier(
+                height: height,
+                glassEnabled: glassEnabled
+            )
+        )
+    }
+
+    func boltHardTopScrollEdgeEffect() -> some View {
+        self.scrollEdgeEffectStyle(.hard, for: .top)
     }
 }
 
@@ -490,6 +555,18 @@ private struct BoltWithinWindowGlassCoverModifier: ViewModifier {
                     ZStack {
                         Rectangle().fill(.regularMaterial)
                         Color(nsColor: .controlBackgroundColor).opacity(scrimAlpha)
+                        VStack {
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(isDark ? 0.14 : 0.34),
+                                    Color.clear
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 6)
+                            Spacer(minLength: 0)
+                        }
                     }
                     .clipShape(shape)
                 } else {
@@ -501,7 +578,7 @@ private struct BoltWithinWindowGlassCoverModifier: ViewModifier {
                 if dividerEdge != nil {
                     let dividerOpacity = colorSchemeContrast == .increased
                         ? 0.28
-                        : (isDark ? 0.18 : 0.11)
+                        : (isDark ? 0.20 : 0.12)
                     Rectangle()
                         .fill(
                             effectiveGlass
@@ -510,6 +587,92 @@ private struct BoltWithinWindowGlassCoverModifier: ViewModifier {
                         )
                         .frame(height: 0.5)
                 }
+            }
+    }
+}
+
+private struct BoltTopScrollHeaderBarModifier<Header: View>: ViewModifier {
+    let glassEnabled: Bool
+    let dividerEdge: Edge?
+    @ViewBuilder let header: () -> Header
+    @Environment(\.boltGlassIntensity) private var glassIntensity
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    func body(content: Content) -> some View {
+        let isDark = colorScheme == .dark
+        let effectiveGlass = glassEnabled && !reduceTransparency
+        let veilAlpha = BoltGlassMetrics.scrollHeaderVeilAlpha(intensity: glassIntensity, isDark: isDark)
+        let dividerOpacity = colorSchemeContrast == .increased
+            ? 0.26
+            : (isDark ? 0.14 : 0.08)
+
+        content
+            .scrollEdgeEffectStyle(.soft, for: .top)
+            .safeAreaBar(edge: .top) {
+                header()
+                    .background {
+                        if effectiveGlass {
+                            Color(nsColor: .controlBackgroundColor)
+                                .opacity(veilAlpha)
+                        } else {
+                            Color(nsColor: .windowBackgroundColor)
+                        }
+                    }
+                    .overlay(alignment: dividerEdge == .top ? .top : .bottom) {
+                        if dividerEdge != nil {
+                            Rectangle()
+                                .fill(
+                                    effectiveGlass
+                                        ? Color.primary.opacity(dividerOpacity)
+                                        : Color(nsColor: .separatorColor)
+                                )
+                                .frame(height: 0.5)
+                        }
+                    }
+            }
+    }
+}
+
+private struct BoltTitlebarScrollEdgeBarModifier: ViewModifier {
+    let height: CGFloat
+    let glassEnabled: Bool
+    @Environment(\.boltGlassIntensity) private var glassIntensity
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    func body(content: Content) -> some View {
+        let isDark = colorScheme == .dark
+        let effectiveGlass = glassEnabled && !reduceTransparency
+        let veilAlpha = BoltGlassMetrics.titlebarScrollVeilAlpha(intensity: glassIntensity, isDark: isDark)
+        let dividerOpacity = colorSchemeContrast == .increased
+            ? 0.22
+            : (isDark ? 0.12 : 0.07)
+
+        content
+            .scrollEdgeEffectStyle(.hard, for: .top)
+            .safeAreaBar(edge: .top) {
+                Group {
+                    if effectiveGlass {
+                        Color(nsColor: .windowBackgroundColor)
+                            .opacity(veilAlpha)
+                    } else {
+                        Color(nsColor: .windowBackgroundColor)
+                    }
+                }
+                .frame(height: height)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(
+                            effectiveGlass
+                                ? Color.primary.opacity(dividerOpacity)
+                                : Color(nsColor: .separatorColor)
+                        )
+                        .frame(height: 0.5)
+                }
+                .allowsHitTesting(false)
             }
     }
 }
@@ -544,5 +707,157 @@ private struct BoltGlassSheetStyleModifier: ViewModifier {
             .presentationBackground(
                 effectiveGlass ? AnyShapeStyle(.thinMaterial) : AnyShapeStyle(Color(nsColor: baseColor))
             )
+    }
+}
+
+// MARK: - Shared Form Row Primitives
+
+/// Standardized switch row shared by Settings and Create Archive panels.
+struct BoltFormSwitchRow<Leading: View>: View {
+    let title: String
+    var subtitle: String? = nil
+    @Binding var isOn: Bool
+    @ViewBuilder let leading: () -> Leading
+
+    init(
+        title: String,
+        subtitle: String? = nil,
+        isOn: Binding<Bool>,
+        @ViewBuilder leading: @escaping () -> Leading = { EmptyView() }
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self._isOn = isOn
+        self.leading = leading
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            leading()
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(BoltType.subbodyMedium)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(BoltType.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+            Spacer(minLength: 8)
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+        }
+    }
+}
+
+/// Standardized Liquid Glass dropdown menu row shared by Settings and Create Archive panels.
+struct BoltFormMenuRow<MenuContent: View>: View {
+    let title: String
+    var subtitle: String? = nil
+    let selectedTitle: String
+    @ViewBuilder let menuContent: () -> MenuContent
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(BoltType.subbodyMedium)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(BoltType.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            BoltGlassContainer {
+                Menu {
+                    menuContent()
+                } label: {
+                    Text(selectedTitle)
+                        .font(BoltType.subbody)
+                        .foregroundStyle(.primary)
+                }
+                .menuStyle(.button)
+                .boltGlassButton()
+                .controlSize(.small)
+                .fixedSize()
+            }
+        }
+    }
+}
+
+/// Unified checkmark-capable option button inside `BoltFormMenuRow`.
+struct BoltMenuOptionButton: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            if isSelected {
+                Label(title, systemImage: "checkmark")
+            } else {
+                Text(title)
+            }
+        }
+    }
+}
+
+/// Neutral low-contrast read-only badge clearly separated from interactive Liquid Glass controls.
+struct BoltReadOnlyBadge: View {
+    let text: String
+    var dotColor: Color? = nil
+    var isEmphasized: Bool = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let dotColor {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 6, height: 6)
+            }
+            Text(text)
+                .font(BoltType.monoCaption)
+                .monospacedDigit()
+                .foregroundStyle(isEmphasized ? Color.primary : Color.secondary)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 3)
+        .background(Color.primary.opacity(0.06), in: Capsule())
+        .overlay(
+            Capsule()
+                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
+        )
+    }
+}
+
+/// Unified elevated Liquid Glass footer bar shared across sheets and modal forms.
+struct BoltSheetFooterBar<Content: View>: View {
+    let glassEnabled: Bool
+    var spacing: CGFloat = 8
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        BoltGlassContainer(spacing: 10) {
+            HStack(spacing: spacing) {
+                content()
+            }
+            .padding(.horizontal, BoltMetrics.cardFooterHPad)
+            .padding(.vertical, BoltMetrics.cardFooterVPad)
+            .boltLayeredSurface(
+                glassEnabled: glassEnabled,
+                level: .elevated,
+                tone: .regular,
+                in: RoundedRectangle(cornerRadius: BoltRadius.bar, style: .continuous)
+            )
+        }
     }
 }

@@ -4,7 +4,7 @@ import SwiftUI
 extension ArchiveExplorerView {
     @ViewBuilder
     func rowContextMenu(ids: Set<String>, listing: ArchiveListing, l: L10n) -> some View {
-        let picked = vm.visibleEntries.filter { ids.contains($0.id) }
+        let picked = ids.compactMap { vm.visibleEntryByID[$0] }
         if let first = picked.first, picked.count == 1 {
             if vm.isSearchingActive {
                 Button {
@@ -61,7 +61,7 @@ extension ArchiveExplorerView {
             }
             Button(l.ctxDeleteFromArchive, role: .destructive) {
                 vm.selectedEntryIDs = ids
-                vm.deleteSelectedEntries()
+                vm.requestDeleteSelectedEntries()
             }
         }
     }
@@ -85,6 +85,22 @@ extension ArchiveExplorerView {
             }
             Button(l.ctxNewFolderHere) {
                 vm.activeSheet = .createFolder(parentFolder: vm.currentFolder)
+            }
+            Menu(l.zipAddAlgoLabel) {
+                ForEach(ArchiveFormat.zip.supportedAlgorithms) { algo in
+                    Button {
+                        vm.preferredZipEditAlgorithm = algo
+                    } label: {
+                        if vm.preferredZipEditAlgorithm == algo {
+                            Label(algo.shortName, systemImage: "checkmark")
+                        } else {
+                            Text(algo.shortName)
+                        }
+                    }
+                }
+            }
+            Button(l.archiveCommentEditBtn) {
+                vm.activeSheet = .editArchiveComment(current: listing.comment)
             }
         }
 

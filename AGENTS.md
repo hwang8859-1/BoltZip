@@ -48,10 +48,15 @@ BoltZip/
 │   │   │   ├── ZipWriter.swift          # ZIP/ZIP64 writer, split volumes (.z01/.zip), zero-recompress editing
 │   │   │   ├── TarCodec.swift           # Pure Swift USTAR/PAX tar + .tar.{gz,zst,xz,bz2,lz4} + single-stream
 │   │   │   └── ExtendedArchiveDriver.swift # .7z / .iso / .cab / .xar bridge via /usr/bin/tar (libarchive)
-│   │   └── Engine/
-│   │       ├── ArchiveAssociationService.swift # Shared LaunchServices UTI & default app association logic
-│   │       ├── BoltArchiveSession.swift # High-level BoltArchiveEngine (inspect, extract, create, editZip, test)
-│   │       └── BenchmarkRunner.swift    # Multi-codec local throughput & ratio benchmark
+│   │   ├── Engine/
+│   │   │   ├── ArchiveAssociationService.swift # Shared LaunchServices UTI & default app association logic
+│   │   │   ├── BoltArchiveSession.swift # High-level BoltArchiveEngine (inspect, extract, create, editZip, test)
+│   │   │   └── BenchmarkRunner.swift    # Multi-codec local throughput & ratio benchmark
+│   │   └── Icons/                       # Centralized AppIcon + 17 per-format Document Icon CG artwork & types
+│   │       ├── BoltIconTypes.swift
+│   │       ├── BoltIconArtwork.swift
+│   │       ├── BoltAppIconArtwork.swift
+│   │       └── BoltDocumentIconArtwork.swift
 │   ├── BoltZipCLI/
 │   │   └── main.swift                   # `boltzip` CLI (a, x, l, t, associate, bench, engines)
 │   ├── BoltZipFinderSync/
@@ -59,6 +64,10 @@ BoltZip/
 │   │   └── FinderSync.entitlements
 │   └── BoltZipApp/                      # Native macOS Liquid Glass desktop app
 │       ├── BoltZipApp.swift             # App entry, NSApplicationDelegate, URL scheme (`boltzip://`) handler
+│       ├── Icons/                       # Cached AppKit bridge, SwiftUI icon views & entry file-icon resolver
+│       │   ├── BoltIconRenderer.swift
+│       │   ├── BoltBrandIconViews.swift
+│       │   └── BoltFileIconCatalog.swift
 │       ├── Localization/L10n.swift      # Idiomatic multi-language engine (Follow System / zh-Hans / zh-Hant / en / ja)
 │       ├── Models/WorkspaceViewModel.swift
 │       ├── Services/

@@ -15,6 +15,7 @@ struct ArchiveExplorerView: View {
     @State private var lastTappedEntryID: String?
     @State private var lastTapTime: Date = .distantPast
     @State private var selectionAnchorID: String?
+    @State private var pointerTracker = ExplorerPointerTracker()
 
     private static let dateFormatter: DateFormatter = {
         let df = DateFormatter()
@@ -49,11 +50,6 @@ struct ArchiveExplorerView: View {
                 .padding(.top, topOffset + 4)
                 .padding(.bottom, 10)
                 .frame(width: w, height: geo.size.height)
-
-                Color.clear
-                    .frame(width: w, height: topOffset)
-                    .boltWithinWindowGlassCover(glassEnabled: glassEnabled, dividerEdge: .bottom)
-                    .allowsHitTesting(false)
             }
         }
         .ignoresSafeArea(.container, edges: .top)
@@ -62,11 +58,16 @@ struct ArchiveExplorerView: View {
             expandAncestors(for: vm.currentFolder)
         }
         .onChange(of: listing.archiveURL) { _, _ in
+            pointerTracker.hoveredEntry = nil
             seedExpandedFolders(from: vm.folderTree)
             expandAncestors(for: vm.currentFolder)
         }
         .onChange(of: vm.currentFolder) { _, newPath in
+            pointerTracker.hoveredEntry = nil
             expandAncestors(for: newPath)
+        }
+        .onChange(of: vm.selectedEntryIDs) { _, _ in
+            vm.scheduleDebouncedQuickLookUpdateIfVisible()
         }
     }
 
@@ -74,44 +75,42 @@ struct ArchiveExplorerView: View {
     private func leftGlassSidebar(l: L10n, glassEnabled: Bool) -> some View {
         BoltGlassContainer(spacing: 8) {
             VStack(spacing: 8) {
-                ZStack(alignment: .top) {
-                    ScrollViewReader { treeProxy in
-                        ScrollView(.vertical, showsIndicators: true) {
-                            LazyVStack(alignment: .leading, spacing: 2) {
-                                GlassFolderTreeRow(
-                                    node: vm.folderTree,
-                                    depth: 0,
-                                    vm: vm,
-                                    canEditZip: listing.canEditInPlace,
-                                    glassEnabled: glassEnabled,
-                                    expandedPaths: $expandedFolderPaths
-                                )
-                            }
-                            .padding(.horizontal, 6)
-                            .padding(.top, 6)
-                            .padding(.bottom, 8)
+                ScrollViewReader { treeProxy in
+                    ScrollView(.vertical, showsIndicators: true) {
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            GlassFolderTreeRow(
+                                node: vm.folderTree,
+                                depth: 0,
+                                selectedFolder: vm.currentFolder,
+                                l: l,
+                                canEditZip: listing.canEditInPlace,
+                                glassEnabled: glassEnabled,
+                                expandedPaths: $expandedFolderPaths,
+                                vm: vm
+                            )
                         }
-                        .contentMargins(.top, BoltMetrics.headerHeight, for: .scrollContent)
-                        .contentMargins(.top, BoltMetrics.headerHeight, for: .scrollIndicators)
-                        .onChange(of: vm.currentFolder) { _, newPath in
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                treeProxy.scrollTo(newPath, anchor: .center)
-                            }
+                        .padding(.horizontal, 6)
+                        .padding(.top, 6)
+                        .padding(.bottom, 8)
+                    }
+                    .boltTopScrollHeaderBar(glassEnabled: glassEnabled, dividerEdge: .bottom) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "folder.fill")
+                                .font(BoltType.captionMedium)
+                                .foregroundStyle(.cyan)
+                            Text(l.folderTreeSection)
+                                .font(BoltType.cardEyebrow)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(height: BoltMetrics.headerHeight)
+                    }
+                    .onChange(of: vm.currentFolder) { _, newPath in
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            treeProxy.scrollTo(newPath, anchor: .center)
                         }
                     }
-
-                    HStack(spacing: 6) {
-                        Image(systemName: "folder.fill")
-                            .font(BoltType.captionMedium)
-                            .foregroundStyle(.cyan)
-                        Text(l.folderTreeSection)
-                            .font(BoltType.cardEyebrow)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(height: BoltMetrics.headerHeight)
-                    .boltWithinWindowGlassCover(glassEnabled: glassEnabled, dividerEdge: .bottom)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous))
@@ -170,16 +169,7 @@ struct ArchiveExplorerView: View {
     @ViewBuilder
     private func archiveOverviewInspectorSection(l: L10n, glassEnabled: Bool) -> some View {
         HStack {
-            Text(listing.format.displayName)
-                .font(BoltType.badge)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-                .boltLayeredSurface(
-                    glassEnabled: glassEnabled,
-                    tone: .regular,
-                    tint: .cyan.opacity(0.16),
-                    in: Capsule()
-                )
+            BoltReadOnlyBadge(text: listing.format.displayName, isEmphasized: true)
             Spacer()
             if listing.hasEncryptedEntries {
                 Label(l.encryptedBadge, systemImage: "lock.fill")
@@ -196,6 +186,25 @@ struct ArchiveExplorerView: View {
             value: String(format: "%.1f%%", listing.overallCompressionRatioPercent),
             valueColor: .green
         )
+
+        if !listing.comment.isEmpty || listing.canEditInPlace {
+            HStack(spacing: 6) {
+                Text(l.archiveCommentTitle)
+                    .font(BoltType.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                Button {
+                    vm.activeSheet = .editArchiveComment(current: listing.comment)
+                } label: {
+                    Text(listing.comment.isEmpty ? l.archiveCommentEditBtn : listing.comment)
+                        .font(BoltType.caption)
+                        .foregroundStyle(listing.comment.isEmpty ? Color.accentColor : Color.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     @ViewBuilder
@@ -206,7 +215,7 @@ struct ArchiveExplorerView: View {
             : (ext.isEmpty ? l.inspectorGenericFile : l.inspectorFileExt(ext))
 
         HStack(spacing: 6) {
-            Image(systemName: entry.isDirectory ? "folder.fill" : iconForFile(entry.name))
+            Image(systemName: BoltFileIconCatalog.sfSymbolName(for: entry))
                 .font(BoltType.subbody)
                 .foregroundStyle(entry.isDirectory ? Color.accentColor : Color.cyan)
             VStack(alignment: .leading, spacing: 1) {
@@ -268,16 +277,7 @@ struct ArchiveExplorerView: View {
     @ViewBuilder
     private func multiSelectionInspectorSection(count: Int, l: L10n, glassEnabled: Bool) -> some View {
         HStack {
-            Text(l.selectedMultiTitle(count))
-                .font(BoltType.badge)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-                .boltLayeredSurface(
-                    glassEnabled: glassEnabled,
-                    tone: .regular,
-                    tint: .cyan.opacity(0.18),
-                    in: Capsule()
-                )
+            BoltReadOnlyBadge(text: l.selectedMultiTitle(count), isEmphasized: true)
             Spacer()
         }
 
@@ -339,63 +339,70 @@ struct ArchiveExplorerView: View {
         VStack(spacing: 8) {
             GeometryReader { paneGeo in
                 let cols = ExplorerColumnMetrics(availableWidth: paneGeo.size.width)
-                ZStack(alignment: .top) {
-                    ScrollViewReader { fileProxy in
-                        ScrollView(.vertical, showsIndicators: true) {
-                            LazyVStack(spacing: 2) {
-                                Color.clear
-                                    .frame(height: 0)
-                                    .id("EXPLORER_TOP")
+                let selectedIDs = vm.selectedEntryIDs
+                ScrollViewReader { fileProxy in
+                    ScrollView(.vertical, showsIndicators: true) {
+                        LazyVStack(spacing: 2) {
+                            Color.clear
+                                .frame(height: 0)
+                                .id("EXPLORER_TOP")
 
-                                ForEach(vm.visibleEntries) { entry in
-                                    ExplorerFileRow(
-                                        entry: entry,
-                                        isSelected: vm.selectedEntryIDs.contains(entry.id),
-                                        cols: cols,
-                                        dateString: Self.dateFormatter.string(from: entry.modifiedDate),
-                                        iconName: entry.isDirectory ? "folder.fill" : iconForFile(entry.name),
-                                        onTap: { handleRowTap(entry) }
-                                    )
-                                    .contextMenu {
-                                        let targetIDs: Set<String> = vm.selectedEntryIDs.contains(entry.id)
-                                            ? vm.selectedEntryIDs
-                                            : [entry.id]
-                                        rowContextMenu(ids: targetIDs, listing: listing, l: l)
-                                    }
+                            ForEach(vm.visibleEntries) { entry in
+                                ExplorerFileRow(
+                                    entry: entry,
+                                    isSelected: selectedIDs.contains(entry.id),
+                                    cols: cols,
+                                    dateString: Self.dateFormatter.string(from: entry.modifiedDate),
+                                    iconName: BoltFileIconCatalog.sfSymbolName(for: entry),
+                                    pointerTracker: pointerTracker,
+                                    onTap: { handleRowTap(entry) }
+                                )
+                                .contextMenu {
+                                    let targetIDs: Set<String> = vm.selectedEntryIDs.contains(entry.id)
+                                        ? vm.selectedEntryIDs
+                                        : [entry.id]
+                                    rowContextMenu(ids: targetIDs, listing: listing, l: l)
                                 }
                             }
-                            .padding(.horizontal, 6)
-                            .padding(.top, 4)
-                            .padding(.bottom, 8)
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .contentMargins(.top, BoltMetrics.headerHeight, for: .scrollContent)
-                        .contentMargins(.top, BoltMetrics.headerHeight, for: .scrollIndicators)
-                        .onChange(of: vm.currentFolder) { _, _ in
-                            fileProxy.scrollTo("EXPLORER_TOP", anchor: .top)
-                        }
-                        .onChange(of: vm.searchText) { _, _ in
-                            fileProxy.scrollTo("EXPLORER_TOP", anchor: .top)
-                        }
-                        .onChange(of: vm.sortColumn) { _, _ in
-                            fileProxy.scrollTo("EXPLORER_TOP", anchor: .top)
-                        }
-                        .onChange(of: vm.sortAscending) { _, _ in
-                            fileProxy.scrollTo("EXPLORER_TOP", anchor: .top)
-                        }
-                        .background {
-                            Color.clear
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    vm.selectedEntryIDs.removeAll()
-                                }
-                                .contextMenu {
-                                    emptySpaceContextMenu(listing: listing, l: l)
-                                }
-                        }
+                        .padding(.horizontal, 6)
+                        .padding(.top, 4)
+                        .padding(.bottom, 8)
                     }
-
-                    fileListColumnHeader(l: l, cols: cols, glassEnabled: glassEnabled)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .boltTopScrollHeaderBar(glassEnabled: glassEnabled, dividerEdge: .bottom) {
+                        fileListColumnHeader(l: l, cols: cols)
+                    }
+                    .onChange(of: vm.currentFolder) { _, _ in
+                        fileProxy.scrollTo("EXPLORER_TOP", anchor: .top)
+                    }
+                    .onChange(of: vm.searchText) { _, _ in
+                        fileProxy.scrollTo("EXPLORER_TOP", anchor: .top)
+                    }
+                    .onChange(of: vm.sortColumn) { _, _ in
+                        fileProxy.scrollTo("EXPLORER_TOP", anchor: .top)
+                    }
+                    .onChange(of: vm.sortAscending) { _, _ in
+                        fileProxy.scrollTo("EXPLORER_TOP", anchor: .top)
+                    }
+                    .background {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                vm.selectedEntryIDs.removeAll()
+                            }
+                            .contextMenu {
+                                emptySpaceContextMenu(listing: listing, l: l)
+                            }
+                    }
+                }
+                .background {
+                    ExplorerListDragHost(
+                        vm: vm,
+                        pointerTracker: pointerTracker,
+                        headerHeight: BoltMetrics.headerHeight,
+                        rowPitch: 32
+                    )
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -444,7 +451,7 @@ struct ArchiveExplorerView: View {
     }
 
     @ViewBuilder
-    private func fileListColumnHeader(l: L10n, cols: ExplorerColumnMetrics, glassEnabled: Bool) -> some View {
+    private func fileListColumnHeader(l: L10n, cols: ExplorerColumnMetrics) -> some View {
         HStack(spacing: 12) {
             sortableColumnHeader(l.colName, column: .name, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -469,13 +476,32 @@ struct ArchiveExplorerView: View {
         }
         .padding(.horizontal, 14)
         .frame(height: BoltMetrics.headerHeight)
-        .boltWithinWindowGlassCover(glassEnabled: glassEnabled, dividerEdge: .bottom)
     }
 
     @ViewBuilder
     private func bottomBreadcrumbBar(l: L10n, glassEnabled: Bool) -> some View {
         BoltGlassContainer(spacing: 8) {
             HStack(spacing: 10) {
+                if let parentFrame = vm.archiveBackStack.last {
+                    Button {
+                        vm.navigateBackFromNestedArchive()
+                    } label: {
+                        Label(l.backToParentArchive(parentFrame.archiveURL.lastPathComponent), systemImage: "arrow.uturn.backward")
+                            .font(BoltType.captionMedium)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                    }
+                    .buttonStyle(.plain)
+                    .boltLayeredSurface(
+                        glassEnabled: glassEnabled,
+                        level: .elevated,
+                        tone: .regular,
+                        tint: .orange.opacity(0.18),
+                        interactive: true,
+                        in: Capsule()
+                    )
+                }
+
                 ScrollViewReader { crumbProxy in
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 3) {
@@ -567,7 +593,7 @@ struct ArchiveExplorerView: View {
 
     private func previewSelectedOrReturnIgnored() -> KeyPress.Result {
         guard let firstID = vm.selectedEntryIDs.first,
-              let entry = vm.visibleEntries.first(where: { $0.id == firstID }) else { return .ignored }
+              let entry = vm.visibleEntryByID[firstID] else { return .ignored }
         vm.previewOrOpenEntry(entry)
         return .handled
     }
@@ -628,14 +654,12 @@ struct ArchiveExplorerView: View {
 
     private func seedExpandedFolders(from root: FolderTreeNode) {
         var expanded: Set<String> = [root.path]
-        var queue: [FolderTreeNode] = [root]
-        var index = 0
-        while index < queue.count && expanded.count < 140 {
-            let current = queue[index]
-            index += 1
-            for child in current.children where expanded.count < 140 {
-                expanded.insert(child.path)
-                queue.append(child)
+        if root.children.count == 1, let singleTop = root.children.first {
+            // Auto-expand single top-level wrapper folder so inner root structure is immediately visible
+            expanded.insert(singleTop.path)
+            for grandChild in singleTop.children.prefix(24) {
+                if expanded.count >= 26 { break }
+                expanded.insert(grandChild.path)
             }
         }
         expandedFolderPaths = expanded
@@ -649,20 +673,6 @@ struct ArchiveExplorerView: View {
         for part in parts {
             acc += part + "/"
             expandedFolderPaths.insert(acc)
-        }
-    }
-
-    private func iconForFile(_ name: String) -> String {
-        let ext = (name as NSString).pathExtension.lowercased()
-        switch ext {
-        case "swift", "c", "h", "js", "ts", "py", "json", "xml", "html", "css": return "chevron.left.forwardslash.chevron.right"
-        case "png", "jpg", "jpeg", "webp", "gif", "svg": return "photo"
-        case "pdf": return "doc.richtext"
-        case "md", "txt", "log": return "doc.text"
-        case "zip", "7z", "tar", "gz", "zst", "xz": return "doc.zipper"
-        case "mp4", "mov": return "film"
-        case "mp3", "wav", "m4a": return "waveform"
-        default: return "doc"
         }
     }
 }
