@@ -803,9 +803,8 @@ final class BoltZipCoreTests: XCTestCase {
     }
 
     func testCentralizedVersionMetadata() {
-        XCTAssertFalse(BoltZipVersion.current.isEmpty)
-        XCTAssertEqual(BoltZipVersion.current, "1.0.2")
-        XCTAssertFalse(BoltZipVersion.build.isEmpty)
+        XCTAssertEqual(BoltZipVersion.current, "1.0.3")
+        XCTAssertEqual(BoltZipVersion.build, "14")
     }
 
     func testMultiCoreConcurrencyControlAutoAndFixedCoreCount() throws {

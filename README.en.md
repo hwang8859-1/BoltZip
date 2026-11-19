@@ -10,11 +10,11 @@
 
 ![macOS 26.0+](https://img.shields.io/badge/macOS-26.0%2B%20(Apple%20Silicon)-0ea5e9?style=flat-square)
 ![Swift 6.2](https://img.shields.io/badge/Swift-6.2-6366f1?style=flat-square)
-[![Release v1.0.2](https://img.shields.io/badge/release-v1.0.2-facc15?style=flat-square)](https://github.com/hwang8859-1/BoltZip/releases/latest)
+[![Release v1.0.3](https://img.shields.io/badge/release-v1.0.3-facc15?style=flat-square)](https://github.com/hwang8859-1/BoltZip/releases/latest)
 ![License MIT](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)
 
 <p>
-  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.dmg"><strong>⬇️ Download Latest v1.0.2 (.dmg · Apple Silicon)</strong></a>
+  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.3/BoltZip-1.0.3-macOS-arm64.dmg"><strong>⬇️ Download Latest v1.0.3 (.dmg · Apple Silicon)</strong></a>
   &nbsp;·&nbsp;
   <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg">🛡 Compatible v0.9.3 (.dmg · Intel / macOS 12–26)</a>
   &nbsp;·&nbsp;
@@ -38,7 +38,7 @@
 
 | Mac & macOS Compatibility | Recommended Release | Direct Download | Release Page |
 | :--- | :--- | :--- | :--- |
-| **Apple Silicon (`arm64`) · macOS 26.0+** | **`v1.0.2`** (Latest) | [Download `.dmg` Installer](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.dmg) · [Portable `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.zip) | [Release v1.0.2 ↗](https://github.com/hwang8859-1/BoltZip/releases/latest) |
+| **Apple Silicon (`arm64`) · macOS 26.0+** | **`v1.0.3`** (Latest) | [Download `.dmg` Installer](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.3/BoltZip-1.0.3-macOS-arm64.dmg) · [Portable `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.3/BoltZip-1.0.3-macOS-arm64.zip) | [Release v1.0.3 ↗](https://github.com/hwang8859-1/BoltZip/releases/latest) |
 | **Intel (`x86_64`) or macOS 12.0–15 / 26+** | **`v0.9.3`** (Universal LTS) | [Download `.dmg` Installer](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg) · [Portable `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.zip) | [Release v0.9.3 ↗](https://github.com/hwang8859-1/BoltZip/releases/tag/v0.9.3) |
 
 - **3-Step Install**: Open the downloaded `.dmg` → drag `BoltZip.app` into `Applications` → launch BoltZip and enable the **Finder `Bolt ›` Context Menu** & **Default File Associations** in Settings with one click.
@@ -90,7 +90,7 @@ swift run -c release boltzip x release.zip ./out --mode smart
 
 ## 🧩 Interactive Showcase & Developer Docs
 
-- **Live Showcase & Download Page**: Visit [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/) to explore the live interactive Windows-Zip UI simulator, multi-language switcher, codec benchmarks, and direct downloads for `BoltZip v1.0.2 Apple Silicon` & source archives (sources in [showcase/](showcase/)).
+- **Live Showcase**: Explore the UI simulator, language switcher, and codec benchmarks on the [showcase site](https://122.51.112.183/boltzip/). Get the latest packages from GitHub Releases above. The website source is in [showcase/](showcase/).
 - **Contributor & AI Agent Guide**: See [AGENTS.md](AGENTS.md) for architecture boundaries, static-linking details, and engineering invariants.
 - **Release History**: See [CHANGELOG.md](CHANGELOG.md).
 

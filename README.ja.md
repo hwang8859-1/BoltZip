@@ -10,11 +10,11 @@
 
 ![macOS 26.0+](https://img.shields.io/badge/macOS-26.0%2B%20(Apple%20Silicon)-0ea5e9?style=flat-square)
 ![Swift 6.2](https://img.shields.io/badge/Swift-6.2-6366f1?style=flat-square)
-[![Release v1.0.2](https://img.shields.io/badge/release-v1.0.2-facc15?style=flat-square)](https://github.com/hwang8859-1/BoltZip/releases/latest)
+[![Release v1.0.3](https://img.shields.io/badge/release-v1.0.3-facc15?style=flat-square)](https://github.com/hwang8859-1/BoltZip/releases/latest)
 ![License MIT](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)
 
 <p>
-  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.dmg"><strong>⬇️ 最新版 v1.0.2 をダウンロード (.dmg · Apple Silicon)</strong></a>
+  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.3/BoltZip-1.0.3-macOS-arm64.dmg"><strong>⬇️ 最新版 v1.0.3 をダウンロード (.dmg · Apple Silicon)</strong></a>
   &nbsp;·&nbsp;
   <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg">🛡 互換版 v0.9.3 (.dmg · Intel / macOS 12–26)</a>
   &nbsp;·&nbsp;
@@ -38,7 +38,7 @@
 
 | 対象 Mac / macOS | 推奨バージョン | 直接ダウンロード | リリースページ |
 | :--- | :--- | :--- | :--- |
-| **Apple Silicon (`arm64`) · macOS 26.0+** | **`v1.0.2`**（最新安定版） | [`.dmg` インストーラー](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.dmg) · [ポータブル `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.zip) | [Release v1.0.2 ↗](https://github.com/hwang8859-1/BoltZip/releases/latest) |
+| **Apple Silicon (`arm64`) · macOS 26.0+** | **`v1.0.3`**（最新安定版） | [`.dmg` インストーラー](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.3/BoltZip-1.0.3-macOS-arm64.dmg) · [ポータブル `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.3/BoltZip-1.0.3-macOS-arm64.zip) | [Release v1.0.3 ↗](https://github.com/hwang8859-1/BoltZip/releases/latest) |
 | **Intel (`x86_64`) または macOS 12.0–15 / 26+** | **`v0.9.3`**（Universal 互換版） | [`.dmg` インストーラー](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg) · [ポータブル `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.zip) | [Release v0.9.3 ↗](https://github.com/hwang8859-1/BoltZip/releases/tag/v0.9.3) |
 
 - **導入手順**：ダウンロードした `.dmg` を開く → `BoltZip.app` を `Applications` へドラッグ → 起動後、設定画面から **Finder 右クリック「Bolt ›」メニュー** と **既定の関連付け** をワンクリックで有効化できます。
@@ -90,7 +90,7 @@ swift run -c release boltzip x release.zip ./out --mode smart
 
 ## 🧩 紹介ページ ＆ 開発者向けドキュメント
 
-- **オンライン紹介・ダウンロードページ**：公開サイト [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/) にて UI シミュレーター、圧縮エンジン比較、および `BoltZip v1.0.2 Apple Silicon` とソースコードアーカイブのダウンロードをご確認いただけます（ソースは [showcase/](showcase/) に同梱）。
+- **オンライン紹介**：[製品紹介サイト](https://122.51.112.183/boltzip/) で UI シミュレーター、言語切り替え、圧縮エンジンの比較をお試しいただけます。最新版は上記の GitHub Releases から入手できます。サイトのソースコードは [showcase/](showcase/) にあります。
 - **AI Agent / コントリビューターガイド**：[AGENTS.md](AGENTS.md) をご覧ください。
 - **変更履歴**：[CHANGELOG.md](CHANGELOG.md) をご覧ください。
 

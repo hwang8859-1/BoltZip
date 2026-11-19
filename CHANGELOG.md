@@ -2,6 +2,17 @@
 
 All notable changes to **BoltZip** will be documented in this file.
 
+## [1.0.3] - 2026-11-19
+
+### Improved
+- Reorganized the welcome screen with a dedicated feature card and a compact window that shows the drop zone with equal margins.
+- Added an optional gold sweep for the Dock icon. The selected light or dark icon and gold tip persist after quitting when the app is pinned to the Dock.
+
+### Fixed
+- Stage extracted entries before replacement so failed or canceled extraction leaves existing files intact.
+- Reject unsupported archive size totals and mismatched ZIP decoded sizes before committing output.
+- Build release source archives from a clean commit and tighten release-branch validation and archival safeguards.
+
 ## [1.0.2] - 2026-11-19 (`dev-1.0.2`: Streaming Engine, Symlinks, Drag-Out, Updater, Adaptive Icons & Reliability Hardening)
 
 ### Core Engine & Format Support
