@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="showcase/app-icon.png" width="112" height="112" alt="BoltZip" />
+
 # BoltZip ⚡
 
 **稲妻の速さ、ガラスの透明感 —— macOS のためのオープンソース書庫スタジオ**
@@ -8,8 +10,18 @@
 
 ![macOS 26.0+](https://img.shields.io/badge/macOS-26.0%2B%20(Apple%20Silicon)-0ea5e9?style=flat-square)
 ![Swift 6.2](https://img.shields.io/badge/Swift-6.2-6366f1?style=flat-square)
-![Release v1.0.1](https://img.shields.io/badge/release-v1.0.1-facc15?style=flat-square)
+[![Release v1.0.1](https://img.shields.io/badge/release-v1.0.1-facc15?style=flat-square)](https://github.com/hwang8859-1/BoltZip/releases/latest)
 ![License MIT](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)
+
+<p>
+  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.1/BoltZip-1.0.1-macOS-arm64.dmg"><strong>⬇️ 最新版 v1.0.1 をダウンロード (.dmg · Apple Silicon)</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg">🛡 互換版 v0.9.3 (.dmg · Intel / macOS 12–26)</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/hwang8859-1/BoltZip/releases/latest">📦 GitHub Releases</a>
+  &nbsp;·&nbsp;
+  <a href="https://122.51.112.183/boltzip/">🌐 オンライン配布ページ</a>
+</p>
 
 </div>
 
@@ -17,10 +29,21 @@
 
 **BoltZip** は **Apple Silicon（M シリーズ `arm64`）& macOS 26.0+ 専用** に最適化されたオープンソースの圧縮・展開ツールです。7-Zip / WinZip / Bandizip など Windows 定番圧縮ソフトの軽快な操作性とネイティブの **Liquid Glass** を融合しました。
 
-> 💡 **Intel Mac や macOS 12〜15 をお使いの方**：長期互換リリース **v0.9.3 Universal (`arm64 + x86_64`)** を [`legacy/macos-12`](../../tree/legacy/macos-12) ブランチおよび `v0.9.3` タグにて提供しています。
+> 💡 **Intel Mac や macOS 12〜15 をお使いの方**：長期互換リリース **v0.9.3 Universal (`arm64 + x86_64`)** を [`legacy/macos-12`](../../tree/legacy/macos-12) ブランチおよび [`v0.9.3`](https://github.com/hwang8859-1/BoltZip/releases/tag/v0.9.3) タグにて提供しています。
 
 > [!IMPORTANT]
 > **現在の開発ブランチ：[GitHub デフォルトの `dev-*` ブランチ](../../)** · `main` は保護されたリリース専用ブランチです。PR は必ず現在のデフォルト開発ブランチをターゲットに作成してください（詳細は [CONTRIBUTING.md](CONTRIBUTING.md)）。
+
+## ⬇️ クイックダウンロード ＆ インストール
+
+| 対象 Mac / macOS | 推奨バージョン | 直接ダウンロード | リリースページ |
+| :--- | :--- | :--- | :--- |
+| **Apple Silicon (`arm64`) · macOS 26.0+** | **`v1.0.1`**（最新安定版） | [`.dmg` インストーラー](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.1/BoltZip-1.0.1-macOS-arm64.dmg) · [ポータブル `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.1/BoltZip-1.0.1-macOS-arm64.zip) | [Release v1.0.1 ↗](https://github.com/hwang8859-1/BoltZip/releases/latest) |
+| **Intel (`x86_64`) または macOS 12.0–15 / 26+** | **`v0.9.3`**（Universal 互換版） | [`.dmg` インストーラー](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg) · [ポータブル `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.zip) | [Release v0.9.3 ↗](https://github.com/hwang8859-1/BoltZip/releases/tag/v0.9.3) |
+
+- **導入手順**：ダウンロードした `.dmg` を開く → `BoltZip.app` を `Applications` へドラッグ → 起動後、設定画面から **Finder 右クリック「Bolt ›」メニュー** と **既定の関連付け** をワンクリックで有効化できます。
+- **Web 配布ページ**：[**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/) でもお使いの Mac に合わせた推奨トラック案内と `SHA256SUMS.txt` をご確認いただけます。
+- **初回起動時の補足**：オープンソース配布版はアドホック署名のため、初回起動時に警告が出た場合は `BoltZip.app` を右クリック → **開く**（または「システム設定 → プライバシーとセキュリティ → **このまま開く**」）を選択してください。
 
 ## ✨ 主な特長
 
