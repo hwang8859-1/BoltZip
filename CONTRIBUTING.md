@@ -6,7 +6,8 @@
 
 | 分支 | 用途 | 保护与协作规则 |
 | :--- | :--- | :--- |
-| **[默认 `dev-*` 分支](../../)** *(当前 `dev-1.0.2`)* | **当前活跃开发分支** | 所有日常开发与外部贡献 PR **均须基于并提交至此默认分支**；受 Ruleset 保护禁止强推与误删 |
+| **[默认 `dev-*` 分支](../../)** *(当前 `dev-1.0.3`)* | **当前活跃开发分支** | 所有日常开发与外部贡献 PR **均须基于并提交至此默认分支**；受 Ruleset 保护禁止强推与误删 |
+| **已归档 `dev-*` 分支** | **历史版本只读归档** | 发布后永久保留，**禁止提交、推送、合并与删除**；旧版本修复请走当前活跃分支并随下一版本发布 |
 | **`main`** | **稳定发布分支**（受保护） | 禁止直接 `git push`；仅接收从活跃 `dev-*` 合入的版本发布 PR，受 [`pr-target-guard`](.github/workflows/pr-target-guard.yml) 强校验 |
 | **`legacy/macos-12`** | **v0.9.3 LTS 兼容分支** | 仅维护 Intel (`x86_64`) + macOS 12–26 关键兼容性修复；受 Ruleset 保护禁止强推与删除 |
 
@@ -31,16 +32,19 @@
 
 ## 维护者发版切分支流程
 
-版本发布完成（通过 Merge Commit 将活跃 `dev-*` 合入 `main` 并创建 `vX.Y.Z` Tag）后，运行脚本切换至下一版本分支并清理已合入旧分支：
+版本发布完成（通过 Merge Commit 将活跃 `dev-*` 合入 `main` 并创建 `vX.Y.Z` Tag）后，运行脚本切换至下一版本分支，**旧分支保留为只读归档**：
 
 ```bash
-./Scripts/cut_next_dev_branch.sh dev-1.0.3 --cleanup-old dev-1.0.2
+./Scripts/cut_next_dev_branch.sh dev-1.0.4
 ```
+
+切勿传 `--cleanup-old`。发布后的旧 `dev-*` 分支必须原样保留，并立即在 GitHub `Settings → Rules` 中为其设置 `Restrict updates` 与 `Restrict deletions`；任何修复只能进入当前活跃分支并随下一版本发布。
 
 ---
 
 ## Branch Workflow (English)
 
-- **[Default `dev-*` branch](../../)** *(currently `dev-1.0.2`)*: Active development branch. Always branch from it and target it as your PR base branch (protected against force pushes and deletion via repository rulesets).
+- **[Default `dev-*` branch](../../)** *(currently `dev-1.0.3`)*: Active development branch. Always branch from it and target it as your PR base branch (protected against force pushes and deletion via repository rulesets).
+- **Archived `dev-*` branches**: Released `dev-X.Y.Z` branches are kept permanently as read-only archives. Never commit, push, merge, or delete them; fixes belong to the active `dev-*` branch and the next release.
 - **`main`** *(protected)*: Release-only branch. Direct pushes are blocked, and non-release PRs targeting `main` are automatically closed by [`pr-target-guard`](.github/workflows/pr-target-guard.yml).
 - **`legacy/macos-12`**: Maintenance branch for macOS 12–26 Universal (`arm64` + `x86_64`) v0.9.x releases.
