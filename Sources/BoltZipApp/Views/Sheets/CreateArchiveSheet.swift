@@ -162,6 +162,11 @@ struct CreateArchiveSheet: View {
             }
             .padding(.horizontal, BoltMetrics.cardHeaderHPad)
             .padding(.vertical, BoltMetrics.cardHeaderVPad)
+            .background {
+                if isStandaloneWindow {
+                    BoltWindowDragHandle()
+                }
+            }
             .boltLayeredSurface(
                 glassEnabled: glassEnabled,
                 level: .elevated,

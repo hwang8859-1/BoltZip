@@ -348,7 +348,7 @@ struct MainWindowView: View {
                         label: l.settingsMenuTitle,
                         helpText: l.settingsMenuTitle
                     ) {
-                        NSApp.activate(ignoringOtherApps: true)
+                        boltActivateAppToForeground()
                         openSettings()
                     }
                 }

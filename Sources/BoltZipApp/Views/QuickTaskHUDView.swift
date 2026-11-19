@@ -24,6 +24,11 @@ struct QuickTaskHUDView: View {
         .padding(16)
         .frame(width: isFloatingWindow ? 404 : nil)
         .frame(maxWidth: isFloatingWindow ? 404 : 408)
+        .background {
+            if isFloatingWindow {
+                BoltWindowDragHandle()
+            }
+        }
         .modifier(HUDSurfaceModifier(useLiquidGlass: glassEnabled, isFloatingWindow: isFloatingWindow))
         .environment(\.boltGlassIntensity, vm.glassIntensity)
         .padding(.horizontal, 16)

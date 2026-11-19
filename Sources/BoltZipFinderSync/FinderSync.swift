@@ -280,6 +280,8 @@ final class FinderSync: FIFinderSync {
         }
         comps.queryItems = items
         guard let actionURL = comps.url else { return }
-        NSWorkspace.shared.open(actionURL)
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = (host == "finder")
+        NSWorkspace.shared.open(actionURL, configuration: config) { _, _ in }
     }
 }

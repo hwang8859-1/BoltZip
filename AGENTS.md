@@ -121,7 +121,7 @@ open dist/BoltZip.app
 6. **FinderSync Extension Signing & IPC**:
    - `BoltZipFinderSync.appex` runs inside App Sandbox (`FinderSync.entitlements`).
    - In `build_app.sh`, sign `.appex` first **with `--entitlements`**, then sign the outer `BoltZip.app` **without `--deep`** so the extension's sandbox entitlements are not stripped.
-   - Finder menu clicks dispatch `boltzip://finder?op=...&path=...` URLs back to `BoltZipApp`, where `WindowGroup.handlesExternalEvents(matching: ["*"])` prevents spawning duplicate windows.
+   - Finder menu clicks dispatch `boltzip://finder?op=...&path=...` URLs back to `BoltZipApp`, where the single-instance `Window("BoltZip", id: "main").handlesExternalEvents(matching: Set(["*"]))` prevents spawning duplicate windows and `boltActivateAppToForeground` reliably orders the main window to the front.
 7. **Portability & Localization**:
    - **Never** hardcode local user home paths (`/Users/<someone>/...`) in source code, scripts, or `showcase/`. Always resolve relative to `Bundle.main`, current working directory, or repository root.
    - Keep all user-facing UI strings inside `L10n.swift` across all supported languages (`zh-Hans`, `zh-Hant`, `en`, `ja`) with natural, platform-idiomatic phrasing (avoid literal machine-translated wording).

@@ -5,7 +5,7 @@ import SwiftUI
 /// underlying SwiftUI window delegate behaviors cleanly.
 @MainActor
 final class MainWindowDelegateProxy: NSObject, NSWindowDelegate {
-    nonisolated(unsafe) weak var wrappedDelegate: (any NSWindowDelegate)?
+    nonisolated(unsafe) var wrappedDelegate: (any NSWindowDelegate)?
     var shouldCloseHandler: ((NSWindow) -> Bool)?
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -32,7 +32,7 @@ final class MainWindowDelegateProxy: NSObject, NSWindowDelegate {
 final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
     let viewModel = WorkspaceViewModel()
     private let menuManager = MainMenuManager()
-    private let mainWindowDelegateProxy = MainWindowDelegateProxy()
+    private var mainWindowDelegateProxies: [ObjectIdentifier: MainWindowDelegateProxy] = [:]
 
     weak var mainWindow: NSWindow?
     var openMainWindowHandler: (() -> Void)?
@@ -83,7 +83,7 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         if suppressMainWindowOnLaunch && !explicitMainWindowRequested {
             hideAutoCreatedMainWindow()
         } else {
-            NSApp.activate(ignoringOtherApps: true)
+            boltActivateAppToForeground(bringing: mainWindow)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
                 guard let self, !self.suppressMainWindowOnLaunch else { return }
                 self.didSettleNormalLaunch = true
@@ -123,9 +123,12 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
 
         explicitMainWindowRequested = true
         suppressMainWindowOnLaunch = false
-        NSApp.activate(ignoringOtherApps: true)
         viewModel.handleIncomingURLs(urls)
         showMainWindow()
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.explicitMainWindowRequested else { return }
+            self.showMainWindow()
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -151,15 +154,15 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
     private func wireLifecycleCallbacks() {
         menuManager.configureActions(
             onNewArchive: { [weak self] in
-                NSApp.activate(ignoringOtherApps: true)
+                boltActivateAppToForeground()
                 self?.viewModel.startNewArchivePanel()
             },
             onOpenArchive: { [weak self] in
-                NSApp.activate(ignoringOtherApps: true)
+                boltActivateAppToForeground()
                 self?.viewModel.openArchivePanel()
             },
             onCheckUpdates: { [weak self] in
-                NSApp.activate(ignoringOtherApps: true)
+                boltActivateAppToForeground()
                 self?.showMainWindow()
                 self?.viewModel.checkForUpdates(userInitiated: true)
             },
@@ -237,11 +240,21 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
             forName: NSWindow.willCloseNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] note in
+            let closingWindow = note.object as? NSWindow
             // Delay termination checks briefly so closing windows finish ordering out (`isVisible == false`),
             // without blindly excluding an NSWindow instance that SwiftUI immediately recycles and shows
             // during cold-launch external URL activation (`boltzip://finder?op=open...`).
-            Task { @MainActor [weak self] in
+            Task { @MainActor [weak self, weak closingWindow] in
+                if let closingWindow, let self {
+                    let key = ObjectIdentifier(closingWindow)
+                    if let proxy = self.mainWindowDelegateProxies.removeValue(forKey: key) {
+                        if closingWindow.delegate === proxy {
+                            closingWindow.delegate = proxy.wrappedDelegate
+                        }
+                        proxy.wrappedDelegate = nil
+                    }
+                }
                 try? await Task.sleep(for: .milliseconds(60))
                 self?.terminateIfIdleAndNoVisibleWindows()
             }
@@ -301,16 +314,19 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         self.openMainWindowHandler = openMainAction
         ensureMainWindowDelegateProxy(on: window)
 
-        if suppressMainWindowOnLaunch && !explicitMainWindowRequested {
-            window.alphaValue = 0
-            window.orderOut(nil)
-        }
+        presentOrSuppressRegisteredWindow(window)
     }
 
     private func ensureMainWindowDelegateProxy(on window: NSWindow) {
-        guard window.delegate !== mainWindowDelegateProxy else { return }
-        mainWindowDelegateProxy.wrappedDelegate = window.delegate
-        mainWindowDelegateProxy.shouldCloseHandler = { [weak self] _ in
+        if window.delegate is MainWindowDelegateProxy {
+            return
+        }
+        let key = ObjectIdentifier(window)
+        let proxy = mainWindowDelegateProxies[key] ?? MainWindowDelegateProxy()
+        if let existingDelegate = window.delegate, !(existingDelegate is MainWindowDelegateProxy) {
+            proxy.wrappedDelegate = existingDelegate
+        }
+        proxy.shouldCloseHandler = { [weak self] _ in
             guard let self else { return true }
             if self.viewModel.shouldReturnHomeOnWindowClose() {
                 self.viewModel.closeArchive()
@@ -318,7 +334,8 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
             }
             return true
         }
-        window.delegate = mainWindowDelegateProxy
+        mainWindowDelegateProxies[key] = proxy
+        window.delegate = proxy
     }
 
     func registerSecondaryWindow(_ window: NSWindow, identifier: String) {
@@ -326,33 +343,44 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
             window.identifier = NSUserInterfaceItemIdentifier(identifier)
         }
         window.isRestorable = false
+        presentOrSuppressRegisteredWindow(window)
+    }
+
+    private func presentOrSuppressRegisteredWindow(_ window: NSWindow) {
         if suppressMainWindowOnLaunch && !explicitMainWindowRequested {
             window.alphaValue = 0
             window.orderOut(nil)
+            return
+        }
+        boltActivateAppToForeground(bringing: window)
+        for delay in [0.0, 0.15] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak window] in
+                guard let self, let window else { return }
+                guard !self.suppressMainWindowOnLaunch || self.explicitMainWindowRequested else { return }
+                boltActivateAppToForeground(bringing: window)
+            }
         }
     }
 
     func showMainWindow() {
         explicitMainWindowRequested = true
         suppressMainWindowOnLaunch = false
-        NSApp.activate(ignoringOtherApps: true)
 
         if let existing = mainWindow ?? NSApp.windows.first(where: { isMainAppWindow($0) }) {
-            existing.alphaValue = 1
-            existing.makeKeyAndOrderFront(nil)
+            boltActivateAppToForeground(bringing: existing)
             ensureMainWindowDelegateProxy(on: existing)
             return
         }
+        boltActivateAppToForeground()
         openMainWindowHandler?()
     }
 
     func openAboutWindow() {
-        NSApp.activate(ignoringOtherApps: true)
         if let existing = NSApp.windows.first(where: { $0.identifier?.rawValue == "boltzip.about" }) {
-            existing.alphaValue = 1
-            existing.makeKeyAndOrderFront(nil)
+            boltActivateAppToForeground(bringing: existing)
             return
         }
+        boltActivateAppToForeground()
         openAboutWindowHandler?()
     }
 

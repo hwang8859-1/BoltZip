@@ -28,7 +28,7 @@ private final class DragBatchPasswordState {
             return (nil, false)
         }
 
-        NSApp.activate(ignoringOtherApps: true)
+        boltActivateAppToForeground()
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = l.passwordPromptTitle

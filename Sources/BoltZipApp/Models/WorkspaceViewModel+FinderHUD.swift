@@ -163,10 +163,10 @@ extension WorkspaceViewModel {
         switch op {
         case "openWorkspace":
             onRequestShowMainWindow?()
-            NSApp.activate(ignoringOtherApps: true)
+            boltActivateAppToForeground()
         case "open":
             onRequestShowMainWindow?()
-            NSApp.activate(ignoringOtherApps: true)
+            boltActivateAppToForeground()
             if let first = BoltArchiveEngine.filterArchiveURLs(paths).first ?? paths.first {
                 openArchive(url: first, fromExternalFinder: true)
             }
@@ -174,7 +174,7 @@ extension WorkspaceViewModel {
             let archives = BoltArchiveEngine.filterArchiveURLs(paths)
             if !archives.isEmpty {
                 onRequestShowMainWindow?()
-                NSApp.activate(ignoringOtherApps: true)
+                boltActivateAppToForeground()
                 testIntegrityBatch(archiveURLs: archives)
             }
         case "smartExtract":
@@ -186,7 +186,7 @@ extension WorkspaceViewModel {
         case "extractTo":
             let archives = BoltArchiveEngine.filterArchiveURLs(paths)
             if !archives.isEmpty {
-                NSApp.activate(ignoringOtherApps: true)
+                boltActivateAppToForeground()
                 let panel = NSOpenPanel()
                 panel.title = l10n.selectExtractDestTitle
                 panel.canChooseDirectories = true
@@ -298,7 +298,7 @@ extension WorkspaceViewModel {
                 var chosenOverwritePolicy: OverwritePolicy = .overwrite
 
                 if !conflicting.isEmpty {
-                    NSApp.activate(ignoringOtherApps: true)
+                    boltActivateAppToForeground()
                     let l = self.l10n
                     let alert = NSAlert()
                     alert.alertStyle = .warning

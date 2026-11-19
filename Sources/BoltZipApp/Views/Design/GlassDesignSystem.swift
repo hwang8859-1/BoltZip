@@ -861,3 +861,57 @@ struct BoltSheetFooterBar<Content: View>: View {
         }
     }
 }
+
+@MainActor
+protocol BoltDragTrackingWindow: AnyObject {
+    func setUserDragging(_ dragging: Bool)
+}
+
+/// AppKit mouse-tracking drag surface allowing borderless HUDs and transparent-titlebar windows
+/// to be smoothly repositioned by dragging non-interactive areas (e.g., headers, progress bars, card surfaces).
+struct BoltWindowDragHandle: NSViewRepresentable {
+    final class DragNSView: NSView {
+        override var mouseDownCanMoveWindow: Bool { true }
+
+        override func mouseDown(with event: NSEvent) {
+            guard let window else {
+                super.mouseDown(with: event)
+                return
+            }
+            let tracker = window as? BoltDragTrackingWindow
+            tracker?.setUserDragging(true)
+            defer { tracker?.setUserDragging(false) }
+
+            var startMouse = NSEvent.mouseLocation
+            var origin = window.frame.origin
+            window.trackEvents(
+                matching: [.leftMouseDragged, .leftMouseUp],
+                timeout: .greatestFiniteMagnitude,
+                mode: .eventTracking
+            ) { ev, stop in
+                guard let ev else {
+                    stop.pointee = true
+                    return
+                }
+                switch ev.type {
+                case .leftMouseDragged:
+                    let cur = NSEvent.mouseLocation
+                    origin.x += cur.x - startMouse.x
+                    origin.y += cur.y - startMouse.y
+                    startMouse = cur
+                    window.setFrameOrigin(origin)
+                case .leftMouseUp:
+                    stop.pointee = true
+                default:
+                    break
+                }
+            }
+        }
+    }
+
+    func makeNSView(context: Context) -> DragNSView {
+        DragNSView(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: DragNSView, context: Context) {}
+}
