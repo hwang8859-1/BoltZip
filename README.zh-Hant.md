@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="showcase/app-icon.png" width="112" height="112" alt="BoltZip" />
+
 # BoltZip ⚡
 
 **快如閃電，通透如玻 —— 讓 macOS 壓縮像桌面本身一樣順手**
@@ -8,8 +10,18 @@
 
 ![macOS 26.0+](https://img.shields.io/badge/macOS-26.0%2B%20(Apple%20Silicon)-0ea5e9?style=flat-square)
 ![Swift 6.2](https://img.shields.io/badge/Swift-6.2-6366f1?style=flat-square)
-![Release v1.0.1](https://img.shields.io/badge/release-v1.0.1-facc15?style=flat-square)
+[![Release v1.0.2](https://img.shields.io/badge/release-v1.0.2-facc15?style=flat-square)](https://github.com/hwang8859-1/BoltZip/releases/latest)
 ![License MIT](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)
+
+<p>
+  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.dmg"><strong>⬇️ 直接下載最新版 v1.0.2 (.dmg · Apple Silicon)</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg">🛡 下載相容版 v0.9.3 (.dmg · Intel / macOS 12–26)</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/hwang8859-1/BoltZip/releases/latest">📦 GitHub Releases</a>
+  &nbsp;·&nbsp;
+  <a href="https://122.51.112.183/boltzip/">🌐 線上展示與下載站</a>
+</p>
 
 </div>
 
@@ -17,18 +29,30 @@
 
 **BoltZip** 是一款專為 **macOS 26.0+（Apple Silicon M 系列 `arm64` 專屬最佳化）** 打造的開源壓縮與解壓縮工作台。它將 Windows 經典封存工具（7-Zip / WinZip / Bandizip）的高效操作邏輯融入 macOS 26 原生 **Liquid Glass 液態玻璃** 體驗，徹底告別雙擊就將檔案全數釋放一地的困擾。
 
-> 💡 **Intel Mac 或 macOS 12–15 使用者**：長期相容版本 **v0.9.3 Universal (`arm64 + x86_64`)** 維護於 [`legacy/macos-12`](../../tree/legacy/macos-12) 分支與 `v0.9.3` 標籤。
+> 💡 **Intel Mac 或 macOS 12–15 使用者**：長期相容版本 **v0.9.3 Universal (`arm64 + x86_64`)** 維護於 [`legacy/macos-12`](../../tree/legacy/macos-12) 分支與 [`v0.9.3`](https://github.com/hwang8859-1/BoltZip/releases/tag/v0.9.3) 標籤。
 
 > [!IMPORTANT]
 > **目前活躍開發分支：[GitHub 預設 `dev-*` 分支](../../)** · `main` 分支僅供穩定版發佈使用且已受保護。提交程式碼或 PR 請務必保持指向目前預設開發分支，詳見 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## ⬇️ 快速下載與安裝
+
+| 適用機型與系統 | 推薦版本 | 直接下載連結 | 發佈頁面 |
+| :--- | :--- | :--- | :--- |
+| **Apple Silicon (M 系列 `arm64`) · macOS 26.0+** | **`v1.0.2`**（最新正式版） | [下載 `.dmg` 安裝映像檔](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.dmg) · [可攜包 `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.zip) | [Release v1.0.2 ↗](https://github.com/hwang8859-1/BoltZip/releases/latest) |
+| **Intel (`x86_64`) 或 macOS 12.0–15 / 26+** | **`v0.9.3`**（Universal 全相容版） | [下載 `.dmg` 相容映像檔](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg) · [可攜包 `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.zip) | [Release v0.9.3 ↗](https://github.com/hwang8859-1/BoltZip/releases/tag/v0.9.3) |
+
+- **安裝步驟**：打開下載的 `.dmg` 映像檔 → 將 `BoltZip.app` 拖入右側 `Applications` 資料夾 → 啟動後可在「設定」一鍵啟用 **Finder 右鍵第一層選單 `Bolt ›`** 與 **預設檔案關聯**。
+- **線上展示與下載站**：亦可造訪 [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/)（依 Mac 平台自動推薦對應版本，附帶 `SHA256SUMS.txt` 校驗清單）。
+- **開源未公證提示**：社群發行版採本機自簽署封裝；若首次開啟受系統安全提示阻擋，可前往「系統設定 → 隱私權與安全性」點選 **強制打開**，或於應用程式上按右鍵選擇 **打開**。
 
 ## ✨ 核心功能
 
 - **自動刪除 `.DS_Store` 等 Mac 隱藏垃圾檔**：壓縮建立、ZIP 封存檔原地新增檔案以及解壓縮時預設自動剔除 `.DS_Store`、`__MACOSX`、`._*`、`.Spotlight-V100`、`.Trashes` 等系統中繼檔，傳送給 Windows/Linux 使用者不污染目錄，智慧解壓也不受 `__MACOSX` 干擾。
 - **Finder 右鍵第一層選單 `Bolt >`**：透過原生沙盒 `FinderSync` 延伸功能（`BoltZipFinderSync.appex`），無需進入「服務」子選單，直接在右鍵最頂層一鍵執行：
-  - 智慧解壓縮 / 解壓至同名資料夾 / 開啟瀏覽 / 完整性驗證
-  - 一鍵壓縮為 `ZIP` / `TAR.ZST (Zstd)` / `7z` / 加密與分卷進階壓縮
-- **Windows Zip 級封存檔工作台**：雙擊或按下空白鍵即可呼叫 macOS Quick Look 預覽內部檔案，無需整包解壓；支援樹狀瀏覽、即時搜尋排序、檢視 CRC32 屬性、單獨匯出選取項目為新 ZIP，以及 **ZIP 封存檔原地新增、重新命名與刪除**（未變動項目零重新壓縮）。
+  - 智慧解壓縮 / 解壓至同名資料夾 / 解壓到指定目錄 / 開啟瀏覽 / 完整性驗證
+  - 一鍵壓縮為 `ZIP` / `TAR.ZST (Zstd)` / `7z` / 多選個別打包為 ZIP / 加密與分卷進階壓縮
+- **Windows Zip 級封存檔工作台**：雙擊或按下空白鍵即可呼叫 macOS Quick Look 預覽內部檔案，支援樹狀瀏覽與**巢狀壓縮檔層級返回**、拖曳直接匯出至 Finder、單獨匯出為新 ZIP、封存檔註解檢視與編輯，以及 **ZIP 封存檔原地新增、重新命名與刪除**（未變動項目零重新壓縮）。
+- **大檔分塊串流、安全符號連結與內建更新**：`>= 64 MB` 項目支援全流程分塊串流讀寫（ZIP / WinZip AE-2 / ZipCrypto / TAR.*）、符號連結安全保留還原與越界防範、APFS 硬連結高速 `.7z` 封裝、17 組分格式專屬圖示，以及應用內 GitHub Releases 檢查更新（含 SHA-256 校驗）。
 - **液態玻璃原生體驗**：
   - macOS 26+ 提供視窗半透明開關與背景不透明度微調（25% – 100%）；
   - 首頁各區塊（Finder 提示列、特色介紹卡、最近開啟清單）及側欄摘要、狀態列皆可獨立隱藏；
@@ -66,7 +90,7 @@ swift run -c release boltzip x release.zip ./out --mode smart
 
 ## 🧩 展示頁面與開發者文件
 
-- **線上產品展示與下載頁**：造訪公開展示網站 [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/)，即可體驗互動式模擬器與演算法效能比較，並直接下載 `BoltZip v1.0.1 Apple Silicon` 安裝包與原始碼歸檔（原始檔案位於 [showcase/](showcase/)）。
+- **線上產品展示與下載頁**：造訪公開展示網站 [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/)，即可體驗互動式模擬器與演算法效能比較，並直接下載 `BoltZip v1.0.2 Apple Silicon` 安裝包與原始碼歸檔（原始檔案位於 [showcase/](showcase/)）。
 - **AI Agent 與開發指南**：請參閱 [AGENTS.md](AGENTS.md)。
 - **版本更新紀錄**：請參閱 [CHANGELOG.md](CHANGELOG.md)。
 

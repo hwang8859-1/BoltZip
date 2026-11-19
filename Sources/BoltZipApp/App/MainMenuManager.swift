@@ -45,6 +45,7 @@ final class ForwardingMenuDelegateProxy: NSObject, NSMenuDelegate {
 final class MergedMenuActionTarget: NSObject {
     var onNewArchive: (() -> Void)?
     var onOpenArchive: (() -> Void)?
+    var onCheckUpdates: (() -> Void)?
     var onOpenAbout: (() -> Void)?
 
     @objc func performNewArchive(_ sender: Any?) {
@@ -53,6 +54,10 @@ final class MergedMenuActionTarget: NSObject {
 
     @objc func performOpenArchive(_ sender: Any?) {
         onOpenArchive?()
+    }
+
+    @objc func performCheckUpdates(_ sender: Any?) {
+        onCheckUpdates?()
     }
 
     @objc func performOpenAbout(_ sender: Any?) {
@@ -64,8 +69,9 @@ final class MergedMenuActionTarget: NSObject {
 /// 1. 新建压缩包 (⌘N)
 /// 2. 打开压缩包 (⌘O)
 /// 3. 设置… (⌘,)
-/// 4. 关于 BoltZip
-/// 5. 退出 BoltZip (⌘Q)
+/// 4. 检查更新…
+/// 5. 关于 BoltZip
+/// 6. 退出 BoltZip (⌘Q)
 @MainActor
 final class MainMenuManager {
     private var observersInstalled = false
@@ -86,6 +92,11 @@ final class MainMenuManager {
         item.target = actionTarget
         return item
     }()
+    private lazy var checkUpdatesItem: NSMenuItem = {
+        let item = NSMenuItem(title: "", action: #selector(MergedMenuActionTarget.performCheckUpdates(_:)), keyEquivalent: "")
+        item.target = actionTarget
+        return item
+    }()
     private lazy var aboutItem: NSMenuItem = {
         let item = NSMenuItem(title: "", action: #selector(MergedMenuActionTarget.performOpenAbout(_:)), keyEquivalent: "")
         item.target = actionTarget
@@ -97,10 +108,12 @@ final class MainMenuManager {
     func configureActions(
         onNewArchive: @escaping () -> Void,
         onOpenArchive: @escaping () -> Void,
+        onCheckUpdates: @escaping () -> Void,
         onOpenAbout: @escaping () -> Void
     ) {
         actionTarget.onNewArchive = onNewArchive
         actionTarget.onOpenArchive = onOpenArchive
+        actionTarget.onCheckUpdates = onCheckUpdates
         actionTarget.onOpenAbout = onOpenAbout
     }
 
@@ -167,6 +180,7 @@ final class MainMenuManager {
     private func syncMergedAppMenu(_ submenu: NSMenu, l: L10n) {
         if newArchiveItem.title != l.newArchive { newArchiveItem.title = l.newArchive }
         if openArchiveItem.title != l.openArchive { openArchiveItem.title = l.openArchive }
+        if checkUpdatesItem.title != l.checkForUpdatesMenuTitle { checkUpdatesItem.title = l.checkForUpdatesMenuTitle }
         if aboutItem.title != l.aboutMenuTitle { aboutItem.title = l.aboutMenuTitle }
 
         let settingsItem = submenu.items.first { item in
@@ -199,6 +213,7 @@ final class MainMenuManager {
             actionsSeparator
         ]
         if let settingsItem { desired.append(settingsItem) }
+        desired.append(checkUpdatesItem)
         desired.append(aboutItem)
         if let quitItem {
             desired.append(quitSeparator)

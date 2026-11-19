@@ -8,37 +8,75 @@ public enum TarCodec {
         case .gz, .zst, .xz, .bz2, .lz4:
             return try listSingleStream(at: url, format: format)
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4:
-            let tarData = try loadUncompressedTarData(at: url, format: format)
-            return try parseTarEntries(tarData, methodLabel: format.defaultAlgorithm.shortName).map(\.entry)
+            var entries: [ArchiveEntry] = []
+            try withUncompressedTarFile(at: url, format: format) { tarURL in
+                entries = try streamScanTar(at: tarURL, methodLabel: format.defaultAlgorithm.shortName, computeCRC: true)
+            }
+            return entries
         default:
             throw BoltZipError.unsupportedFormat(format.displayName)
         }
     }
 
-    static func readAllEntries(
+    /// Extracts a single entry payload directly to a file URL on disk without buffering the entire payload in memory.
+    public static func extractSingleEntryToFile(
         at url: URL,
         format: ArchiveFormat,
-        controller: ArchiveTaskController? = nil,
-        progress: ((UInt64, UInt64) -> Void)? = nil
-    ) throws -> [String: Data] {
+        path: String,
+        to destinationFileURL: URL,
+        controller: ArchiveTaskController? = nil
+    ) throws {
+        try controller?.checkpoint()
+        let fm = FileManager.default
+        try fm.createDirectory(at: destinationFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+
         switch format {
         case .gz, .zst, .xz, .bz2, .lz4:
             let entries = try listSingleStream(at: url, format: format)
-            let raw = try Data(contentsOf: url, options: .mappedIfSafe)
-            let plain = try decompressStream(raw, format: format, controller: controller, progress: progress)
-            if let first = entries.first {
-                return [first.path: plain]
+            guard let first = entries.first else {
+                throw BoltZipError.entryNotFound(path)
             }
-            return [:]
+            let targetNorm = ArchiveEntry.normalizePath(path, isDirectory: path.hasSuffix("/"))
+            guard first.path == targetNorm || targetNorm == url.lastPathComponent else {
+                throw BoltZipError.entryNotFound(path)
+            }
+            try decompressStreamFile(from: url, to: destinationFileURL, format: format, controller: controller)
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4:
-            let tarData = try loadUncompressedTarData(at: url, format: format, controller: controller, progress: progress)
-            let items = try parseTarEntries(tarData, methodLabel: format.defaultAlgorithm.shortName)
-            var dict: [String: Data] = [:]
-            dict.reserveCapacity(items.count)
-            for item in items {
-                dict[item.entry.path] = item.payload
+            let target = ArchiveEntry.normalizePath(path, isDirectory: path.hasSuffix("/"))
+            var found = false
+            try withUncompressedTarFile(at: url, format: format, controller: controller) { tarURL in
+                try iterateTarHeaders(at: tarURL, methodLabel: "TAR", computeCRC: false, controller: controller) { info, fh in
+                    guard info.entry.path == target else { return true }
+                    found = true
+                    if info.entry.isSymbolicLink {
+                        let data = Data(info.symlinkTarget.utf8)
+                        try data.write(to: destinationFileURL, options: .atomic)
+                    } else if info.entry.isDirectory {
+                        try fm.createDirectory(at: destinationFileURL, withIntermediateDirectories: true)
+                    } else {
+                        try fh.seek(toOffset: info.payloadOffset)
+                        fm.createFile(atPath: destinationFileURL.path, contents: nil)
+                        let outHandle = try FileHandle(forWritingTo: destinationFileURL)
+                        var closeOut = true
+                        defer { if closeOut { try? outHandle.close() } }
+                        var rem = info.payloadSize
+                        while rem > 0 {
+                            try controller?.checkpoint()
+                            let want = Int(min(UInt64(BoltConcurrency.streamChunkSize), rem))
+                            let chunk = try fh.read(upToCount: want) ?? Data()
+                            if chunk.isEmpty { break }
+                            try outHandle.write(contentsOf: chunk)
+                            rem -= UInt64(chunk.count)
+                        }
+                        try outHandle.close()
+                        closeOut = false
+                    }
+                    return false
+                }
             }
-            return dict
+            if !found {
+                throw BoltZipError.entryNotFound(path)
+            }
         default:
             throw BoltZipError.unsupportedFormat(format.displayName)
         }
@@ -47,16 +85,113 @@ public enum TarCodec {
     public static func readEntryData(at url: URL, format: ArchiveFormat, path: String) throws -> Data {
         switch format {
         case .gz, .zst, .xz, .bz2, .lz4:
-            let raw = try Data(contentsOf: url, options: .mappedIfSafe)
-            return try decompressStream(raw, format: format)
+            let fm = FileManager.default
+            let tmpURL = fm.temporaryDirectory.appendingPathComponent("boltzip-sread-\(UUID().uuidString).tmp")
+            defer { try? fm.removeItem(at: tmpURL) }
+            try decompressStreamFile(from: url, to: tmpURL, format: format)
+            return try Data(contentsOf: tmpURL, options: .mappedIfSafe)
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4:
-            let tarData = try loadUncompressedTarData(at: url, format: format)
             let target = ArchiveEntry.normalizePath(path, isDirectory: path.hasSuffix("/"))
-            let items = try parseTarEntries(tarData, methodLabel: format.defaultAlgorithm.shortName)
-            guard let found = items.first(where: { $0.entry.path == target }) else {
+            var foundData: Data?
+            try withUncompressedTarFile(at: url, format: format) { tarURL in
+                foundData = try readSingleEntryFromTarFile(at: tarURL, targetPath: target)
+            }
+            guard let data = foundData else {
                 throw BoltZipError.entryNotFound(path)
             }
-            return found.payload
+            return data
+        default:
+            throw BoltZipError.unsupportedFormat(format.displayName)
+        }
+    }
+
+    public static func extract(
+        at url: URL,
+        format: ArchiveFormat,
+        to destinationURL: URL,
+        selectedPaths: Set<String>?,
+        stripMacJunk: Bool,
+        overwritePolicy: OverwritePolicy,
+        restoreSymlinks: Bool,
+        topLevelDirRenameMap: [String: String],
+        totalExpectedBytes: UInt64,
+        controller: ArchiveTaskController? = nil,
+        progress: (@Sendable (OperationProgress) -> Void)? = nil
+    ) throws {
+        try controller?.checkpoint()
+        let fm = FileManager.default
+
+        switch format {
+        case .gz, .zst, .xz, .bz2, .lz4:
+            let entries = try listSingleStream(at: url, format: format)
+            guard let first = entries.first else { return }
+            if stripMacJunk && MacJunkFilter.isJunk(path: first.path) { return }
+            if let sel = selectedPaths, !sel.isEmpty,
+               !BoltArchiveEngine.pathMatchesSelection(first.path, selectedPaths: sel) {
+                return
+            }
+
+            let outputPath = BoltArchiveEngine.remapTopLevelFolder(in: first.path, renameMap: topLevelDirRenameMap)
+            let initialDest = try BoltArchiveEngine.safeDestinationURL(for: outputPath, under: destinationURL)
+            guard let targetURL = try BoltArchiveEngine.prepareExtractTargetURL(
+                initialURL: initialDest,
+                under: destinationURL,
+                policy: overwritePolicy
+            ) else {
+                return
+            }
+
+            let stageURL = fm.temporaryDirectory.appendingPathComponent("boltzip-sgz-\(UUID().uuidString).tmp")
+            defer { try? fm.removeItem(at: stageURL) }
+            try decompressStreamFile(from: url, to: stageURL, format: format, controller: controller) { readBytes, totalComp in
+                let frac = totalComp > 0 ? min(0.99, Double(readBytes) / Double(totalComp)) : 0.2
+                progress?(OperationProgress(
+                    fractionCompleted: frac,
+                    currentItem: first.path,
+                    processedBytes: totalExpectedBytes > 0 ? UInt64(Double(totalExpectedBytes) * frac) : readBytes,
+                    totalBytes: totalExpectedBytes
+                ))
+            }
+
+            try BoltArchiveEngine.assertNoSymlinkTraversal(at: targetURL, under: destinationURL)
+            if fm.fileExists(atPath: targetURL.path) {
+                try fm.removeItem(at: targetURL)
+            }
+            try fm.moveItem(at: stageURL, to: targetURL)
+            let attrs: [FileAttributeKey: Any] = [
+                .modificationDate: first.modifiedDate,
+                .posixPermissions: NSNumber(value: first.permissions)
+            ]
+            try? fm.setAttributes(attrs, ofItemAtPath: targetURL.path)
+
+        case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4:
+            try withUncompressedTarFile(at: url, format: format, controller: controller, progress: { readBytes, totalCompressed in
+                let curBytes = totalExpectedBytes > 0 && totalCompressed > 0
+                    ? UInt64(Double(totalExpectedBytes) * 0.4 * (Double(readBytes) / Double(totalCompressed)))
+                    : readBytes
+                let frac = totalCompressed > 0 ? 0.4 * (Double(readBytes) / Double(totalCompressed)) : 0.1
+                progress?(OperationProgress(
+                    fractionCompleted: frac,
+                    currentItem: url.lastPathComponent,
+                    processedBytes: curBytes,
+                    totalBytes: totalExpectedBytes > 0 ? totalExpectedBytes : totalCompressed
+                ))
+            }) { tarURL in
+                try streamExtractTarFile(
+                    at: tarURL,
+                    to: destinationURL,
+                    selectedPaths: selectedPaths,
+                    stripMacJunk: stripMacJunk,
+                    overwritePolicy: overwritePolicy,
+                    restoreSymlinks: restoreSymlinks,
+                    topLevelDirRenameMap: topLevelDirRenameMap,
+                    baseFrac: format == .tar ? 0.0 : 0.4,
+                    totalExpectedBytes: totalExpectedBytes,
+                    controller: controller,
+                    progress: progress
+                )
+            }
+
         default:
             throw BoltZipError.unsupportedFormat(format.displayName)
         }
@@ -67,47 +202,70 @@ public enum TarCodec {
         to outputURL: URL,
         options: CreateArchiveOptions,
         controller: ArchiveTaskController? = nil,
-        progress: ((OperationProgress) -> Void)? = nil
+        progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
         try controller?.checkpoint()
-        let items = try ZipWriter.collectInputItems(from: inputURLs, excludeMacJunk: options.excludeMacJunk)
-        var tarData = Data()
+        let items = try ZipWriter.collectInputItems(
+            from: inputURLs,
+            excludeMacJunk: options.excludeMacJunk,
+            preserveSymlinks: options.preserveSymlinks
+        )
         let totalBytes = items.reduce(UInt64(0)) { $0 + $1.fileSize }
         var stagedBytes: UInt64 = 0
         let isRawTar = (options.format == .tar)
+
+        let fm = FileManager.default
+        let tempTarURL = fm.temporaryDirectory.appendingPathComponent("boltzip-tar-\(UUID().uuidString).tar")
+        defer { try? fm.removeItem(at: tempTarURL) }
+
+        fm.createFile(atPath: tempTarURL.path, contents: nil)
+        let tarHandle = try FileHandle(forWritingTo: tempTarURL)
+        var shouldCloseTar = true
+        defer { if shouldCloseTar { try? tarHandle.close() } }
 
         for item in items {
             try controller?.checkpoint()
             let stageFrac = totalBytes > 0 ? Double(stagedBytes) / Double(totalBytes) : 0
             progress?(OperationProgress(
-                fractionCompleted: isRawTar ? stageFrac * 0.95 : stageFrac * 0.15,
+                fractionCompleted: isRawTar ? stageFrac * 0.95 : stageFrac * 0.25,
                 currentItem: item.archivePath,
-                processedBytes: isRawTar ? stagedBytes : UInt64(Double(totalBytes) * (stageFrac * 0.15)),
+                processedBytes: isRawTar ? stagedBytes : UInt64(Double(totalBytes) * (stageFrac * 0.25)),
                 totalBytes: totalBytes
             ))
-            let payload: Data
-            if let fileURL = item.fileURL, !item.isDirectory {
-                payload = try Data(contentsOf: fileURL, options: .mappedIfSafe)
-            } else {
-                payload = Data()
+            try streamAppendTarEntry(to: tarHandle, item: item, controller: controller) { chunkBytes in
+                let cur = min(totalBytes, stagedBytes + chunkBytes)
+                let curFrac = totalBytes > 0 ? Double(cur) / Double(totalBytes) : 0
+                progress?(OperationProgress(
+                    fractionCompleted: isRawTar ? curFrac * 0.95 : curFrac * 0.25,
+                    currentItem: item.archivePath,
+                    processedBytes: cur,
+                    totalBytes: totalBytes
+                ))
             }
-            appendTarEntry(
-                to: &tarData,
-                path: item.archivePath,
-                isDirectory: item.isDirectory,
-                permissions: item.permissions,
-                modifiedDate: item.modifiedDate,
-                payload: payload
-            )
             stagedBytes += item.fileSize
         }
+
         // Two 512-byte zero blocks terminate TAR stream
-        tarData.append(Data(count: blockSize * 2))
+        try tarHandle.write(contentsOf: Data(count: blockSize * 2))
+        try tarHandle.close()
+        shouldCloseTar = false
         try controller?.checkpoint()
+
+        if options.format == .tar {
+            let stageOut = fm.temporaryDirectory.appendingPathComponent("boltzip-tarout-\(UUID().uuidString).tar")
+            defer { try? fm.removeItem(at: stageOut) }
+            try fm.moveItem(at: tempTarURL, to: stageOut)
+            if fm.fileExists(atPath: outputURL.path) {
+                try fm.removeItem(at: outputURL)
+            }
+            try fm.moveItem(at: stageOut, to: outputURL)
+            progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outputURL.lastPathComponent, processedBytes: totalBytes, totalBytes: totalBytes))
+            return
+        }
 
         let reportCompressProgress: (UInt64, UInt64) -> Void = { bytesRead, tarTotal in
             let ratio = tarTotal > 0 ? Double(bytesRead) / Double(tarTotal) : 1.0
-            let frac = min(0.99, 0.15 + 0.85 * ratio)
+            let frac = min(0.99, 0.25 + 0.75 * ratio)
             let estBytes = totalBytes > 0 ? UInt64(Double(totalBytes) * frac) : bytesRead
             progress?(OperationProgress(
                 fractionCompleted: frac,
@@ -117,33 +275,76 @@ public enum TarCodec {
             ))
         }
 
-        let finalBytes: Data
+        let workers = BoltConcurrency.resolvedWorkerCount(override: options.workerCount)
+        let stageCompURL = fm.temporaryDirectory.appendingPathComponent("boltzip-tarcmp-\(UUID().uuidString).tmp")
+        defer { try? fm.removeItem(at: stageCompURL) }
+
         switch options.format {
-        case .tar:
-            finalBytes = tarData
         case .tarGz:
-            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .deflate, gzipContainer: true, level: options.level, controller: controller, progress: reportCompressProgress)
+            try CompressionCodec.compressFile(sourceURL: tempTarURL, destinationURL: stageCompURL, algorithm: .deflate, gzipContainer: true, level: options.level, allowMultiThread: true, workerCount: workers, controller: controller, progress: reportCompressProgress)
         case .tarZst:
-            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .zstd, gzipContainer: false, level: options.level, controller: controller, progress: reportCompressProgress)
+            try CompressionCodec.compressFile(sourceURL: tempTarURL, destinationURL: stageCompURL, algorithm: .zstd, gzipContainer: false, level: options.level, allowMultiThread: true, workerCount: workers, controller: controller, progress: reportCompressProgress)
         case .tarXz:
-            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .xz, gzipContainer: false, level: options.level, controller: controller, progress: reportCompressProgress)
+            try CompressionCodec.compressFile(sourceURL: tempTarURL, destinationURL: stageCompURL, algorithm: .xz, gzipContainer: false, level: options.level, allowMultiThread: true, workerCount: workers, controller: controller, progress: reportCompressProgress)
         case .tarBz2:
-            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .bzip2, gzipContainer: false, level: options.level, controller: controller, progress: reportCompressProgress)
+            try CompressionCodec.compressFile(sourceURL: tempTarURL, destinationURL: stageCompURL, algorithm: .bzip2, gzipContainer: false, level: options.level, allowMultiThread: true, workerCount: workers, controller: controller, progress: reportCompressProgress)
         case .tarLz4:
-            finalBytes = try CompressionCodec.compress(data: tarData, algorithm: .lz4, gzipContainer: false, level: options.level, controller: controller, progress: reportCompressProgress)
+            try CompressionCodec.compressFile(sourceURL: tempTarURL, destinationURL: stageCompURL, algorithm: .lz4, gzipContainer: false, level: options.level, allowMultiThread: true, workerCount: workers, controller: controller, progress: reportCompressProgress)
         default:
             throw BoltZipError.unsupportedFormat(options.format.displayName)
         }
 
         try controller?.checkpoint()
-        try finalBytes.write(to: outputURL, options: .atomic)
+        if fm.fileExists(atPath: outputURL.path) {
+            try fm.removeItem(at: outputURL)
+        }
+        try fm.moveItem(at: stageCompURL, to: outputURL)
         progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outputURL.lastPathComponent, processedBytes: totalBytes, totalBytes: totalBytes))
     }
 
     public static func testIntegrity(at url: URL, format: ArchiveFormat) throws -> IntegrityReport {
         let start = CFAbsoluteTimeGetCurrent()
-        let entries = try listEntries(at: url, format: format)
-        let okDetail = BoltCoreLocalization.t("流解码与校验和通过", "串流解碼與校驗和通過", "Stream decode & checksum passed", "ストリームデコード・チェックサム正常")
+        let isRawTar = (format == .tar)
+        let isSingleStream: Bool
+        switch format {
+        case .gz, .zst, .xz, .bz2, .lz4: isSingleStream = true
+        default: isSingleStream = false
+        }
+
+        let entries: [ArchiveEntry]
+        if isSingleStream {
+            entries = try listSingleStream(at: url, format: format)
+        } else {
+            var scanned: [ArchiveEntry] = []
+            try withUncompressedTarFile(at: url, format: format) { tarURL in
+                scanned = try streamScanTar(at: tarURL, methodLabel: format.defaultAlgorithm.shortName, computeCRC: false, verifyDataRead: true)
+            }
+            entries = scanned
+        }
+
+        let okDetail: String
+        if isSingleStream {
+            okDetail = BoltCoreLocalization.t(
+                "容器流解码与 CRC 校验通过",
+                "容器串流解碼與 CRC 驗證通過",
+                "Container stream decode & CRC passed",
+                "コンテナストリームのデコードと CRC 検証に合格"
+            )
+        } else if isRawTar {
+            okDetail = BoltCoreLocalization.t(
+                "TAR 归档结构读取通过（TAR 格式无内置校验和）",
+                "TAR 封存檔結構讀取通過（TAR 格式無內建校驗和）",
+                "TAR structure readable (format has no built-in checksums)",
+                "TAR 構造の読み込み正常（TAR 形式にチェックサムはありません）"
+            )
+        } else {
+            okDetail = BoltCoreLocalization.t(
+                "压缩流校验与 TAR 结构读取通过（TAR 条目无内置校验和）",
+                "壓縮串流驗證與 TAR 結構讀取通過（TAR 項目無內建校驗和）",
+                "Compressed stream verified & TAR structure OK (no per-entry checksum)",
+                "圧縮ストリーム検証および TAR 構造正常（項目別チェックサムなし）"
+            )
+        }
         let results = entries.map {
             IntegrityEntryResult(path: $0.path, status: .passed, detail: okDetail)
         }
@@ -160,39 +361,54 @@ public enum TarCodec {
 
     // MARK: - Internal TAR & Stream Codecs
 
-    private static func decompressStream(
-        _ data: Data,
-        format: ArchiveFormat,
-        controller: ArchiveTaskController? = nil,
-        progress: ((UInt64, UInt64) -> Void)? = nil
-    ) throws -> Data {
+    private static func streamCodecParams(for format: ArchiveFormat) throws -> (algorithm: CompressionAlgorithm, gzip: Bool) {
         switch format {
-        case .gz, .tarGz:
-            return try CompressionCodec.decompress(data: data, algorithm: .deflate, gzipContainer: true, controller: controller, progress: progress)
-        case .zst, .tarZst:
-            return try CompressionCodec.decompress(data: data, algorithm: .zstd, controller: controller, progress: progress)
-        case .xz, .tarXz:
-            return try CompressionCodec.decompress(data: data, algorithm: .xz, controller: controller, progress: progress)
-        case .bz2, .tarBz2:
-            return try CompressionCodec.decompress(data: data, algorithm: .bzip2, controller: controller, progress: progress)
-        case .lz4, .tarLz4:
-            return try CompressionCodec.decompress(data: data, algorithm: .lz4, controller: controller, progress: progress)
-        case .tar:
-            progress?(UInt64(data.count), UInt64(data.count))
-            return data
+        case .gz, .tarGz: return (.deflate, true)
+        case .zst, .tarZst: return (.zstd, false)
+        case .xz, .tarXz: return (.xz, false)
+        case .bz2, .tarBz2: return (.bzip2, false)
+        case .lz4, .tarLz4: return (.lz4, false)
         default:
             throw BoltZipError.unsupportedFormat(format.displayName)
         }
     }
 
-    private static func loadUncompressedTarData(
-        at url: URL,
+    private static func decompressStreamFile(
+        from sourceURL: URL,
+        to destinationURL: URL,
         format: ArchiveFormat,
         controller: ArchiveTaskController? = nil,
         progress: ((UInt64, UInt64) -> Void)? = nil
-    ) throws -> Data {
-        let raw = try Data(contentsOf: url, options: .mappedIfSafe)
-        return try decompressStream(raw, format: format, controller: controller, progress: progress)
+    ) throws {
+        let (algo, gzip) = try streamCodecParams(for: format)
+        try CompressionCodec.decompressFile(
+            sourceURL: sourceURL,
+            destinationURL: destinationURL,
+            algorithm: algo,
+            gzipContainer: gzip,
+            controller: controller,
+            progress: progress
+        )
+    }
+
+    internal static func withUncompressedTarFile(
+        at url: URL,
+        format: ArchiveFormat,
+        controller: ArchiveTaskController? = nil,
+        progress: ((UInt64, UInt64) -> Void)? = nil,
+        body: (URL) throws -> Void
+    ) throws {
+        if format == .tar {
+            let size = ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.uint64Value) ?? 0
+            progress?(size, size)
+            try body(url)
+            return
+        }
+        let fm = FileManager.default
+        let tempTarURL = fm.temporaryDirectory.appendingPathComponent("boltzip-untar-\(UUID().uuidString).tar")
+        defer { try? fm.removeItem(at: tempTarURL) }
+        try decompressStreamFile(from: url, to: tempTarURL, format: format, controller: controller, progress: progress)
+        try body(tempTarURL)
     }
 
     private static func listSingleStream(at url: URL, format: ArchiveFormat) throws -> [ArchiveEntry] {
@@ -200,24 +416,29 @@ public enum TarCodec {
         let compressedSize = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
         let modDate = (attrs[.modificationDate] as? Date) ?? Date()
 
-        let raw = try Data(contentsOf: url, options: .mappedIfSafe)
         var innerName = url.deletingPathExtension().lastPathComponent
-        if format == .gz, let gzName = parseGzipOriginalFilename(raw), !gzName.isEmpty {
-            innerName = gzName
-        } else if innerName == url.lastPathComponent || innerName.isEmpty {
+        if format == .gz {
+            let fh = try FileHandle(forReadingFrom: url)
+            let head = try fh.read(upToCount: 4096) ?? Data()
+            try? fh.close()
+            if let gzName = parseGzipOriginalFilename(head), !gzName.isEmpty {
+                innerName = gzName
+            }
+        }
+        if innerName == url.lastPathComponent || innerName.isEmpty {
             innerName = url.lastPathComponent + ".out"
         }
 
-        let plain = try decompressStream(raw, format: format)
-        let crc = CompressionCodec.crc32(plain)
+        let (algo, gzip) = try streamCodecParams(for: format)
+        let verified = try CompressionCodec.verifyFile(sourceURL: url, algorithm: algo, gzipContainer: gzip)
         return [
             ArchiveEntry(
                 path: innerName,
                 isDirectory: false,
-                uncompressedSize: UInt64(plain.count),
+                uncompressedSize: verified.uncompressedSize,
                 compressedSize: compressedSize,
                 compressionMethodName: format.defaultAlgorithm.shortName,
-                crc32: crc,
+                crc32: verified.crc32,
                 modifiedDate: modDate
             )
         ]
@@ -242,20 +463,38 @@ public enum TarCodec {
         return nil
     }
 
-    struct ParsedTarItem {
+    private struct StreamTarHeaderInfo {
         let entry: ArchiveEntry
-        let payload: Data
+        let symlinkTarget: String
+        let payloadOffset: UInt64
+        let payloadSize: UInt64
+        let paddedSize: UInt64
     }
 
-    private static func parseTarEntries(_ data: Data, methodLabel: String) throws -> [ParsedTarItem] {
-        var items: [ParsedTarItem] = []
-        var offset = 0
+    private static func iterateTarHeaders(
+        at tarURL: URL,
+        methodLabel: String,
+        computeCRC: Bool,
+        controller: ArchiveTaskController? = nil,
+        visitor: (StreamTarHeaderInfo, FileHandle) throws -> Bool
+    ) throws {
+        let fh = try FileHandle(forReadingFrom: tarURL)
+        defer { try? fh.close() }
+        let attrs = try FileManager.default.attributesOfItem(atPath: tarURL.path)
+        let fileSize = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
+
+        var offset: UInt64 = 0
         var nextPaxAttributes: [String: String] = [:]
         var nextGnuLongName: String?
+        var nextGnuLongLink: String?
 
-        while offset + blockSize <= data.count {
-            let header = data.subdata(in: offset..<(offset + blockSize))
-            offset += blockSize
+        while offset + UInt64(blockSize) <= fileSize {
+            try controller?.checkpoint()
+            try fh.seek(toOffset: offset)
+            guard let header = try fh.read(upToCount: blockSize), header.count == blockSize else {
+                break
+            }
+            offset += UInt64(blockSize)
 
             if header.allSatisfy({ $0 == 0 }) {
                 break
@@ -266,98 +505,294 @@ public enum TarCodec {
             let sizeVal = readTarOctal(header, start: 124, length: 12)
             let mtimeVal = readTarOctal(header, start: 136, length: 12)
             let typeFlag = header[156]
+            let rawLinkName = readTarString(header, start: 157, length: 100)
             let prefix = readTarString(header, start: 345, length: 155)
 
-            let payloadLen = Int(sizeVal)
-            let paddedLen = ((payloadLen + blockSize - 1) / blockSize) * blockSize
-            guard offset + payloadLen <= data.count else {
+            let resolvedSize = nextPaxAttributes["size"].flatMap(UInt64.init) ?? sizeVal
+            let paddedLen = ((resolvedSize + UInt64(blockSize) - 1) / UInt64(blockSize)) * UInt64(blockSize)
+
+            guard offset + resolvedSize <= fileSize else {
                 throw BoltZipError.invalidArchive(BoltCoreLocalization.t("TAR 数据块提前结束", "TAR 資料區塊提前結束", "Unexpected EOF in TAR data block", "TAR データブロックが途中で終了しました"))
             }
-            let payload = data.subdata(in: offset..<(offset + payloadLen))
-            offset = min(data.count, offset + paddedLen)
 
-            // PAX extended header ('x') or GNU long name ('L')
-            if typeFlag == UInt8(ascii: "x") {
-                nextPaxAttributes = parsePAXPayload(payload)
-                continue
-            } else if typeFlag == UInt8(ascii: "g") {
-                continue
-            } else if typeFlag == UInt8(ascii: "L") {
-                nextGnuLongName = String(data: payload, encoding: .utf8)?.trimmingCharacters(in: CharacterSet(charactersIn: "\0"))
+            // PAX extended header ('x'), GNU long name ('L'), GNU long link ('K')
+            if typeFlag == UInt8(ascii: "x") || typeFlag == UInt8(ascii: "g") || typeFlag == UInt8(ascii: "L") || typeFlag == UInt8(ascii: "K") {
+                if typeFlag == UInt8(ascii: "x") {
+                    let payload = try fh.read(upToCount: Int(resolvedSize)) ?? Data()
+                    nextPaxAttributes = parsePAXPayload(payload)
+                } else if typeFlag == UInt8(ascii: "L") {
+                    let payload = try fh.read(upToCount: Int(resolvedSize)) ?? Data()
+                    nextGnuLongName = String(data: payload, encoding: .utf8)?.trimmingCharacters(in: CharacterSet(charactersIn: "\0"))
+                } else if typeFlag == UInt8(ascii: "K") {
+                    let payload = try fh.read(upToCount: Int(resolvedSize)) ?? Data()
+                    nextGnuLongLink = String(data: payload, encoding: .utf8)?.trimmingCharacters(in: CharacterSet(charactersIn: "\0"))
+                }
+                offset = min(fileSize, offset + paddedLen)
                 continue
             }
 
             let basePath = prefix.isEmpty ? rawName : "\(prefix)/\(rawName)"
             let resolvedPath = nextPaxAttributes["path"] ?? nextGnuLongName ?? basePath
-            let resolvedSize = nextPaxAttributes["size"].flatMap(UInt64.init) ?? sizeVal
+            let resolvedLinkTarget = nextPaxAttributes["linkpath"] ?? nextGnuLongLink ?? rawLinkName
             let resolvedMtime = nextPaxAttributes["mtime"].flatMap(Double.init) ?? Double(mtimeVal)
 
             nextPaxAttributes.removeAll()
             nextGnuLongName = nil
+            nextGnuLongLink = nil
 
             let isDir = typeFlag == UInt8(ascii: "5") || resolvedPath.hasSuffix("/")
             let isSymlink = typeFlag == UInt8(ascii: "2")
-            let crc = isDir ? 0 : CompressionCodec.crc32(payload)
+
+            var crc: UInt32 = 0
+            if computeCRC && !isDir && !isSymlink && resolvedSize > 0 {
+                try fh.seek(toOffset: offset)
+                var rem = resolvedSize
+                while rem > 0 {
+                    try controller?.checkpoint()
+                    let want = Int(min(UInt64(BoltConcurrency.streamChunkSize), rem))
+                    let chunk = try fh.read(upToCount: want) ?? Data()
+                    if chunk.isEmpty { break }
+                    crc = CompressionCodec.crc32(chunk, initial: crc)
+                    rem -= UInt64(chunk.count)
+                }
+            } else if isSymlink && computeCRC {
+                crc = CompressionCodec.crc32(Data(resolvedLinkTarget.utf8))
+            }
+
             let entry = ArchiveEntry(
                 path: resolvedPath,
                 isDirectory: isDir,
                 isSymbolicLink: isSymlink,
-                uncompressedSize: isDir ? 0 : resolvedSize,
+                uncompressedSize: isDir ? 0 : (isSymlink ? UInt64(resolvedLinkTarget.utf8.count) : resolvedSize),
                 compressedSize: isDir ? 0 : resolvedSize,
                 compressionMethodName: methodLabel,
                 crc32: crc,
                 modifiedDate: Date(timeIntervalSince1970: resolvedMtime),
                 permissions: UInt16(modeVal & 0o7777)
             )
-            items.append(ParsedTarItem(entry: entry, payload: payload))
+            let info = StreamTarHeaderInfo(
+                entry: entry,
+                symlinkTarget: resolvedLinkTarget,
+                payloadOffset: offset,
+                payloadSize: isDir ? 0 : resolvedSize,
+                paddedSize: paddedLen
+            )
+            let shouldContinue = try visitor(info, fh)
+            offset = min(fileSize, offset + paddedLen)
+            if !shouldContinue { break }
         }
-        return items
     }
 
-    private static func appendTarEntry(
-        to out: inout Data,
-        path: String,
-        isDirectory: Bool,
-        permissions: UInt16,
-        modifiedDate: Date,
-        payload: Data
-    ) {
-        let utf8Path = Data(path.utf8)
-        let needsPAX = utf8Path.count > 100 || payload.count >= 0o77777777777
+    internal static func streamScanTar(
+        at tarURL: URL,
+        methodLabel: String,
+        computeCRC: Bool,
+        verifyDataRead: Bool = false
+    ) throws -> [ArchiveEntry] {
+        var result: [ArchiveEntry] = []
+        try iterateTarHeaders(at: tarURL, methodLabel: methodLabel, computeCRC: computeCRC) { info, fh in
+            if verifyDataRead && !info.entry.isDirectory && !info.entry.isSymbolicLink && info.payloadSize > 0 {
+                // Probe end of payload to confirm underlying stream wasn't truncated prematurely
+                let lastByteOffset = info.payloadOffset + info.payloadSize - 1
+                try fh.seek(toOffset: lastByteOffset)
+                guard let tailByte = try fh.read(upToCount: 1), tailByte.count == 1 else {
+                    throw BoltZipError.corruptedEntry(
+                        entry: info.entry.path,
+                        detail: BoltCoreLocalization.t("TAR 条目数据区提前截断", "TAR 項目資料區提前截斷", "Unexpected EOF in TAR entry payload", "TAR 項目のデータ領域が途中で切れています")
+                    )
+                }
+            }
+            result.append(info.entry)
+            return true
+        }
+        return result
+    }
+
+    private static func readSingleEntryFromTarFile(at tarURL: URL, targetPath: String) throws -> Data? {
+        var found: Data?
+        try iterateTarHeaders(at: tarURL, methodLabel: "TAR", computeCRC: false) { info, fh in
+            guard info.entry.path == targetPath else { return true }
+            if info.entry.isSymbolicLink {
+                found = Data(info.symlinkTarget.utf8)
+            } else {
+                try fh.seek(toOffset: info.payloadOffset)
+                found = try fh.read(upToCount: Int(info.payloadSize)) ?? Data()
+            }
+            return false
+        }
+        return found
+    }
+
+    internal static func streamExtractTarFile(
+        at tarURL: URL,
+        to destinationURL: URL,
+        selectedPaths: Set<String>?,
+        stripMacJunk: Bool,
+        overwritePolicy: OverwritePolicy,
+        restoreSymlinks: Bool,
+        topLevelDirRenameMap: [String: String],
+        baseFrac: Double,
+        totalExpectedBytes: UInt64,
+        controller: ArchiveTaskController?,
+        progress: (@Sendable (OperationProgress) -> Void)?
+    ) throws {
+        let fm = FileManager.default
+        var processedBytes: UInt64 = 0
+
+        try iterateTarHeaders(at: tarURL, methodLabel: "TAR", computeCRC: false, controller: controller) { info, fh in
+            let entry = info.entry
+            if stripMacJunk && MacJunkFilter.isJunk(path: entry.path) {
+                return true
+            }
+            if let sel = selectedPaths, !sel.isEmpty,
+               !BoltArchiveEngine.pathMatchesSelection(entry.path, selectedPaths: sel) {
+                return true
+            }
+
+            let outputPath = BoltArchiveEngine.remapTopLevelFolder(in: entry.path, renameMap: topLevelDirRenameMap)
+            let initialDest = try BoltArchiveEngine.safeDestinationURL(for: outputPath, under: destinationURL)
+
+            if entry.isDirectory {
+                try BoltArchiveEngine.assertNoSymlinkTraversal(at: initialDest, under: destinationURL)
+                try fm.createDirectory(at: initialDest, withIntermediateDirectories: true)
+                return true
+            }
+
+            if entry.isSymbolicLink {
+                if restoreSymlinks {
+                    try BoltArchiveEngine.createSafeSymlink(
+                        at: initialDest,
+                        target: info.symlinkTarget,
+                        under: destinationURL,
+                        overwritePolicy: overwritePolicy
+                    )
+                }
+                return true
+            }
+
+            guard let targetURL = try BoltArchiveEngine.prepareExtractTargetURL(
+                initialURL: initialDest,
+                under: destinationURL,
+                policy: overwritePolicy
+            ) else {
+                processedBytes += info.payloadSize
+                return true
+            }
+
+            try fh.seek(toOffset: info.payloadOffset)
+            fm.createFile(atPath: targetURL.path, contents: nil)
+            let outHandle = try FileHandle(forWritingTo: targetURL)
+            var closeOut = true
+            defer { if closeOut { try? outHandle.close() } }
+
+            var rem = info.payloadSize
+            while rem > 0 {
+                try controller?.checkpoint()
+                let want = Int(min(UInt64(BoltConcurrency.streamChunkSize), rem))
+                let chunk = try fh.read(upToCount: want) ?? Data()
+                if chunk.isEmpty { break }
+                try outHandle.write(contentsOf: chunk)
+                rem -= UInt64(chunk.count)
+                processedBytes += UInt64(chunk.count)
+
+                let span = 1.0 - baseFrac
+                let itemFrac = totalExpectedBytes > 0 ? Double(processedBytes) / Double(totalExpectedBytes) : 0.5
+                let overallFrac = min(0.99, baseFrac + span * itemFrac)
+                progress?(OperationProgress(
+                    fractionCompleted: overallFrac,
+                    currentItem: entry.path,
+                    processedBytes: processedBytes,
+                    totalBytes: totalExpectedBytes
+                ))
+            }
+            try outHandle.close()
+            closeOut = false
+
+            let attrs: [FileAttributeKey: Any] = [
+                .modificationDate: entry.modifiedDate,
+                .posixPermissions: NSNumber(value: entry.permissions)
+            ]
+            try? fm.setAttributes(attrs, ofItemAtPath: targetURL.path)
+            return true
+        }
+    }
+
+    private static func streamAppendTarEntry(
+        to handle: FileHandle,
+        item: ZipWriter.InputItem,
+        controller: ArchiveTaskController?,
+        onChunkProgress: (UInt64) -> Void
+    ) throws {
+        let path = item.archivePath
+        let symlinkTarget = item.symlinkTarget ?? ""
+        let payloadSize = (item.isDirectory || item.isSymbolicLink) ? UInt64(0) : item.fileSize
+
+        let needsPAX = path.utf8.count > 100
+            || symlinkTarget.utf8.count > 100
+            || payloadSize >= 0o77777777777
 
         if needsPAX {
             var paxBody = Data()
-            paxBody.append(paxRecord(key: "path", value: path))
-            if payload.count >= 0o77777777777 {
-                paxBody.append(paxRecord(key: "size", value: String(payload.count)))
+            if path.utf8.count > 100 {
+                paxBody.append(paxRecord(key: "path", value: path))
+            }
+            if item.isSymbolicLink && symlinkTarget.utf8.count > 100 {
+                paxBody.append(paxRecord(key: "linkpath", value: symlinkTarget))
+            }
+            if payloadSize >= 0o77777777777 {
+                paxBody.append(paxRecord(key: "size", value: String(payloadSize)))
             }
             let paxName = "PaxHeaders.0/" + String(path.suffix(70))
             let paxHeader = buildUSTARHeader(
                 name: paxName,
                 mode: 0o644,
                 size: UInt64(paxBody.count),
-                mtime: UInt64(max(0, modifiedDate.timeIntervalSince1970)),
-                typeFlag: UInt8(ascii: "x")
+                mtime: UInt64(max(0, item.modifiedDate.timeIntervalSince1970)),
+                typeFlag: UInt8(ascii: "x"),
+                linkname: ""
             )
-            out.append(paxHeader)
-            out.append(paxBody)
+            try handle.write(contentsOf: paxHeader)
+            try handle.write(contentsOf: paxBody)
             let paxPad = (blockSize - (paxBody.count % blockSize)) % blockSize
-            if paxPad > 0 { out.append(Data(count: paxPad)) }
+            if paxPad > 0 { try handle.write(contentsOf: Data(count: paxPad)) }
         }
 
         let headerName = String(path.prefix(99))
+        let typeFlag: UInt8
+        if item.isSymbolicLink {
+            typeFlag = UInt8(ascii: "2")
+        } else if item.isDirectory {
+            typeFlag = UInt8(ascii: "5")
+        } else {
+            typeFlag = UInt8(ascii: "0")
+        }
+
         let header = buildUSTARHeader(
             name: headerName,
-            mode: permissions,
-            size: isDirectory ? 0 : UInt64(payload.count),
-            mtime: UInt64(max(0, modifiedDate.timeIntervalSince1970)),
-            typeFlag: isDirectory ? UInt8(ascii: "5") : UInt8(ascii: "0")
+            mode: item.permissions,
+            size: payloadSize,
+            mtime: UInt64(max(0, item.modifiedDate.timeIntervalSince1970)),
+            typeFlag: typeFlag,
+            linkname: item.isSymbolicLink ? String(symlinkTarget.prefix(99)) : ""
         )
-        out.append(header)
-        if !isDirectory && !payload.isEmpty {
-            out.append(payload)
-            let pad = (blockSize - (payload.count % blockSize)) % blockSize
-            if pad > 0 { out.append(Data(count: pad)) }
+        try handle.write(contentsOf: header)
+
+        if let fileURL = item.fileURL, !item.isDirectory && !item.isSymbolicLink && payloadSize > 0 {
+            let inHandle = try FileHandle(forReadingFrom: fileURL)
+            defer { try? inHandle.close() }
+            var copied: UInt64 = 0
+            while copied < payloadSize {
+                try controller?.checkpoint()
+                let want = Int(min(UInt64(BoltConcurrency.streamChunkSize), payloadSize - copied))
+                let chunk = try inHandle.read(upToCount: want) ?? Data()
+                if chunk.isEmpty { break }
+                try handle.write(contentsOf: chunk)
+                copied += UInt64(chunk.count)
+                onChunkProgress(copied)
+            }
+            let remMod = Int(copied % UInt64(blockSize))
+            let pad = (blockSize - remMod) % blockSize
+            if pad > 0 { try handle.write(contentsOf: Data(count: pad)) }
         }
     }
 
@@ -366,7 +801,8 @@ public enum TarCodec {
         mode: UInt16,
         size: UInt64,
         mtime: UInt64,
-        typeFlag: UInt8
+        typeFlag: UInt8,
+        linkname: String
     ) -> Data {
         var hdr = Data(count: blockSize)
         writeTarBytes(&hdr, string: name, offset: 0, maxLen: 100)
@@ -377,6 +813,9 @@ public enum TarCodec {
         writeTarOctal(&hdr, value: mtime, offset: 136, length: 12)
         for i in 148..<156 { hdr[i] = UInt8(ascii: " ") }
         hdr[156] = typeFlag
+        if !linkname.isEmpty {
+            writeTarBytes(&hdr, string: linkname, offset: 157, maxLen: 100)
+        }
         writeTarBytes(&hdr, string: "ustar", offset: 257, maxLen: 6)
         hdr[263] = UInt8(ascii: "0")
         hdr[264] = UInt8(ascii: "0")

@@ -79,6 +79,54 @@ struct MainWindowView: View {
                 names: conflict.conflictingNames
             ))
         }
+        .alert(
+            l.batchDropTitle,
+            isPresented: Binding(
+                get: { vm.pendingBatchArchiveDrop != nil },
+                set: { if !$0 { vm.pendingBatchArchiveDrop = nil } }
+            ),
+            presenting: vm.pendingBatchArchiveDrop
+        ) { batch in
+            Button(l.batchDropSmartExtractAll) {
+                let urls = batch.urls
+                vm.pendingBatchArchiveDrop = nil
+                vm.executeBatchArchiveDropAction(urls: urls, mode: .smart)
+            }
+            Button(l.batchDropSubfolderAll) {
+                let urls = batch.urls
+                vm.pendingBatchArchiveDrop = nil
+                vm.executeBatchArchiveDropAction(urls: urls, mode: .subfolder)
+            }
+            Button(l.batchDropRepack) {
+                let urls = batch.urls
+                vm.pendingBatchArchiveDrop = nil
+                vm.presentStandaloneCompressWizard(inputs: urls)
+            }
+            Button(l.cancel, role: .cancel) {
+                vm.pendingBatchArchiveDrop = nil
+            }
+        } message: { batch in
+            Text(l.batchDropMessage(batch.urls.count))
+        }
+        .alert(
+            l.confirmDeleteTitle,
+            isPresented: Binding(
+                get: { vm.pendingDeleteConfirmation != nil },
+                set: { if !$0 { vm.pendingDeleteConfirmation = nil } }
+            ),
+            presenting: vm.pendingDeleteConfirmation
+        ) { req in
+            Button(l.confirmDeleteBtn, role: .destructive) {
+                let targets = req.paths
+                vm.pendingDeleteConfirmation = nil
+                vm.deletePaths(targets)
+            }
+            Button(l.cancel, role: .cancel) {
+                vm.pendingDeleteConfirmation = nil
+            }
+        } message: { req in
+            Text(l.confirmDeleteMessage(req.paths.count))
+        }
     }
 
     @ToolbarContentBuilder
@@ -96,6 +144,16 @@ struct MainWindowView: View {
                         }
 
                         toolbarDivider
+                    }
+
+                    if let parentFrame = vm.archiveBackStack.last {
+                        ToolbarPillIconButton(
+                            systemImage: "arrow.uturn.backward",
+                            label: l.backToParentArchive(parentFrame.archiveURL.lastPathComponent),
+                            helpText: l.backToParentArchive(parentFrame.archiveURL.lastPathComponent)
+                        ) {
+                            vm.navigateBackFromNestedArchive()
+                        }
                     }
 
                     ToolbarPillIconButton(
@@ -213,6 +271,15 @@ struct MainWindowView: View {
                             ) {
                                 vm.activeSheet = .createFolder(parentFolder: vm.currentFolder)
                             }
+
+                            ToolbarPillIconButton(
+                                systemImage: "text.bubble",
+                                label: l.archiveCommentEditBtn,
+                                helpText: l.archiveCommentTitle,
+                                isActive: !listing.comment.isEmpty
+                            ) {
+                                vm.activeSheet = .editArchiveComment(current: listing.comment)
+                            }
                         }
 
                         toolbarDivider
@@ -281,7 +348,7 @@ struct MainWindowView: View {
                         label: l.settingsMenuTitle,
                         helpText: l.settingsMenuTitle
                     ) {
-                        NSApp.activate(ignoringOtherApps: true)
+                        boltActivateAppToForeground()
                         openSettings()
                     }
                 }
@@ -387,6 +454,10 @@ struct MainWindowView: View {
             }
         case .entryProperties(let entry):
             EntryPropertiesSheet(vm: vm, entry: entry)
+        case .editArchiveComment(let current):
+            ArchiveCommentSheet(vm: vm, initialComment: current, canEdit: vm.listing?.canEditInPlace == true)
+        case .updateAvailable(let info):
+            UpdateAvailableSheet(vm: vm, release: info)
         }
     }
 }

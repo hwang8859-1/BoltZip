@@ -1,157 +1,176 @@
 import AppKit
-import CoreGraphics
 import Foundation
 
-guard CommandLine.arguments.count > 1 else {
-    fputs("Usage: generate_icon.swift <output.iconset>\n", stderr)
-    exit(1)
-}
+// Compiled alongside `Sources/BoltZipCore/Icons/*.swift` by `Scripts/build_app.sh`:
+// swiftc -O -parse-as-library Sources/BoltZipCore/Icons/*.swift Scripts/generate_icon.swift \
+//   -framework AppKit -framework CoreGraphics -o <bin>
 
-let iconsetURL = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
-try FileManager.default.createDirectory(at: iconsetURL, withIntermediateDirectories: true)
+@main
+struct BoltIconGeneratorCLI {
+    static let specs: [(String, Int)] = [
+        ("icon_16x16.png", 16),
+        ("icon_16x16@2x.png", 32),
+        ("icon_32x32.png", 32),
+        ("icon_32x32@2x.png", 64),
+        ("icon_128x128.png", 128),
+        ("icon_128x128@2x.png", 256),
+        ("icon_256x256.png", 256),
+        ("icon_256x256@2x.png", 512),
+        ("icon_512x512.png", 512),
+        ("icon_512x512@2x.png", 1024)
+    ]
 
-func renderIcon(size: Int) -> Data? {
-    let s = CGFloat(size)
-    guard let rep = NSBitmapImageRep(
-        bitmapDataPlanes: nil,
-        pixelsWide: size,
-        pixelsHigh: size,
-        bitsPerSample: 8,
-        samplesPerPixel: 4,
-        hasAlpha: true,
-        isPlanar: false,
-        colorSpaceName: .deviceRGB,
-        bytesPerRow: 0,
-        bitsPerPixel: 0
-    ) else { return nil }
-
-    NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-    guard let ctx = NSGraphicsContext.current?.cgContext else { return nil }
-
-    let inset = s * 0.08
-    let rect = CGRect(x: inset, y: inset, width: s - inset * 2, height: s - inset * 2)
-    let corner = rect.width * 0.225
-    let squircle = CGPath(roundedRect: rect, cornerWidth: corner, cornerHeight: corner, transform: nil)
-
-    // Outer drop shadow
-    ctx.saveGState()
-    ctx.setShadow(offset: CGSize(width: 0, height: -s * 0.025), blur: s * 0.05, color: NSColor.black.withAlphaComponent(0.38).cgColor)
-    ctx.addPath(squircle)
-    ctx.setFillColor(NSColor(red: 0.05, green: 0.08, blue: 0.18, alpha: 1.0).cgColor)
-    ctx.fillPath()
-    ctx.restoreGState()
-
-    // Clip to squircle
-    ctx.saveGState()
-    ctx.addPath(squircle)
-    ctx.clip()
-
-    let cs = CGColorSpaceCreateDeviceRGB()
-    let bgColors = [
-        NSColor(red: 0.05, green: 0.10, blue: 0.24, alpha: 1.0).cgColor,
-        NSColor(red: 0.11, green: 0.15, blue: 0.37, alpha: 1.0).cgColor,
-        NSColor(red: 0.03, green: 0.05, blue: 0.13, alpha: 1.0).cgColor
-    ] as CFArray
-    if let grad = CGGradient(colorsSpace: cs, colors: bgColors, locations: [0.0, 0.52, 1.0]) {
-        ctx.drawLinearGradient(grad, start: CGPoint(x: 0, y: s), end: CGPoint(x: s, y: 0), options: [])
+    static func writeIconset(at iconsetURL: URL, renderPNG: (Int) -> Data?) throws {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: iconsetURL.path) {
+            try fm.removeItem(at: iconsetURL)
+        }
+        try fm.createDirectory(at: iconsetURL, withIntermediateDirectories: true)
+        for (filename, px) in specs {
+            guard let png = renderPNG(px) else {
+                throw NSError(domain: "BoltIconGenerator", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: "Failed to render \(filename)"
+                ])
+            }
+            try png.write(to: iconsetURL.appendingPathComponent(filename))
+        }
     }
 
-    // Soft radial cyan/indigo ambient glow behind the emblem
-    let auraColors = [
-        NSColor(red: 0.22, green: 0.74, blue: 0.98, alpha: 0.28).cgColor,
-        NSColor(red: 0.39, green: 0.40, blue: 0.95, alpha: 0.12).cgColor,
-        NSColor.clear.cgColor
-    ] as CFArray
-    if let aura = CGGradient(colorsSpace: cs, colors: auraColors, locations: [0.0, 0.5, 1.0]) {
-        ctx.drawRadialGradient(
-            aura,
-            startCenter: CGPoint(x: s * 0.5, y: s * 0.5),
-            startRadius: 0,
-            endCenter: CGPoint(x: s * 0.5, y: s * 0.5),
-            endRadius: s * 0.44,
-            options: []
-        )
+    static func convertToIcns(iconsetURL: URL, outputIcnsURL: URL) throws {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
+        proc.arguments = ["-c", "icns", iconsetURL.path, "-o", outputIcnsURL.path]
+        try proc.run()
+        proc.waitUntilExit()
+        guard proc.terminationStatus == 0 else {
+            throw NSError(domain: "BoltIconGenerator", code: Int(proc.terminationStatus), userInfo: [
+                NSLocalizedDescriptionKey: "iconutil failed for \(iconsetURL.lastPathComponent)"
+            ])
+        }
     }
 
-    // Subtle glass top specular sheen
-    let hlColors = [
-        NSColor.white.withAlphaComponent(0.22).cgColor,
-        NSColor.white.withAlphaComponent(0.0).cgColor
-    ] as CFArray
-    if let hlGrad = CGGradient(colorsSpace: cs, colors: hlColors, locations: [0.0, 1.0]) {
-        ctx.drawLinearGradient(hlGrad, start: CGPoint(x: s * 0.5, y: rect.maxY), end: CGPoint(x: s * 0.5, y: rect.midY), options: [])
-    }
+    static func main() throws {
+        let args = Array(CommandLine.arguments.dropFirst())
+        guard let first = args.first else {
+            fputs("Usage:\n  generate_icon <output.iconset>\n  generate_icon --resources <Contents/Resources>\n", stderr)
+            exit(1)
+        }
 
-    // Tilted Lightning + "Z" Emblem:
-    // Forward-leant dynamic Z where the diagonal stroke splits like an electric bolt
-    let zBolt = CGMutablePath()
-    zBolt.move(to: CGPoint(x: s * 0.33, y: s * 0.78))
-    zBolt.addLine(to: CGPoint(x: s * 0.78, y: s * 0.78))
-    zBolt.addLine(to: CGPoint(x: s * 0.51, y: s * 0.53))
-    zBolt.addLine(to: CGPoint(x: s * 0.65, y: s * 0.53))
-    zBolt.addLine(to: CGPoint(x: s * 0.42, y: s * 0.33))
-    zBolt.addLine(to: CGPoint(x: s * 0.72, y: s * 0.33))
-    zBolt.addLine(to: CGPoint(x: s * 0.67, y: s * 0.21))
-    zBolt.addLine(to: CGPoint(x: s * 0.21, y: s * 0.21))
-    zBolt.addLine(to: CGPoint(x: s * 0.48, y: s * 0.46))
-    zBolt.addLine(to: CGPoint(x: s * 0.34, y: s * 0.46))
-    zBolt.addLine(to: CGPoint(x: s * 0.57, y: s * 0.66))
-    zBolt.addLine(to: CGPoint(x: s * 0.28, y: s * 0.66))
-    zBolt.closeSubpath()
+        if first == "--resources" {
+            guard args.count >= 2 else {
+                fputs("Missing <Contents/Resources> directory argument.\n", stderr)
+                exit(1)
+            }
+            let resourcesURL = URL(fileURLWithPath: args[1], isDirectory: true)
+            let fm = FileManager.default
+            try fm.createDirectory(at: resourcesURL, withIntermediateDirectories: true)
 
-    // Rotate Z-Bolt slightly (-8 deg clockwise) around center so it feels like a tilted lightning strike AND a sharp Z
-    var xform = CGAffineTransform(translationX: s * 0.5, y: s * 0.5)
-        .rotated(by: -0.11)
-        .translatedBy(x: -s * 0.5, y: -s * 0.5)
-    let tiltedBolt = zBolt.copy(using: &xform) ?? zBolt
+            let workDir = fm.temporaryDirectory.appendingPathComponent("boltzip-iconsets-\(UUID().uuidString)", isDirectory: true)
+            try fm.createDirectory(at: workDir, withIntermediateDirectories: true)
+            defer { try? fm.removeItem(at: workDir) }
 
-    ctx.saveGState()
-    ctx.setShadow(offset: CGSize(width: 0, height: -s * 0.015), blur: s * 0.075, color: NSColor(red: 0.22, green: 0.78, blue: 1.0, alpha: 0.75).cgColor)
-    ctx.addPath(tiltedBolt)
-    ctx.clip()
-    let boltColors = [
-        NSColor(red: 0.22, green: 0.84, blue: 1.0, alpha: 1.0).cgColor,
-        NSColor(red: 0.54, green: 0.72, blue: 1.0, alpha: 1.0).cgColor,
-        NSColor(red: 1.0, green: 0.84, blue: 0.18, alpha: 1.0).cgColor
-    ] as CFArray
-    if let bGrad = CGGradient(colorsSpace: cs, colors: boltColors, locations: [0.0, 0.45, 1.0]) {
-        ctx.drawLinearGradient(bGrad, start: CGPoint(x: s * 0.26, y: s * 0.78), end: CGPoint(x: s * 0.74, y: s * 0.21), options: [])
-    }
-    ctx.restoreGState()
+            let appIconBundle = workDir.appendingPathComponent("AppIcon.icon", isDirectory: true)
+            let assetsDir = appIconBundle.appendingPathComponent("Assets", isDirectory: true)
+            try fm.createDirectory(at: assetsDir, withIntermediateDirectories: true)
 
-    // Crisp specular edge around Z-Bolt
-    ctx.addPath(tiltedBolt)
-    ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.38).cgColor)
-    ctx.setLineWidth(max(0.8, s * 0.008))
-    ctx.strokePath()
+            guard let foregroundPNG = BoltIconArtwork.renderAppIconForegroundPNG(pixelSize: 1024, whiteBackground: true) else {
+                fputs("Failed to render foreground icon assets.\n", stderr)
+                exit(1)
+            }
+            try foregroundPNG.write(to: assetsDir.appendingPathComponent("emblem.png"))
 
-    // Outer squircle glass rim
-    ctx.addPath(squircle)
-    ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.30).cgColor)
-    ctx.setLineWidth(max(1.0, s * 0.012))
-    ctx.strokePath()
+            let iconJSON = """
+            {
+              "fill-specializations": [
+                {
+                  "value": {
+                    "linear-gradient": [
+                      "srgb:1.00000,1.00000,1.00000,1.00000",
+                      "srgb:0.91373,0.94510,0.98824,1.00000"
+                    ],
+                    "orientation": {
+                      "start": { "x": 0.15, "y": 0.0 },
+                      "stop": { "x": 0.35, "y": 1.0 }
+                    }
+                  }
+                },
+                {
+                  "appearance": "dark",
+                  "value": {
+                    "linear-gradient": [
+                      "srgb:0.19216,0.33333,0.54118,1.00000",
+                      "srgb:0.06275,0.12157,0.23922,1.00000"
+                    ],
+                    "orientation": {
+                      "start": { "x": 0.15, "y": 0.0 },
+                      "stop": { "x": 0.35, "y": 1.0 }
+                    }
+                  }
+                }
+              ],
+              "groups": [
+                {
+                  "layers": [
+                    {
+                      "image-name": "emblem.png",
+                      "name": "bolt-emblem",
+                      "position": {
+                        "scale": 1.0,
+                        "translation-in-points": [0, 0]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "supported-platforms": {
+                "squares": "shared"
+              }
+            }
+            """
+            try Data(iconJSON.utf8).write(to: appIconBundle.appendingPathComponent("icon.json"))
 
-    ctx.restoreGState()
-    NSGraphicsContext.restoreGraphicsState()
-    return rep.representation(using: .png, properties: [:])
-}
+            let actoolProc = Process()
+            actoolProc.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+            actoolProc.arguments = [
+                "actool",
+                appIconBundle.path,
+                "--compile", resourcesURL.path,
+                "--platform", "macosx",
+                "--minimum-deployment-target", "26.0",
+                "--app-icon", "AppIcon",
+                "--output-partial-info-plist", workDir.appendingPathComponent("assetcatalog_info.plist").path,
+                "--warnings",
+                "--errors"
+            ]
+            try actoolProc.run()
+            actoolProc.waitUntilExit()
+            if actoolProc.terminationStatus != 0 {
+                fputs("Warning: xcrun actool failed (status \(actoolProc.terminationStatus)), falling back to AppIcon.icns via iconutil.\n", stderr)
+                let appIconset = workDir.appendingPathComponent("AppIcon.iconset", isDirectory: true)
+                try writeIconset(at: appIconset) { px in
+                    BoltIconArtwork.renderAppIconPNG(pixelSize: px, whiteBackground: false)
+                }
+                try convertToIcns(
+                    iconsetURL: appIconset,
+                    outputIcnsURL: resourcesURL.appendingPathComponent("AppIcon.icns")
+                )
+            }
 
-let specs: [(String, Int)] = [
-    ("icon_16x16.png", 16),
-    ("icon_16x16@2x.png", 32),
-    ("icon_32x32.png", 32),
-    ("icon_32x32@2x.png", 64),
-    ("icon_128x128.png", 128),
-    ("icon_128x128@2x.png", 256),
-    ("icon_256x256.png", 256),
-    ("icon_256x256@2x.png", 512),
-    ("icon_512x512.png", 512),
-    ("icon_512x512@2x.png", 1024)
-]
-
-for (filename, px) in specs {
-    if let png = renderIcon(size: px) {
-        try png.write(to: iconsetURL.appendingPathComponent(filename))
+            for kind in BoltDocumentIconKind.allCases {
+                let docIconset = workDir.appendingPathComponent("\(kind.icnsBaseName).iconset", isDirectory: true)
+                try writeIconset(at: docIconset) { px in
+                    BoltIconArtwork.renderDocumentIconPNG(kind: kind, pixelSize: px)
+                }
+                try convertToIcns(
+                    iconsetURL: docIconset,
+                    outputIcnsURL: resourcesURL.appendingPathComponent("\(kind.icnsBaseName).icns")
+                )
+            }
+        } else {
+            let iconsetURL = URL(fileURLWithPath: first, isDirectory: true)
+            try writeIconset(at: iconsetURL) { px in
+                BoltIconArtwork.renderAppIconPNG(pixelSize: px, whiteBackground: false)
+            }
+        }
     }
 }

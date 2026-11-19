@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="showcase/app-icon.png" width="112" height="112" alt="BoltZip" />
+
 # BoltZip ⚡
 
 **Lightning-fast archives. Liquid-clear macOS craft.**
@@ -8,8 +10,18 @@
 
 ![macOS 26.0+](https://img.shields.io/badge/macOS-26.0%2B%20(Apple%20Silicon)-0ea5e9?style=flat-square)
 ![Swift 6.2](https://img.shields.io/badge/Swift-6.2-6366f1?style=flat-square)
-![Release v1.0.1](https://img.shields.io/badge/release-v1.0.1-facc15?style=flat-square)
+[![Release v1.0.2](https://img.shields.io/badge/release-v1.0.2-facc15?style=flat-square)](https://github.com/hwang8859-1/BoltZip/releases/latest)
 ![License MIT](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)
+
+<p>
+  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.dmg"><strong>⬇️ Download Latest v1.0.2 (.dmg · Apple Silicon)</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg">🛡 Compatible v0.9.3 (.dmg · Intel / macOS 12–26)</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/hwang8859-1/BoltZip/releases/latest">📦 GitHub Releases</a>
+  &nbsp;·&nbsp;
+  <a href="https://122.51.112.183/boltzip/">🌐 Live Showcase &amp; Downloads</a>
+</p>
 
 </div>
 
@@ -17,18 +29,30 @@
 
 **BoltZip** is an open-source archive manager crafted exclusively for **macOS 26.0+ on Apple Silicon (`arm64` / M-series)**. It pairs the productive, desktop-class archive workflows popularized by Windows tools (7-Zip, WinZip, Bandizip) with native **Liquid Glass** craft—so you never have to extract an entire archive just to inspect or edit one file.
 
-> 💡 **Using Intel Mac or macOS 12–15?** Download **v0.9.3 Universal (`arm64` + `x86_64`)** from the [`legacy/macos-12`](../../tree/legacy/macos-12) branch / `v0.9.3` release tag.
+> 💡 **Using Intel Mac or macOS 12–15?** Download **v0.9.3 Universal (`arm64` + `x86_64`)** from the [`legacy/macos-12`](../../tree/legacy/macos-12) branch / [`v0.9.3`](https://github.com/hwang8859-1/BoltZip/releases/tag/v0.9.3) release.
 
 > [!IMPORTANT]
 > **Active Development: [Repository Default `dev-*` Branch](../../)** · `main` is a protected release-only branch. Please target the active default `dev-*` branch for all pull requests — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## ⬇️ Quick Download & Install
+
+| Mac & macOS Compatibility | Recommended Release | Direct Download | Release Page |
+| :--- | :--- | :--- | :--- |
+| **Apple Silicon (`arm64`) · macOS 26.0+** | **`v1.0.2`** (Latest) | [Download `.dmg` Installer](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.dmg) · [Portable `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.zip) | [Release v1.0.2 ↗](https://github.com/hwang8859-1/BoltZip/releases/latest) |
+| **Intel (`x86_64`) or macOS 12.0–15 / 26+** | **`v0.9.3`** (Universal LTS) | [Download `.dmg` Installer](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg) · [Portable `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.zip) | [Release v0.9.3 ↗](https://github.com/hwang8859-1/BoltZip/releases/tag/v0.9.3) |
+
+- **3-Step Install**: Open the downloaded `.dmg` → drag `BoltZip.app` into `Applications` → launch BoltZip and enable the **Finder `Bolt ›` Context Menu** & **Default File Associations** in Settings with one click.
+- **Web Download Portal**: Visit [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/) for interactive UI previews, auto-matched track recommendations, and `SHA256SUMS.txt` checksums.
+- **Gatekeeper Note**: Open-source release binaries use ad-hoc signing; on first launch, right-click `BoltZip.app` → **Open** (or click **Open Anyway** in System Settings → Privacy & Security).
 
 ## ✨ Highlights
 
 - **Auto-Remove `.DS_Store` & macOS Junk**: Automatically strips `.DS_Store`, `__MACOSX`, `._*`, `.Spotlight-V100`, and `.Trashes` during archive creation, in-place ZIP additions, and extraction—keeping archives clean for Windows/Linux recipients and preventing `__MACOSX` from breaking Smart Extract (opt out via `--keep-junk` in CLI or the toggle in UI).
 - **Top-Level Finder Context Menu `Bolt ›`**: Powered by a sandboxed native `FinderSync` extension (`BoltZipFinderSync.appex`), quick actions appear directly at the top level of Finder’s right-click menu—never buried under Services:
-  - Smart Extract / Extract to Subfolder / Browse in BoltZip / Verify Integrity
-  - Instant Compress to `ZIP`, `TAR.ZST (Zstd)`, `7z`, or Encrypted & Split Archive Wizard
-- **Browse & Edit Inside Archives**: Double-click or press `Space` to preview entries via macOS Quick Look without full extraction. Navigate folder trees, search/sort, inspect CRC32 & metadata, export selected entries into a new ZIP, and **add, rename, or delete inside ZIP files** with zero recompression of untouched entries.
+  - Smart Extract / Extract to Subfolder / Extract to… / Browse in BoltZip / Verify Integrity
+  - Instant Compress to `ZIP`, `TAR.ZST (Zstd)`, `7z`, Individual ZIPs on Multi-Select, or Encrypted & Split Archive Wizard
+- **Browse, Drag Out & Edit Inside Archives**: Double-click or press `Space` for macOS Quick Look without full extraction, drill into **nested archives with breadcrumb back navigation**, drag items straight out to Finder (`NSFilePromiseProvider`), view/edit ZIP comments, and **add, rename, or delete inside ZIP files** with zero recompression of untouched entries.
+- **Chunked Streaming I/O, Safe Symlinks & In-App Updater**: Streams entries `>= 64 MB` in `1 MB` chunks across ZIP, WinZip AE-2, ZipCrypto, and TAR.*, safely preserves/restores symlinks with traversal guards, stages `.7z` via APFS hardlinks, ships 17 per-format document icons, and checks GitHub Releases updates with `SHA256SUMS.txt` verification.
 - **Native Liquid Glass Experience**:
   - On macOS 26+, toggle window translucency and fine-tune background opacity (`25% – 100%`) live;
   - Independently show/hide home modules (Finder setup banner, feature highlights, recent archives), sidebar summary, and status bar;
@@ -66,7 +90,7 @@ swift run -c release boltzip x release.zip ./out --mode smart
 
 ## 🧩 Interactive Showcase & Developer Docs
 
-- **Live Showcase & Download Page**: Visit [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/) to explore the live interactive Windows-Zip UI simulator, multi-language switcher, codec benchmarks, and direct downloads for `BoltZip v1.0.1 Apple Silicon` & source archives (sources in [showcase/](showcase/)).
+- **Live Showcase & Download Page**: Visit [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/) to explore the live interactive Windows-Zip UI simulator, multi-language switcher, codec benchmarks, and direct downloads for `BoltZip v1.0.2 Apple Silicon` & source archives (sources in [showcase/](showcase/)).
 - **Contributor & AI Agent Guide**: See [AGENTS.md](AGENTS.md) for architecture boundaries, static-linking details, and engineering invariants.
 - **Release History**: See [CHANGELOG.md](CHANGELOG.md).
 

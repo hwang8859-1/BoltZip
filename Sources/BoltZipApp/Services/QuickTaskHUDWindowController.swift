@@ -2,9 +2,18 @@ import AppKit
 import BoltZipCore
 import SwiftUI
 
-private final class QuickHUDPanel: NSPanel {
+private final class QuickHUDPanel: NSPanel, BoltDragTrackingWindow {
+    var isUserDragging = false
+    var onUserDraggingChanged: (@MainActor (Bool) -> Void)?
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    func setUserDragging(_ dragging: Bool) {
+        guard isUserDragging != dragging else { return }
+        isUserDragging = dragging
+        onUserDraggingChanged?(dragging)
+    }
 }
 
 @MainActor
@@ -21,6 +30,7 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
     private var hasPositionedOnce: Bool = false
     private var isProgrammaticFrameUpdate: Bool = false
     private var isResizeScheduled: Bool = false
+    private var pendingResizeAfterDrag: Bool = false
 
     var isVisible: Bool { panel?.isVisible == true }
     var onDidHide: (() -> Void)?
@@ -78,6 +88,11 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
             created.hidesOnDeactivate = false
             created.becomesKeyOnlyIfNeeded = true
             created.delegate = self
+            created.onUserDraggingChanged = { [weak self] dragging in
+                guard let self, !dragging, self.pendingResizeAfterDrag else { return }
+                self.pendingResizeAfterDrag = false
+                self.scheduleResizeToFit()
+            }
             self.panel = created
             panel = created
         }
@@ -136,6 +151,10 @@ final class QuickTaskHUDWindowController: NSObject, NSWindowDelegate {
     }
 
     private func resizePanelIfNeeded(_ panel: NSPanel, to fitting: NSSize) {
+        if let hudPanel = panel as? QuickHUDPanel, hudPanel.isUserDragging {
+            pendingResizeAfterDrag = true
+            return
+        }
         let current = panel.frame
         if abs(current.width - fitting.width) > 1.0 || abs(current.height - fitting.height) > 1.0 {
             let topLeftOrigin = NSPoint(x: current.origin.x, y: current.maxY - fitting.height)

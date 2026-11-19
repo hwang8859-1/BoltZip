@@ -34,7 +34,11 @@ private let boltCodecControlBridge: bolt_control_cb = { bytesRead, totalBytes, r
 
 public enum CompressionCodec {
     public static var activeCoreCount: Int {
-        max(1, Int(bolt_active_cores()))
+        BoltConcurrency.hardwareCoreCount
+    }
+
+    public static var effectiveWorkerCount: Int {
+        BoltConcurrency.resolvedWorkerCount()
     }
 
     private static func mapAlgo(_ algo: CompressionAlgorithm) -> bolt_algo_t {
@@ -55,12 +59,42 @@ public enum CompressionCodec {
         }
     }
 
+    public static func crc32File(
+        at url: URL,
+        chunkSize: Int = BoltConcurrency.streamChunkSize,
+        controller: ArchiveTaskController? = nil
+    ) throws -> UInt32 {
+        let fh = try FileHandle(forReadingFrom: url)
+        defer { try? fh.close() }
+        var crc: UInt32 = 0
+        while true {
+            try controller?.checkpoint()
+            let chunk = try fh.read(upToCount: chunkSize) ?? Data()
+            if chunk.isEmpty { break }
+            crc = crc32(chunk, initial: crc)
+        }
+        return crc
+    }
+
+    private static func throwIfCodecError(_ status: bolt_status_t) throws {
+        if status.code == BOLT_STATUS_CANCELLED {
+            throw BoltZipError.cancelled
+        }
+        guard status.code == 0 else {
+            let msg = withUnsafePointer(to: status.message) {
+                $0.withMemoryRebound(to: CChar.self, capacity: 256) { String(cString: $0) }
+            }
+            throw BoltZipError.compressionFailed(msg)
+        }
+    }
+
     public static func compress(
         data: Data,
         algorithm: CompressionAlgorithm,
         gzipContainer: Bool = false,
         level: Int? = nil,
         allowMultiThread: Bool = true,
+        workerCount: Int? = nil,
         controller: ArchiveTaskController? = nil,
         progress: ((UInt64, UInt64) -> Void)? = nil
     ) throws -> Data {
@@ -76,13 +110,15 @@ public enum CompressionCodec {
 
         let needsBridge = (controller != nil || progress != nil)
         let controlCtx = needsBridge ? CCodecControlContext(controller: controller, onProgress: progress) : nil
-        let allowMTFlag: Int32 = allowMultiThread ? 1 : 0
+        let maxWorkers: Int32 = allowMultiThread
+            ? Int32(BoltConcurrency.resolvedWorkerCount(override: workerCount))
+            : 1
         let status = withExtendedLifetime(controlCtx) {
             let rawCtx = controlCtx.map { Unmanaged.passUnretained($0).toOpaque() }
             let cb: bolt_control_cb? = needsBridge ? boltCodecControlBridge : nil
             return data.withUnsafeBytes { rawBuf -> bolt_status_t in
                 let ptr = rawBuf.bindMemory(to: UInt8.self).baseAddress
-                return bolt_compress_buffer_mt(mapAlgo(algorithm), container, lvl, ptr, data.count, &outBuf, allowMTFlag, cb, rawCtx)
+                return bolt_compress_buffer_workers(mapAlgo(algorithm), container, lvl, ptr, data.count, &outBuf, maxWorkers, cb, rawCtx)
             }
         }
         if status.code == BOLT_STATUS_CANCELLED {
@@ -143,48 +179,92 @@ public enum CompressionCodec {
         destinationURL: URL,
         algorithm: CompressionAlgorithm,
         gzipContainer: Bool = false,
-        level: Int? = nil
+        level: Int? = nil,
+        allowMultiThread: Bool = true,
+        workerCount: Int? = nil,
+        controller: ArchiveTaskController? = nil,
+        progress: ((UInt64, UInt64) -> Void)? = nil
     ) throws {
+        try controller?.checkpoint()
         let lvl = Int32(level ?? algorithm.defaultLevel)
         let container = gzipContainer ? BOLT_CONTAINER_GZIP : BOLT_CONTAINER_RAW
-        let status = bolt_compress_file(
-            mapAlgo(algorithm),
-            container,
-            lvl,
-            sourceURL.path,
-            destinationURL.path,
-            nil,
-            nil
-        )
-        guard status.code == 0 else {
-            let msg = withUnsafePointer(to: status.message) {
-                $0.withMemoryRebound(to: CChar.self, capacity: 256) { String(cString: $0) }
-            }
-            throw BoltZipError.compressionFailed(msg)
+        let maxWorkers: Int32 = allowMultiThread
+            ? Int32(BoltConcurrency.resolvedWorkerCount(override: workerCount))
+            : 1
+        let needsBridge = (controller != nil || progress != nil)
+        let controlCtx = needsBridge ? CCodecControlContext(controller: controller, onProgress: progress) : nil
+        let status = withExtendedLifetime(controlCtx) {
+            let rawCtx = controlCtx.map { Unmanaged.passUnretained($0).toOpaque() }
+            let cb: bolt_control_cb? = needsBridge ? boltCodecControlBridge : nil
+            return bolt_compress_file_workers(
+                mapAlgo(algorithm),
+                container,
+                lvl,
+                sourceURL.path,
+                destinationURL.path,
+                maxWorkers,
+                cb,
+                rawCtx
+            )
         }
+        try throwIfCodecError(status)
     }
 
     public static func decompressFile(
         sourceURL: URL,
         destinationURL: URL,
         algorithm: CompressionAlgorithm,
-        gzipContainer: Bool = false
+        gzipContainer: Bool = false,
+        controller: ArchiveTaskController? = nil,
+        progress: ((UInt64, UInt64) -> Void)? = nil
     ) throws {
+        try controller?.checkpoint()
         let container = gzipContainer ? BOLT_CONTAINER_GZIP : BOLT_CONTAINER_RAW
-        let status = bolt_decompress_file(
-            mapAlgo(algorithm),
-            container,
-            sourceURL.path,
-            destinationURL.path,
-            nil,
-            nil
-        )
-        guard status.code == 0 else {
-            let msg = withUnsafePointer(to: status.message) {
-                $0.withMemoryRebound(to: CChar.self, capacity: 256) { String(cString: $0) }
-            }
-            throw BoltZipError.compressionFailed(msg)
+        let needsBridge = (controller != nil || progress != nil)
+        let controlCtx = needsBridge ? CCodecControlContext(controller: controller, onProgress: progress) : nil
+        let status = withExtendedLifetime(controlCtx) {
+            let rawCtx = controlCtx.map { Unmanaged.passUnretained($0).toOpaque() }
+            let cb: bolt_control_cb? = needsBridge ? boltCodecControlBridge : nil
+            return bolt_decompress_file_ex(
+                mapAlgo(algorithm),
+                container,
+                sourceURL.path,
+                destinationURL.path,
+                cb,
+                rawCtx
+            )
         }
+        try throwIfCodecError(status)
+    }
+
+    public static func verifyFile(
+        sourceURL: URL,
+        algorithm: CompressionAlgorithm,
+        gzipContainer: Bool = false,
+        controller: ArchiveTaskController? = nil,
+        progress: ((UInt64, UInt64) -> Void)? = nil
+    ) throws -> (crc32: UInt32, uncompressedSize: UInt64) {
+        try controller?.checkpoint()
+        let container = gzipContainer ? BOLT_CONTAINER_GZIP : BOLT_CONTAINER_RAW
+        let needsBridge = (controller != nil || progress != nil)
+        let controlCtx = needsBridge ? CCodecControlContext(controller: controller, onProgress: progress) : nil
+        var crcOut: UInt32 = 0
+        var sizeOut: UInt64 = 0
+        let status = withExtendedLifetime(controlCtx) {
+            let rawCtx = controlCtx.map { Unmanaged.passUnretained($0).toOpaque() }
+            let cb: bolt_control_cb? = needsBridge ? boltCodecControlBridge : nil
+            return bolt_verify_file(
+                mapAlgo(algorithm),
+                container,
+                sourceURL.path,
+                &crcOut,
+                &sizeOut,
+                cb,
+                rawCtx
+            )
+        }
+        try throwIfCodecError(status)
+        return (crcOut, sizeOut)
     }
 
     public static func engineVersions() -> [CodecEngineInfo] {

@@ -37,7 +37,7 @@ struct BoltZipApp: App {
     var body: some Scene {
         let vm = appDelegate.viewModel
         let l = L10n(language: vm.appLanguage)
-        WindowGroup(id: "main") {
+        Window("BoltZip", id: "main") {
             MainWindowView(vm: vm)
                 .background(
                     MainWindowLaunchBridge { window in
@@ -52,7 +52,7 @@ struct BoltZipApp: App {
         }
         .defaultSize(width: 680, height: 430)
         .windowToolbarStyle(.unifiedCompact)
-        .handlesExternalEvents(matching: Set(["finder"]))
+        .handlesExternalEvents(matching: Set(["*"]))
         .commands {
             CommandGroup(replacing: .appInfo) {}
             CommandGroup(replacing: .appVisibility) {}

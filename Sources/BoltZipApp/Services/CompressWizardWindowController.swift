@@ -43,6 +43,7 @@ final class CompressWizardWindowController: NSObject, NSWindowDelegate {
             created.title = viewModel.l10n.createArchiveTitle
             created.isReleasedWhenClosed = false
             created.isRestorable = false
+            created.isMovableByWindowBackground = true
             created.delegate = self
             created.contentViewController = hostingController
             created.setContentSize(targetSize)
@@ -51,9 +52,7 @@ final class CompressWizardWindowController: NSObject, NSWindowDelegate {
             targetWindow = created
         }
 
-        NSApp.activate(ignoringOtherApps: true)
-        targetWindow.alphaValue = 1
-        targetWindow.makeKeyAndOrderFront(nil)
+        boltActivateAppToForeground(bringing: targetWindow)
     }
 
     private func centerWindowOnActiveScreen(_ window: NSWindow, contentSize: NSSize) {

@@ -1,6 +1,25 @@
 import AppKit
 import SwiftUI
 
+/// Reliably activates BoltZip to the foreground under macOS 14–26 cooperative activation
+/// (cold-launch document opens, Finder extensions, and minimized/occluded windows).
+@MainActor
+func boltActivateAppToForeground(bringing window: NSWindow? = nil) {
+    if NSApp.isHidden {
+        NSApp.unhide(nil)
+    }
+    NSRunningApplication.current.activate(options: .activateAllWindows)
+    NSApp.activate()
+    if let window {
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+        window.alphaValue = 1
+        window.orderFrontRegardless()
+        window.makeKeyAndOrderFront(nil)
+    }
+}
+
 /// Shared AppKit window translucency configuration used by both `WindowStyleConfigurator` and `BoltAuxiliaryWindowStyleBridge`.
 @MainActor
 func applyBoltWindowTranslucency(_ isTranslucent: Bool, to window: NSWindow) {

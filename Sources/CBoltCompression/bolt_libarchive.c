@@ -50,6 +50,8 @@ extern time_t archive_entry_mtime(struct archive_entry *entry);
 extern int archive_entry_mtime_is_set(struct archive_entry *entry);
 extern mode_t archive_entry_filetype(struct archive_entry *entry);
 extern mode_t archive_entry_perm(struct archive_entry *entry);
+extern const char *archive_entry_symlink_utf8(struct archive_entry *entry);
+extern const char *archive_entry_symlink(struct archive_entry *entry);
 extern int archive_entry_is_encrypted(struct archive_entry *entry);
 extern int archive_entry_is_data_encrypted(struct archive_entry *entry);
 extern int archive_entry_is_metadata_encrypted(struct archive_entry *entry);
@@ -194,6 +196,9 @@ static void populate_entry_info(
     }
     info->permissions = perm;
     info->format_name = archive_format_name(a);
+    const char *sym_utf8 = archive_entry_symlink_utf8(entry);
+    const char *sym_raw = archive_entry_symlink(entry);
+    info->symlink_target = sym_utf8 ? sym_utf8 : sym_raw;
 }
 
 int32_t bolt_la_list(

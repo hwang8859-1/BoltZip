@@ -4,6 +4,9 @@ import os
 #if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
 #endif
+#if canImport(AppKit)
+import AppKit
+#endif
 import XCTest
 
 final class BoltZipCoreTests: XCTestCase {
@@ -801,7 +804,527 @@ final class BoltZipCoreTests: XCTestCase {
 
     func testCentralizedVersionMetadata() {
         XCTAssertFalse(BoltZipVersion.current.isEmpty)
-        XCTAssertEqual(BoltZipVersion.current, "1.0.1")
+        XCTAssertEqual(BoltZipVersion.current, "1.0.2")
         XCTAssertFalse(BoltZipVersion.build.isEmpty)
+    }
+
+    func testMultiCoreConcurrencyControlAutoAndFixedCoreCount() throws {
+        let originalPref = BoltConcurrency.preference
+        defer { BoltConcurrency.setPreference(originalPref, persist: false) }
+
+        let hw = BoltConcurrency.hardwareCoreCount
+        XCTAssertGreaterThanOrEqual(hw, 1)
+        XCTAssertEqual(MultiCorePreference(rawStorageValue: 0), .auto)
+        XCTAssertEqual(MultiCorePreference(rawStorageValue: -3), .auto)
+        XCTAssertEqual(MultiCorePreference(rawStorageValue: 4), .fixed(4))
+
+        BoltConcurrency.setPreference(.fixed(1), persist: false)
+        XCTAssertEqual(BoltConcurrency.resolvedWorkerCount(), 1)
+        XCTAssertEqual(CompressionCodec.effectiveWorkerCount, 1)
+
+        BoltConcurrency.setPreference(.fixed(999), persist: false)
+        XCTAssertEqual(BoltConcurrency.resolvedWorkerCount(), hw)
+
+        BoltConcurrency.setPreference(.auto, persist: false)
+        XCTAssertEqual(BoltConcurrency.resolvedWorkerCount(), BoltConcurrency.autoWorkerCount)
+        XCTAssertEqual(BoltConcurrency.resolvedWorkerCount(override: 1), 1)
+        XCTAssertEqual(BoltConcurrency.resolvedWorkerCount(override: 0), BoltConcurrency.autoWorkerCount)
+
+        // Roundtrip >512 KB Zstd & XZ streams under explicit 1-core and 2-core caps
+        let payload = BenchmarkRunner.generateMixedSampleData(sizeBytes: 640 * 1024)
+        for workerCap in [1, 2, 0] {
+            let zstCompressed = try CompressionCodec.compress(data: payload, algorithm: .zstd, level: 3, workerCount: workerCap)
+            let zstRestored = try CompressionCodec.decompress(data: zstCompressed, algorithm: .zstd, expectedSize: payload.count)
+            XCTAssertEqual(zstRestored, payload)
+
+            let xzCompressed = try CompressionCodec.compress(data: payload, algorithm: .xz, level: 1, workerCount: workerCap)
+            let xzRestored = try CompressionCodec.decompress(data: xzCompressed, algorithm: .xz, expectedSize: payload.count)
+            XCTAssertEqual(xzRestored, payload)
+        }
+
+        // Multi-file ZIP create/extract/test with explicit single-core & auto overrides
+        let srcDir = tempDir.appendingPathComponent("CoreControlSrc", isDirectory: true)
+        try FileManager.default.createDirectory(at: srcDir, withIntermediateDirectories: true)
+        let f1 = srcDir.appendingPathComponent("a.bin")
+        let f2 = srcDir.appendingPathComponent("b.bin")
+        let d1 = Data("alpha-12345".utf8)
+        let d2 = Data("beta-67890".utf8)
+        try d1.write(to: f1)
+        try d2.write(to: f2)
+
+        let zipSingle = tempDir.appendingPathComponent("single_core.zip")
+        try BoltArchiveEngine.createArchive(
+            from: [srcDir],
+            to: zipSingle,
+            options: CreateArchiveOptions(format: .zip, algorithm: .deflate, workerCount: 1)
+        )
+        let integrity = try BoltArchiveEngine.testIntegrity(archiveURL: zipSingle, workerCount: 1)
+        XCTAssertTrue(integrity.isHealthy)
+
+        let outDir = tempDir.appendingPathComponent("CoreControlOut", isDirectory: true)
+        try BoltArchiveEngine.extract(
+            archiveURL: zipSingle,
+            options: ExtractOptions(destinationURL: outDir, mode: .smart, workerCount: 1)
+        )
+        XCTAssertEqual(try Data(contentsOf: outDir.appendingPathComponent("CoreControlSrc/a.bin")), d1)
+        XCTAssertEqual(try Data(contentsOf: outDir.appendingPathComponent("CoreControlSrc/b.bin")), d2)
+    }
+
+    func testRedesignedAppAndPerFormatDocumentIconArtwork() throws {
+        #if canImport(AppKit) && canImport(CoreGraphics)
+        let pngSignature = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+
+        for whiteBG in [false, true] {
+            for px in [16, 32, 64, 128, 256] {
+                let appPNG = try XCTUnwrap(BoltIconArtwork.renderAppIconPNG(pixelSize: px, whiteBackground: whiteBG))
+                XCTAssertTrue(appPNG.starts(with: pngSignature))
+            }
+        }
+
+        // Verify lifted Dark Deep Glass backdrop luma (> L=46 baseline) and 9.75% Apple grid inset
+        let dark128PNG = try XCTUnwrap(BoltIconArtwork.renderAppIconPNG(pixelSize: 128, whiteBackground: false))
+        let darkRep = try XCTUnwrap(NSBitmapImageRep(data: dark128PNG))
+        let outerCorner = darkRep.colorAt(x: 2, y: 2)?.usingColorSpace(.sRGB)
+        XCTAssertLessThan(outerCorner?.alphaComponent ?? 1.0, 0.05)
+        let upperGlass = try XCTUnwrap(darkRep.colorAt(x: 24, y: 24)?.usingColorSpace(.sRGB))
+        let glassLuma255 = (0.2126 * upperGlass.redComponent + 0.7152 * upperGlass.greenComponent + 0.0722 * upperGlass.blueComponent) * 255.0
+        XCTAssertGreaterThan(glassLuma255, 70.0)
+
+        let kinds = BoltDocumentIconKind.allCases
+        XCTAssertEqual(Set(kinds.map(\.icnsBaseName)).count, kinds.count)
+        XCTAssertEqual(Set(kinds.map(\.badgeLabel)).count, kinds.count)
+        XCTAssertEqual(Set(kinds.map(\.family)).count, BoltIconFamily.allCases.count)
+
+        XCTAssertEqual(BoltIconScale(pixelSize: 16), .micro)
+        XCTAssertEqual(BoltIconScale(pixelSize: 32), .small)
+        XCTAssertEqual(BoltIconScale(pixelSize: 64), .medium)
+        XCTAssertEqual(BoltIconScale(pixelSize: 128), .full)
+        XCTAssertEqual(BoltIconScale(pixelSize: 256), .full)
+
+        for kind in kinds {
+            for isDark in [false, true] {
+                for px in [16, 32, 64, 256] {
+                    let png = try XCTUnwrap(BoltIconArtwork.renderDocumentIconPNG(kind: kind, pixelSize: px, isDark: isDark))
+                    XCTAssertTrue(png.starts(with: pngSignature))
+                }
+            }
+        }
+
+        for group in ArchiveAssociationGroup.allCases {
+            XCTAssertFalse(group.utTypes.isEmpty)
+            XCTAssertFalse(group.documentIconKind.icnsBaseName.isEmpty)
+        }
+
+        XCTAssertEqual(BoltDocumentIconKind.resolve(forFilename: "bundle.tar.zst"), .tzst)
+        XCTAssertEqual(BoltDocumentIconKind.resolve(forFilename: "backup.TAR.GZ"), .tgz)
+        XCTAssertEqual(BoltDocumentIconKind.resolve(forFilename: "split.z01"), .zip)
+        XCTAssertEqual(BoltDocumentIconKind.resolve(forFilename: "comic.cbr"), .rar)
+        XCTAssertNil(BoltDocumentIconKind.resolve(forFilename: "notes.txt"))
+        #endif
+    }
+
+    func testStreamingChunkedZipAE2AndTarZstRoundtrip() throws {
+        BoltConcurrency.streamingThresholdBytes = 64 * 1024
+        defer { BoltConcurrency.streamingThresholdBytes = BoltConcurrency.defaultStreamThresholdBytes }
+
+        // 1. Verify AESCTRStream unaligned chunk invariance matches non-streaming AES-256
+        let key = Data(repeating: 0x5A, count: 32)
+        let sample = Data((0..<5003).map { UInt8(($0 * 13 + 7) & 0xFF) })
+        let fullCipher = try ZipCrypto.AESCTRStream(key: key).transform(sample)
+        let streamCipher = try ZipCrypto.AESCTRStream(key: key)
+        var chunkedCipher = Data()
+        var pos = 0
+        for step in [1, 17, 63, 256, 1023, 5000] {
+            if pos >= sample.count { break }
+            let end = min(sample.count, pos + step)
+            chunkedCipher.append(streamCipher.transform(sample.subdata(in: pos..<end)))
+            pos = end
+        }
+        XCTAssertEqual(chunkedCipher, fullCipher)
+
+        // 2. End-to-end streaming ZIP with AES-256 + DEFLATE + split volume
+        let bigFile = tempDir.appendingPathComponent("stream_payload.bin")
+        var bigBytes = Data(capacity: 220 * 1024)
+        var rngState: UInt64 = 0x123456789ABCDEF0
+        for _ in 0..<(220 * 1024) {
+            rngState ^= rngState << 13
+            rngState ^= rngState >> 7
+            rngState ^= rngState << 17
+            bigBytes.append(UInt8(rngState & 0xFF))
+        }
+        try bigBytes.write(to: bigFile)
+
+        let splitZip = tempDir.appendingPathComponent("StreamSplit.zip")
+        let volumes = try BoltArchiveEngine.createArchive(
+            from: [bigFile],
+            to: splitZip,
+            options: CreateArchiveOptions(
+                format: .zip,
+                algorithm: .deflate,
+                encryption: .aes256,
+                password: "StreamSecret!99",
+                splitVolumeSizeBytes: 80 * 1024
+            )
+        )
+        XCTAssertGreaterThanOrEqual(volumes.count, 2)
+
+        let report = try BoltArchiveEngine.testIntegrity(archiveURL: splitZip, password: "StreamSecret!99")
+        XCTAssertEqual(report.passedCount, 1)
+        XCTAssertEqual(report.failedCount, 0)
+
+        let extractDir = tempDir.appendingPathComponent("StreamZipOut", isDirectory: true)
+        try BoltArchiveEngine.extract(
+            archiveURL: splitZip,
+            options: ExtractOptions(destinationURL: extractDir, mode: .here, password: "StreamSecret!99")
+        )
+        let extractedData = try Data(contentsOf: extractDir.appendingPathComponent("stream_payload.bin"))
+        XCTAssertEqual(extractedData, bigBytes)
+
+        // 3. End-to-end streaming .tar.zst create, list, verify, readEntryData, and extract
+        let tarZst = tempDir.appendingPathComponent("StreamArchive.tar.zst")
+        try BoltArchiveEngine.createArchive(
+            from: [bigFile],
+            to: tarZst,
+            options: CreateArchiveOptions(format: .tarZst, algorithm: .zstd)
+        )
+        let tarListing = try BoltArchiveEngine.inspect(archiveURL: tarZst)
+        XCTAssertEqual(tarListing.entries.count, 1)
+        XCTAssertEqual(tarListing.entries.first?.uncompressedSize, UInt64(bigBytes.count))
+
+        let singleRead = try BoltArchiveEngine.readEntryData(archiveURL: tarZst, entryPath: "stream_payload.bin")
+        XCTAssertEqual(singleRead, bigBytes)
+
+        let tarExtractDir = tempDir.appendingPathComponent("StreamTarOut", isDirectory: true)
+        try BoltArchiveEngine.extract(
+            archiveURL: tarZst,
+            options: ExtractOptions(destinationURL: tarExtractDir, mode: .here)
+        )
+        XCTAssertEqual(try Data(contentsOf: tarExtractDir.appendingPathComponent("stream_payload.bin")), bigBytes)
+    }
+
+    func testZipAndTarSymlinkRoundtripAndTraversalGuard() throws {
+        let fm = FileManager.default
+        let srcRoot = tempDir.appendingPathComponent("SymSrc", isDirectory: true)
+        let subDir = srcRoot.appendingPathComponent("sub", isDirectory: true)
+        try fm.createDirectory(at: subDir, withIntermediateDirectories: true)
+        let targetFile = subDir.appendingPathComponent("hello.txt")
+        try Data("Hello Symlink".utf8).write(to: targetFile)
+
+        let relLink = srcRoot.appendingPathComponent("rel_hello.txt")
+        try fm.createSymbolicLink(atPath: relLink.path, withDestinationPath: "sub/hello.txt")
+
+        // Roundtrip in ZIP + TAR.ZST
+        let zipURL = tempDir.appendingPathComponent("WithSymlink.zip")
+        try BoltArchiveEngine.createArchive(
+            from: [srcRoot],
+            to: zipURL,
+            options: CreateArchiveOptions(format: .zip, archiveComment: "Symlink comment", preserveSymlinks: true)
+        )
+        // Also test in-place .setComment edit preserves entries and updates comment
+        try BoltArchiveEngine.editZip(at: zipURL, operations: [.setComment("Updated v1.0.2 Comment")])
+        let zipListing = try BoltArchiveEngine.inspect(archiveURL: zipURL)
+        XCTAssertEqual(zipListing.comment, "Updated v1.0.2 Comment")
+        XCTAssertTrue(zipListing.entries.contains { $0.path == "SymSrc/rel_hello.txt" && $0.isSymbolicLink })
+
+        let zipOut = tempDir.appendingPathComponent("ZipSymOut", isDirectory: true)
+        try BoltArchiveEngine.extract(archiveURL: zipURL, options: ExtractOptions(destinationURL: zipOut, mode: .here))
+        let restoredZipLink = zipOut.appendingPathComponent("SymSrc/rel_hello.txt")
+        XCTAssertEqual(try fm.destinationOfSymbolicLink(atPath: restoredZipLink.path), "sub/hello.txt")
+        XCTAssertEqual(try String(contentsOf: restoredZipLink, encoding: .utf8), "Hello Symlink")
+
+        let tarZstURL = tempDir.appendingPathComponent("WithSymlink.tar.zst")
+        try BoltArchiveEngine.createArchive(
+            from: [srcRoot],
+            to: tarZstURL,
+            options: CreateArchiveOptions(format: .tarZst, algorithm: .zstd, preserveSymlinks: true)
+        )
+        let tarListing = try BoltArchiveEngine.inspect(archiveURL: tarZstURL)
+        XCTAssertTrue(tarListing.entries.contains { $0.path == "SymSrc/rel_hello.txt" && $0.isSymbolicLink })
+        let tarOut = tempDir.appendingPathComponent("TarSymOut", isDirectory: true)
+        try BoltArchiveEngine.extract(archiveURL: tarZstURL, options: ExtractOptions(destinationURL: tarOut, mode: .here))
+        XCTAssertEqual(try fm.destinationOfSymbolicLink(atPath: tarOut.appendingPathComponent("SymSrc/rel_hello.txt").path), "sub/hello.txt")
+
+        // Security guard: reject symlinks pointing outside extraction root
+        let evilDir = tempDir.appendingPathComponent("EvilSym", isDirectory: true)
+        try fm.createDirectory(at: evilDir, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(atPath: evilDir.appendingPathComponent("escape_link").path, withDestinationPath: "../../etc/passwd")
+        let evilZip = tempDir.appendingPathComponent("Evil.zip")
+        try BoltArchiveEngine.createArchive(from: [evilDir], to: evilZip, options: CreateArchiveOptions(format: .zip, preserveSymlinks: true))
+        let evilListing = try BoltArchiveEngine.inspect(archiveURL: evilZip)
+        XCTAssertTrue(evilListing.entries.contains { $0.path == "EvilSym/escape_link" && $0.isSymbolicLink }, "Entries were: \(evilListing.entries.map { "\($0.path) sym:\($0.isSymbolicLink) sz:\($0.uncompressedSize)" })")
+        let storedTarget = String(data: try BoltArchiveEngine.readEntryData(archiveURL: evilZip, entryPath: "EvilSym/escape_link"), encoding: .utf8)
+        XCTAssertEqual(storedTarget, "../../etc/passwd")
+
+        let evilOut = tempDir.appendingPathComponent("EvilOut", isDirectory: true)
+        XCTAssertThrowsError(try BoltArchiveEngine.extract(archiveURL: evilZip, options: ExtractOptions(destinationURL: evilOut, mode: .here, restoreSymlinks: true))) { err in
+            if case BoltZipError.pathTraversalDetected = err {
+                // Expected security rejection
+            } else {
+                XCTFail("Expected pathTraversalDetected, got \(err)")
+            }
+        }
+    }
+
+    func testContainerVariantsReadOnlyAndSevenZipHardlinkStaging() throws {
+        let fm = FileManager.default
+        let payloadDir = tempDir.appendingPathComponent("PayloadApp", isDirectory: true)
+        try fm.createDirectory(at: payloadDir, withIntermediateDirectories: true)
+        let binFile = payloadDir.appendingPathComponent("manifest.json")
+        try Data("{\"app\":\"bolt\"}".utf8).write(to: binFile)
+
+        let baseZip = tempDir.appendingPathComponent("Base.zip")
+        try BoltArchiveEngine.createArchive(from: [payloadDir], to: baseZip, options: CreateArchiveOptions(format: .zip))
+
+        for ext in ["ipa", "apk", "jar", "epub", "whl"] {
+            let variantURL = tempDir.appendingPathComponent("sample.\(ext)")
+            try fm.copyItem(at: baseZip, to: variantURL)
+            XCTAssertEqual(ArchiveFormat.detect(from: variantURL), .zip)
+            let listing = try BoltArchiveEngine.inspect(archiveURL: variantURL)
+            XCTAssertFalse(listing.canEditInPlace)
+            XCTAssertTrue(listing.entries.contains { $0.path.hasSuffix("manifest.json") })
+        }
+
+        // Verify .7z creation with hardlink staging and nested symlink
+        let sevenZURL = tempDir.appendingPathComponent("HardlinkStage.7z")
+        try BoltArchiveEngine.createArchive(from: [payloadDir], to: sevenZURL, options: CreateArchiveOptions(format: .sevenZip, algorithm: .xz))
+        let szOut = tempDir.appendingPathComponent("SevenZipHardlinkOut", isDirectory: true)
+        try BoltArchiveEngine.extract(archiveURL: sevenZURL, options: ExtractOptions(destinationURL: szOut, mode: .here))
+        XCTAssertEqual(try Data(contentsOf: szOut.appendingPathComponent("PayloadApp/manifest.json")), Data("{\"app\":\"bolt\"}".utf8))
+    }
+
+    func testPathNormalizationFastPathPreservesEdgeCases() {
+        XCTAssertEqual(ArchiveEntry.normalizePath("web/eIBS.war/index.jsp", isDirectory: false), "web/eIBS.war/index.jsp")
+        XCTAssertEqual(ArchiveEntry.normalizePath("web/eIBS.war/", isDirectory: true), "web/eIBS.war/")
+        XCTAssertEqual(ArchiveEntry.normalizePath("web/eIBS.war", isDirectory: true), "web/eIBS.war/")
+        XCTAssertEqual(ArchiveEntry.normalizePath("./a\\b//c/", isDirectory: false), "a/b/c")
+        XCTAssertEqual(ArchiveEntry.normalizePath("/root//dir", isDirectory: true), "root/dir/")
+    }
+
+    func testDefectRegressionSafetyAndBoundaryChecks() throws {
+        let fm = FileManager.default
+
+        // BZ-DEF-10: Empty buffer CRC32 preserves initial value
+        XCTAssertEqual(CompressionCodec.crc32(Data(), initial: 0x12345678), 0x12345678)
+        XCTAssertEqual(CompressionCodec.crc32(Data(), initial: 0), 0)
+
+        // BZ-DEF-03: Extracting regular file onto existing non-empty directory under .overwrite must not delete directory
+        let payloadSrc = tempDir.appendingPathComponent("payload.txt")
+        let payloadBytes = Data("safe-file-contents".utf8)
+        try payloadBytes.write(to: payloadSrc)
+        let conflictZip = tempDir.appendingPathComponent("Conflict.zip")
+        try BoltArchiveEngine.createArchive(
+            from: [payloadSrc],
+            to: conflictZip,
+            options: CreateArchiveOptions(format: .zip)
+        )
+
+        let outRoot = tempDir.appendingPathComponent("CollisionOut", isDirectory: true)
+        let existingDir = outRoot.appendingPathComponent("payload.txt", isDirectory: true)
+        try fm.createDirectory(at: existingDir, withIntermediateDirectories: true)
+        let sentinel = existingDir.appendingPathComponent("sentinel.keep")
+        try Data("do-not-delete".utf8).write(to: sentinel)
+
+        try BoltArchiveEngine.extract(
+            archiveURL: conflictZip,
+            options: ExtractOptions(destinationURL: outRoot, mode: .here, overwritePolicy: .overwrite)
+        )
+        XCTAssertTrue(fm.fileExists(atPath: sentinel.path), "Existing directory contents must survive file-vs-dir collision")
+        let fallbackFile = outRoot.appendingPathComponent("payload (1).txt")
+        XCTAssertEqual(try Data(contentsOf: fallbackFile), payloadBytes)
+
+        // BZ-DEF-05: Pre-cancelled ArchiveTaskController propagates BoltZipError.cancelled cleanly
+        let cancelledController = ArchiveTaskController()
+        cancelledController.cancel()
+        let singleOut = tempDir.appendingPathComponent("cancelled-out.txt")
+        XCTAssertThrowsError(
+            try BoltArchiveEngine.extractSingleEntryToFile(
+                archiveURL: conflictZip,
+                entryPath: "payload.txt",
+                destinationFileURL: singleOut,
+                controller: cancelledController
+            )
+        ) { err in
+            guard case BoltZipError.cancelled = err else {
+                return XCTFail("Expected BoltZipError.cancelled, got \(err)")
+            }
+        }
+
+        // BZ-DEF-02 & BZ-DEF-13: ZIP with trailing bytes after EOCD + extractSingleEntryToFile
+        let zipWithTrailing = tempDir.appendingPathComponent("WithTrailing.zip")
+        var zipData = try Data(contentsOf: conflictZip)
+        zipData.append(Data(repeating: 0xAA, count: 96))
+        try zipData.write(to: zipWithTrailing)
+        let trailingListing = try BoltArchiveEngine.inspect(archiveURL: zipWithTrailing)
+        XCTAssertEqual(trailingListing.entries.map(\.path), ["payload.txt"])
+        let extractedSingleURL = tempDir.appendingPathComponent("single-extracted.txt")
+        try BoltArchiveEngine.extractSingleEntryToFile(
+            archiveURL: zipWithTrailing,
+            entryPath: "payload.txt",
+            destinationFileURL: extractedSingleURL
+        )
+        XCTAssertEqual(try Data(contentsOf: extractedSingleURL), payloadBytes)
+
+        // BZ-DEF-06: Corrupted oversized centralDirSize in EOCD must be rejected cleanly
+        let badCDZip = tempDir.appendingPathComponent("OversizedCD.zip")
+        var eocd = Data()
+        ZipBinary.appendUInt32LE(&eocd, ZipSignature.endOfCentralDirectory)
+        ZipBinary.appendUInt16LE(&eocd, 0) // disk
+        ZipBinary.appendUInt16LE(&eocd, 0) // cdStartDisk
+        ZipBinary.appendUInt16LE(&eocd, 1) // diskEntries
+        ZipBinary.appendUInt16LE(&eocd, 1) // totalEntries
+        ZipBinary.appendUInt32LE(&eocd, 0x7FFF_FFFF) // corrupted huge cdSize
+        ZipBinary.appendUInt32LE(&eocd, 0) // cdOffset
+        ZipBinary.appendUInt16LE(&eocd, 0) // commentLen
+        try eocd.write(to: badCDZip)
+        XCTAssertThrowsError(try BoltArchiveEngine.inspect(archiveURL: badCDZip)) { err in
+            guard case BoltZipError.invalidArchive = err else {
+                return XCTFail("Expected invalidArchive, got \(err)")
+            }
+        }
+
+        // BZ-DEF-08: Truncated TAR file must fail integrity verification & valid TAR reports accurate non-checksum message
+        let validTar = tempDir.appendingPathComponent("Valid.tar")
+        let bigRaw = tempDir.appendingPathComponent("raw.bin")
+        try Data((0..<4096).map { UInt8($0 & 0xFF) }).write(to: bigRaw)
+        try BoltArchiveEngine.createArchive(
+            from: [bigRaw],
+            to: validTar,
+            options: CreateArchiveOptions(format: .tar, algorithm: .store)
+        )
+        let validTarReport = try BoltArchiveEngine.testIntegrity(archiveURL: validTar)
+        XCTAssertTrue(validTarReport.isHealthy)
+        XCTAssertFalse(validTarReport.results.first?.detail.contains("CRC32") ?? false)
+
+        let fullTarData = try Data(contentsOf: validTar)
+        let truncatedTar = tempDir.appendingPathComponent("Truncated.tar")
+        // Cut right inside the file payload (header 512 bytes + partial body, missing trailer)
+        try fullTarData.prefix(900).write(to: truncatedTar)
+        XCTAssertThrowsError(try BoltArchiveEngine.testIntegrity(archiveURL: truncatedTar)) { err in
+            guard case BoltZipError.invalidArchive = err else {
+                return XCTFail("Expected BoltZipError.invalidArchive on truncated TAR, got \(err)")
+            }
+        }
+    }
+
+    func testDefectRegressionLegacyBit3ZipCryptoEditAndUnzipCompat() throws {
+        // BZ-DEF-07: Preserve bit-3 (0x0008) & Data Descriptor for legacy ZipCrypto entries during editZip
+        let plain = Data("Legacy bit-3 ZipCrypto secret payload for in-place edit!".utf8)
+        let realCRC = CompressionCodec.crc32(plain)
+        let realTopByte = UInt8((realCRC >> 24) & 0xFF)
+        let checkHighByte: UInt8 = realTopByte == 0x42 ? 0x43 : 0x42
+        let dosTime: UInt16 = (UInt16(checkHighByte) << 8) | 0x0015
+        let dosDate: UInt16 = ZipBinary.dosDateTime(from: Date()).date
+        let fakeCheckCRC = UInt32(checkHighByte) << 24
+        let password = "LegacyBit3!Pass"
+
+        let encryptedPayload = try ZipCrypto.encryptZipCrypto(plaintext: plain, crc32: fakeCheckCRC, password: password)
+        let nameBytes = Data("legacy.txt".utf8)
+        let flags: UInt16 = 0x0800 | 0x0008 | 0x0001 // UTF-8 + Data Descriptor + Encrypted
+
+        var archiveData = Data()
+        // LFH (with zeros for crc32/comp/uncomp as required by bit 3)
+        ZipBinary.appendUInt32LE(&archiveData, ZipSignature.localFileHeader)
+        ZipBinary.appendUInt16LE(&archiveData, 20)
+        ZipBinary.appendUInt16LE(&archiveData, flags)
+        ZipBinary.appendUInt16LE(&archiveData, 0) // store
+        ZipBinary.appendUInt16LE(&archiveData, dosTime)
+        ZipBinary.appendUInt16LE(&archiveData, dosDate)
+        ZipBinary.appendUInt32LE(&archiveData, 0)
+        ZipBinary.appendUInt32LE(&archiveData, 0)
+        ZipBinary.appendUInt32LE(&archiveData, 0)
+        ZipBinary.appendUInt16LE(&archiveData, UInt16(nameBytes.count))
+        ZipBinary.appendUInt16LE(&archiveData, 0)
+        archiveData.append(nameBytes)
+        archiveData.append(encryptedPayload)
+
+        // PK\x07\x08 Data Descriptor
+        ZipBinary.appendUInt32LE(&archiveData, ZipSignature.dataDescriptor)
+        ZipBinary.appendUInt32LE(&archiveData, realCRC)
+        ZipBinary.appendUInt32LE(&archiveData, UInt32(encryptedPayload.count))
+        ZipBinary.appendUInt32LE(&archiveData, UInt32(plain.count))
+
+        // Central Directory Header
+        let cdOffset = UInt32(archiveData.count)
+        ZipBinary.appendUInt32LE(&archiveData, ZipSignature.centralDirectoryHeader)
+        ZipBinary.appendUInt16LE(&archiveData, 20)
+        ZipBinary.appendUInt16LE(&archiveData, 20)
+        ZipBinary.appendUInt16LE(&archiveData, flags)
+        ZipBinary.appendUInt16LE(&archiveData, 0) // store
+        ZipBinary.appendUInt16LE(&archiveData, dosTime)
+        ZipBinary.appendUInt16LE(&archiveData, dosDate)
+        ZipBinary.appendUInt32LE(&archiveData, realCRC)
+        ZipBinary.appendUInt32LE(&archiveData, UInt32(encryptedPayload.count))
+        ZipBinary.appendUInt32LE(&archiveData, UInt32(plain.count))
+        ZipBinary.appendUInt16LE(&archiveData, UInt16(nameBytes.count))
+        ZipBinary.appendUInt16LE(&archiveData, 0)
+        ZipBinary.appendUInt16LE(&archiveData, 0)
+        ZipBinary.appendUInt16LE(&archiveData, 0)
+        ZipBinary.appendUInt16LE(&archiveData, 0)
+        ZipBinary.appendUInt32LE(&archiveData, 0)
+        ZipBinary.appendUInt32LE(&archiveData, 0) // local header offset
+        archiveData.append(nameBytes)
+        let cdSize = UInt32(archiveData.count) - cdOffset
+
+        ZipBinary.appendUInt32LE(&archiveData, ZipSignature.endOfCentralDirectory)
+        ZipBinary.appendUInt16LE(&archiveData, 0)
+        ZipBinary.appendUInt16LE(&archiveData, 0)
+        ZipBinary.appendUInt16LE(&archiveData, 1)
+        ZipBinary.appendUInt16LE(&archiveData, 1)
+        ZipBinary.appendUInt32LE(&archiveData, cdSize)
+        ZipBinary.appendUInt32LE(&archiveData, cdOffset)
+        ZipBinary.appendUInt16LE(&archiveData, 0)
+
+        let zipURL = tempDir.appendingPathComponent("LegacyBit3.zip")
+        try archiveData.write(to: zipURL)
+
+        let addedFile = tempDir.appendingPathComponent("extra.txt")
+        let addedBytes = Data("Added after bit3 edit".utf8)
+        try addedBytes.write(to: addedFile)
+
+        try BoltArchiveEngine.editZip(
+            at: zipURL,
+            operations: [
+                .addItems(urls: [addedFile], targetFolder: ""),
+                .setComment("bit3-preserved")
+            ]
+        )
+
+        let integrity = try BoltArchiveEngine.testIntegrity(archiveURL: zipURL, password: password)
+        XCTAssertTrue(integrity.isHealthy, "Edited archive integrity failed: \(integrity.results.map { "\($0.path):\($0.status):\($0.detail)" })")
+
+        let extractDir = tempDir.appendingPathComponent("LegacyBit3Out", isDirectory: true)
+        try BoltArchiveEngine.extract(
+            archiveURL: zipURL,
+            options: ExtractOptions(destinationURL: extractDir, mode: .here, password: password)
+        )
+        XCTAssertEqual(try Data(contentsOf: extractDir.appendingPathComponent("legacy.txt")), plain)
+        XCTAssertEqual(try Data(contentsOf: extractDir.appendingPathComponent("extra.txt")), addedBytes)
+
+        // Cross-check with macOS /usr/bin/unzip
+        let unzipProc = Process()
+        unzipProc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        unzipProc.arguments = ["-P", password, "-t", zipURL.path]
+        let outPipe = Pipe()
+        unzipProc.standardOutput = outPipe
+        unzipProc.standardError = outPipe
+        try unzipProc.run()
+        unzipProc.waitUntilExit()
+        let unzipLog = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        XCTAssertEqual(unzipProc.terminationStatus, 0, "unzip -t failed on edited bit-3 ZipCrypto archive: \(unzipLog)")
+    }
+
+    func testAppIconForegroundPNGExport() throws {
+        #if canImport(AppKit)
+        for isWhite in [false, true] {
+            let pngData = try XCTUnwrap(BoltIconArtwork.renderAppIconForegroundPNG(pixelSize: 256, whiteBackground: isWhite))
+            XCTAssertGreaterThan(pngData.count, 500)
+            XCTAssertEqual([UInt8](pngData.prefix(4)), [0x89, 0x50, 0x4E, 0x47])
+            let rep = try XCTUnwrap(NSBitmapImageRep(data: pngData))
+            XCTAssertEqual(rep.pixelsWide, 256)
+            XCTAssertEqual(rep.pixelsHigh, 256)
+            let cornerColor = rep.colorAt(x: 0, y: 0)
+            XCTAssertEqual(Double(cornerColor?.alphaComponent ?? 1), 0, accuracy: 0.01)
+        }
+        #endif
     }
 }

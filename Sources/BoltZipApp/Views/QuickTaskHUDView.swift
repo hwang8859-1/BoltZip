@@ -11,22 +11,25 @@ struct QuickTaskHUDView: View {
 
     var body: some View {
         let glassEnabled = vm.effectiveWindowTranslucency
-        BoltGlassContainer(spacing: 12) {
-            VStack(alignment: .leading, spacing: 12) {
-                headerRow
-                progressSection
+        VStack(alignment: .leading, spacing: 12) {
+            headerRow
+            progressSection
 
-                if case .needsPassword(_, let wrongAttempt) = hud.phase {
-                    passwordPromptSection(wrongAttempt: wrongAttempt)
-                }
-
-                footerRow
+            if case .needsPassword(_, let wrongAttempt) = hud.phase {
+                passwordPromptSection(wrongAttempt: wrongAttempt)
             }
-            .padding(16)
-            .frame(width: isFloatingWindow ? 404 : nil)
-            .frame(maxWidth: isFloatingWindow ? 404 : 408)
-            .modifier(HUDSurfaceModifier(useLiquidGlass: glassEnabled, isFloatingWindow: isFloatingWindow))
+
+            footerRow
         }
+        .padding(16)
+        .frame(width: isFloatingWindow ? 404 : nil)
+        .frame(maxWidth: isFloatingWindow ? 404 : 408)
+        .background {
+            if isFloatingWindow {
+                BoltWindowDragHandle()
+            }
+        }
+        .modifier(HUDSurfaceModifier(useLiquidGlass: glassEnabled, isFloatingWindow: isFloatingWindow))
         .environment(\.boltGlassIntensity, vm.glassIntensity)
         .padding(.horizontal, 16)
         .padding(.vertical, isFloatingWindow ? 14 : 16)
@@ -171,18 +174,22 @@ struct QuickTaskHUDView: View {
                         hud.submitPassword()
                     }
 
-                Button(l10n.cancel) {
-                    hud.cancelPasswordPrompt()
-                }
-                .controlSize(.small)
-                .boltGlassButton()
+                BoltGlassContainer(spacing: 8) {
+                    HStack(spacing: 8) {
+                        Button(l10n.cancel) {
+                            hud.cancelPasswordPrompt()
+                        }
+                        .controlSize(.small)
+                        .boltGlassButton()
 
-                Button(l10n.hudUnlockBtn) {
-                    hud.submitPassword()
+                        Button(l10n.hudUnlockBtn) {
+                            hud.submitPassword()
+                        }
+                        .controlSize(.small)
+                        .disabled(hud.passwordInput.isEmpty)
+                        .boltGlassProminentButton()
+                    }
                 }
-                .controlSize(.small)
-                .disabled(hud.passwordInput.isEmpty)
-                .boltGlassProminentButton()
             }
         }
     }
@@ -282,26 +289,30 @@ struct QuickTaskHUDView: View {
             }
 
         case .completed:
-            HStack(spacing: 6) {
-                Button(l10n.hudRevealBtn) {
-                    hud.revealResult()
-                }
-                .controlSize(.small)
-                .boltGlassProminentButton()
+            BoltGlassContainer(spacing: 6) {
+                HStack(spacing: 6) {
+                    Button(l10n.hudRevealBtn) {
+                        hud.revealResult()
+                    }
+                    .controlSize(.small)
+                    .boltGlassProminentButton()
 
+                    Button(l10n.close) {
+                        hud.dismiss()
+                    }
+                    .controlSize(.small)
+                    .boltGlassButton()
+                }
+            }
+
+        case .cancelled, .failed:
+            BoltGlassContainer(spacing: 6) {
                 Button(l10n.close) {
                     hud.dismiss()
                 }
                 .controlSize(.small)
                 .boltGlassButton()
             }
-
-        case .cancelled, .failed:
-            Button(l10n.close) {
-                hud.dismiss()
-            }
-            .controlSize(.small)
-            .boltGlassButton()
 
         case .idle, .needsPassword:
             EmptyView()

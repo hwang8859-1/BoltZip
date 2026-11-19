@@ -32,6 +32,18 @@ public enum ArchiveAssociationGroup: String, CaseIterable, Identifiable, Sendabl
         [.zip, .rar, .sevenZip, .tar, .singleStreams, .cabXar]
     }
 
+    public var documentIconKind: BoltDocumentIconKind {
+        switch self {
+        case .zip: return .zip
+        case .rar: return .rar
+        case .sevenZip: return .sevenZip
+        case .tar: return .tar
+        case .singleStreams: return .zst
+        case .cabXar: return .cab
+        case .iso: return .iso
+        }
+    }
+
     public var primaryUTType: UTType? {
         utTypes.first
     }
@@ -39,7 +51,7 @@ public enum ArchiveAssociationGroup: String, CaseIterable, Identifiable, Sendabl
     public var utTypeIdentifiers: [String] {
         switch self {
         case .zip:
-            return ["public.zip-archive", "com.pkware.zip-archive"]
+            return ["public.zip-archive", "com.pkware.zip-archive", "com.winzip.zipx-archive"]
         case .rar:
             return ["com.rarlab.rar-archive"]
         case .sevenZip:
@@ -58,6 +70,7 @@ public enum ArchiveAssociationGroup: String, CaseIterable, Identifiable, Sendabl
                 "org.gnu.gnu-zip-archive",
                 "com.facebook.zstandard-archive",
                 "org.tukaani.xz-archive",
+                "org.tukaani.lzma-archive",
                 "public.bzip2-archive",
                 "org.lz4.lz4-archive",
                 "public.lz4-archive"
@@ -82,11 +95,13 @@ public enum ArchiveAssociationGroup: String, CaseIterable, Identifiable, Sendabl
     }
 
     public var utTypes: [UTType] {
-        let declared = utTypeIdentifiers.compactMap { UTType($0) }
+        let declared = utTypeIdentifiers.compactMap { UTType($0) }.filter { !$0.isDynamic }
         if !declared.isEmpty {
             return declared
         }
-        return fallbackExtensions.compactMap { UTType(filenameExtension: $0) }
+        let fallback = fallbackExtensions.compactMap { UTType(filenameExtension: $0) }
+        let nonDynamicFallback = fallback.filter { !$0.isDynamic }
+        return nonDynamicFallback.isEmpty ? fallback : nonDynamicFallback
     }
 
     public var systemDefaultAppURL: URL? {
@@ -248,6 +263,30 @@ public enum ArchiveAssociationService {
         proc.standardError = FileHandle.nullDevice
         try? proc.run()
         proc.waitUntilExit()
+    }
+}
+
+extension ArchiveFormat {
+    public var documentIconKind: BoltDocumentIconKind {
+        switch self {
+        case .zip: return .zip
+        case .rar: return .rar
+        case .sevenZip: return .sevenZip
+        case .tar: return .tar
+        case .tarGz: return .tgz
+        case .tarZst: return .tzst
+        case .tarXz: return .txz
+        case .tarBz2: return .tbz2
+        case .tarLz4: return .tlz4
+        case .gz: return .gz
+        case .zst: return .zst
+        case .xz: return .xz
+        case .bz2: return .bz2
+        case .lz4: return .lz4
+        case .iso: return .iso
+        case .cab: return .cab
+        case .xar: return .xar
+        }
     }
 }
 #endif

@@ -8,7 +8,7 @@ Welcome! This file gives human contributors and AI coding agents an accurate map
 
 - **Repository**: `https://github.com/hwang8859-1/BoltZip.git`
 - **Branch Governance (Option A — One `dev-X.Y.Z` branch per release)**:
-  - **Active `dev-*` branch** (`dev-1.0.1` currently, set as GitHub **default branch**): All new feature work and contributor PRs must target this branch. Protected via repository ruleset against force-pushes and accidental deletion.
+  - **Active `dev-*` branch** (`dev-1.0.2` currently, set as GitHub **default branch**): All new feature work and contributor PRs must target this branch. Protected via repository ruleset against force-pushes and accidental deletion.
   - **`main` (Protected Release Branch)**: Release-only. Direct pushes are blocked (`enforce_admins: true`); merges require a PR from the active `dev-*` branch using **Merge Commit** and passing `.github/workflows/pr-target-guard.yml`.
   - **`legacy/macos-12` (`v0.9.3` LTS)**: Critical Intel / macOS 12–26 fixes only; protected against force-pushes and deletion.
   - **Version Cutover**: After releasing `dev-X.Y.Z -> main` + tagging `vX.Y.Z`, run `./Scripts/cut_next_dev_branch.sh dev-X.Y.(Z+1) --cleanup-old dev-X.Y.Z` to branch from `main`, advance GitHub's default branch, and retire the merged dev branch.
@@ -48,10 +48,15 @@ BoltZip/
 │   │   │   ├── ZipWriter.swift          # ZIP/ZIP64 writer, split volumes (.z01/.zip), zero-recompress editing
 │   │   │   ├── TarCodec.swift           # Pure Swift USTAR/PAX tar + .tar.{gz,zst,xz,bz2,lz4} + single-stream
 │   │   │   └── ExtendedArchiveDriver.swift # .7z / .iso / .cab / .xar bridge via /usr/bin/tar (libarchive)
-│   │   └── Engine/
-│   │       ├── ArchiveAssociationService.swift # Shared LaunchServices UTI & default app association logic
-│   │       ├── BoltArchiveSession.swift # High-level BoltArchiveEngine (inspect, extract, create, editZip, test)
-│   │       └── BenchmarkRunner.swift    # Multi-codec local throughput & ratio benchmark
+│   │   ├── Engine/
+│   │   │   ├── ArchiveAssociationService.swift # Shared LaunchServices UTI & default app association logic
+│   │   │   ├── BoltArchiveSession.swift # High-level BoltArchiveEngine (inspect, extract, create, editZip, test)
+│   │   │   └── BenchmarkRunner.swift    # Multi-codec local throughput & ratio benchmark
+│   │   └── Icons/                       # Centralized AppIcon + 17 per-format Document Icon CG artwork & types
+│   │       ├── BoltIconTypes.swift
+│   │       ├── BoltIconArtwork.swift
+│   │       ├── BoltAppIconArtwork.swift
+│   │       └── BoltDocumentIconArtwork.swift
 │   ├── BoltZipCLI/
 │   │   └── main.swift                   # `boltzip` CLI (a, x, l, t, associate, bench, engines)
 │   ├── BoltZipFinderSync/
@@ -59,6 +64,10 @@ BoltZip/
 │   │   └── FinderSync.entitlements
 │   └── BoltZipApp/                      # Native macOS Liquid Glass desktop app
 │       ├── BoltZipApp.swift             # App entry, NSApplicationDelegate, URL scheme (`boltzip://`) handler
+│       ├── Icons/                       # Cached AppKit bridge, SwiftUI icon views & entry file-icon resolver
+│       │   ├── BoltIconRenderer.swift
+│       │   ├── BoltBrandIconViews.swift
+│       │   └── BoltFileIconCatalog.swift
 │       ├── Localization/L10n.swift      # Idiomatic multi-language engine (Follow System / zh-Hans / zh-Hant / en / ja)
 │       ├── Models/WorkspaceViewModel.swift
 │       ├── Services/
@@ -112,7 +121,7 @@ open dist/BoltZip.app
 6. **FinderSync Extension Signing & IPC**:
    - `BoltZipFinderSync.appex` runs inside App Sandbox (`FinderSync.entitlements`).
    - In `build_app.sh`, sign `.appex` first **with `--entitlements`**, then sign the outer `BoltZip.app` **without `--deep`** so the extension's sandbox entitlements are not stripped.
-   - Finder menu clicks dispatch `boltzip://finder?op=...&path=...` URLs back to `BoltZipApp`, where `WindowGroup.handlesExternalEvents(matching: ["*"])` prevents spawning duplicate windows.
+   - Finder menu clicks dispatch `boltzip://finder?op=...&path=...` URLs back to `BoltZipApp`, where the single-instance `Window("BoltZip", id: "main").handlesExternalEvents(matching: Set(["*"]))` prevents spawning duplicate windows and `boltActivateAppToForeground` reliably orders the main window to the front.
 7. **Portability & Localization**:
    - **Never** hardcode local user home paths (`/Users/<someone>/...`) in source code, scripts, or `showcase/`. Always resolve relative to `Bundle.main`, current working directory, or repository root.
    - Keep all user-facing UI strings inside `L10n.swift` across all supported languages (`zh-Hans`, `zh-Hant`, `en`, `ja`) with natural, platform-idiomatic phrasing (avoid literal machine-translated wording).

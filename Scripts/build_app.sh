@@ -106,9 +106,11 @@ cat <<'STR_ZH_HANS' > "$APPEX_DIR/Contents/Resources/zh-Hans.lproj/Localizable.s
 "finder.openWorkspace" = "打开 BoltZip 工作台";
 "finder.smartExtract" = "智能解压到当前位置";
 "finder.extractSubfolder" = "解压到同名文件夹";
+"finder.extractTo" = "解压到指定文件夹...";
 "finder.openInBoltZip" = "在 BoltZip 中打开浏览";
 "finder.verifyIntegrity" = "校验压缩包完整性";
 "finder.compressZip" = "压缩为 ZIP";
+"finder.compressEachZip" = "分别压缩为独立 ZIP";
 "finder.compressTarZst" = "压缩为 TAR.ZST (Zstd)";
 "finder.compress7z" = "压缩为 7z";
 "finder.encryptSplitCompress" = "加密 / 分卷高级压缩...";
@@ -121,9 +123,11 @@ cat <<'STR_ZH_HANT' > "$APPEX_DIR/Contents/Resources/zh-Hant.lproj/Localizable.s
 "finder.openWorkspace" = "開啟 BoltZip 工作台";
 "finder.smartExtract" = "智慧解壓至目前位置";
 "finder.extractSubfolder" = "解壓至同名資料夾";
+"finder.extractTo" = "解壓至指定資料夾...";
 "finder.openInBoltZip" = "在 BoltZip 中開啟瀏覽";
 "finder.verifyIntegrity" = "驗證封存檔完整性";
 "finder.compressZip" = "壓縮為 ZIP";
+"finder.compressEachZip" = "分別壓縮為獨立 ZIP";
 "finder.compressTarZst" = "壓縮為 TAR.ZST (Zstd)";
 "finder.compress7z" = "壓縮為 7z";
 "finder.encryptSplitCompress" = "加密 / 分卷進階壓縮...";
@@ -136,9 +140,11 @@ cat <<'STR_EN' > "$APPEX_DIR/Contents/Resources/en.lproj/Localizable.strings"
 "finder.openWorkspace" = "Open BoltZip Workspace";
 "finder.smartExtract" = "Smart Extract Here";
 "finder.extractSubfolder" = "Extract to Subfolder";
+"finder.extractTo" = "Extract To...";
 "finder.openInBoltZip" = "Open in BoltZip";
 "finder.verifyIntegrity" = "Verify Archive Integrity";
 "finder.compressZip" = "Compress to ZIP";
+"finder.compressEachZip" = "Compress Each to ZIP";
 "finder.compressTarZst" = "Compress to TAR.ZST (Zstd)";
 "finder.compress7z" = "Compress to 7z";
 "finder.encryptSplitCompress" = "Encrypt & Split Archive...";
@@ -151,21 +157,29 @@ cat <<'STR_JA' > "$APPEX_DIR/Contents/Resources/ja.lproj/Localizable.strings"
 "finder.openWorkspace" = "BoltZip ワークスペースを開く";
 "finder.smartExtract" = "ここにスマート展開";
 "finder.extractSubfolder" = "同名フォルダへ展開";
+"finder.extractTo" = "場所を指定して展開...";
 "finder.openInBoltZip" = "BoltZip で開く";
 "finder.verifyIntegrity" = "書庫の整合性を検証";
 "finder.compressZip" = "ZIP に圧縮";
+"finder.compressEachZip" = "個別に ZIP へ圧縮";
 "finder.compressTarZst" = "TAR.ZST (Zstd) に圧縮";
 "finder.compress7z" = "7z に圧縮";
 "finder.encryptSplitCompress" = "暗号化・分割して圧縮...";
 "finder.repackEncryptCompress" = "再圧縮・暗号化...";
 STR_JA
 
-echo "==> Generating macOS AppIcon.icns..."
-ICONSET_DIR="$DIST_DIR/AppIcon.iconset"
-rm -rf "$ICONSET_DIR"
-swift "$ROOT_DIR/Scripts/generate_icon.swift" "$ICONSET_DIR"
-iconutil -c icns "$ICONSET_DIR" -o "$CONTENTS/Resources/AppIcon.icns"
-rm -rf "$ICONSET_DIR"
+echo "==> Generating macOS AppIcon and per-format Document icons (.icns)..."
+ICON_GEN_BIN="$DIST_DIR/bolt-icongen"
+rm -f "$ICON_GEN_BIN"
+swiftc -O -parse-as-library \
+    -target "arm64-apple-macosx$MIN_MACOS" \
+    -sdk "$SDK_PATH" \
+    "$ROOT_DIR/Sources/BoltZipCore/Icons/"*.swift \
+    "$ROOT_DIR/Scripts/generate_icon.swift" \
+    -framework AppKit -framework CoreGraphics \
+    -o "$ICON_GEN_BIN"
+"$ICON_GEN_BIN" --resources "$CONTENTS/Resources"
+rm -f "$ICON_GEN_BIN"
 
 cat <<PLIST > "$CONTENTS/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -184,6 +198,8 @@ cat <<PLIST > "$CONTENTS/Info.plist"
     <key>CFBundleExecutable</key>
     <string>BoltZipApp</string>
     <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIconName</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>dev.boltzip.macos</string>
@@ -221,6 +237,8 @@ cat <<PLIST > "$CONTENTS/Info.plist"
         <dict>
             <key>CFBundleTypeName</key>
             <string>ZIP Archive</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocZip</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -229,6 +247,7 @@ cat <<PLIST > "$CONTENTS/Info.plist"
             <array>
                 <string>public.zip-archive</string>
                 <string>com.pkware.zip-archive</string>
+                <string>com.winzip.zipx-archive</string>
             </array>
             <key>CFBundleTypeExtensions</key>
             <array>
@@ -241,6 +260,8 @@ cat <<PLIST > "$CONTENTS/Info.plist"
         <dict>
             <key>CFBundleTypeName</key>
             <string>RAR Archive</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocRar</string>
             <key>CFBundleTypeRole</key>
             <string>Viewer</string>
             <key>LSHandlerRank</key>
@@ -260,6 +281,8 @@ cat <<PLIST > "$CONTENTS/Info.plist"
         <dict>
             <key>CFBundleTypeName</key>
             <string>7-Zip Archive</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>Doc7z</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -277,6 +300,8 @@ cat <<PLIST > "$CONTENTS/Info.plist"
         <dict>
             <key>CFBundleTypeName</key>
             <string>TAR Archive</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocTar</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -284,26 +309,108 @@ cat <<PLIST > "$CONTENTS/Info.plist"
             <key>LSItemContentTypes</key>
             <array>
                 <string>public.tar-archive</string>
-                <string>org.gnu.gnu-zip-tar-archive</string>
-                <string>com.facebook.zstandard-tar-archive</string>
-                <string>org.tukaani.tar-xz-archive</string>
-                <string>public.tar-bzip2-archive</string>
-                <string>public.lz4-tar-archive</string>
             </array>
             <key>CFBundleTypeExtensions</key>
             <array>
                 <string>tar</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>TAR + Gzip Archive</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocTgz</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>org.gnu.gnu-zip-tar-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>tgz</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>TAR + Zstandard Archive</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocTzst</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.facebook.zstandard-tar-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>tzst</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>TAR + XZ Archive</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocTxz</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>org.tukaani.tar-xz-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>txz</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>TAR + Bzip2 Archive</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocTbz2</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.tar-bzip2-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>tbz2</string>
                 <string>tbz</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>TAR + LZ4 Archive</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocTlz4</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.lz4-tar-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>tlz4</string>
             </array>
         </dict>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Compressed Stream Archive</string>
+            <string>Gzip Compressed Stream</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocGz</string>
             <key>CFBundleTypeRole</key>
             <string>Viewer</string>
             <key>LSHandlerRank</key>
@@ -311,28 +418,132 @@ cat <<PLIST > "$CONTENTS/Info.plist"
             <key>LSItemContentTypes</key>
             <array>
                 <string>org.gnu.gnu-zip-archive</string>
-                <string>com.facebook.zstandard-archive</string>
-                <string>org.tukaani.xz-archive</string>
-                <string>public.bzip2-archive</string>
-                <string>org.lz4.lz4-archive</string>
-                <string>public.lz4-archive</string>
             </array>
             <key>CFBundleTypeExtensions</key>
             <array>
                 <string>gz</string>
                 <string>gzip</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Zstandard Compressed Stream</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocZst</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.facebook.zstandard-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>zst</string>
                 <string>zstd</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>XZ / LZMA Compressed Stream</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocXz</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>org.tukaani.xz-archive</string>
+                <string>org.tukaani.lzma-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>xz</string>
                 <string>lzma</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Bzip2 Compressed Stream</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocBz2</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.bzip2-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>bz2</string>
                 <string>bzip2</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>LZ4 Compressed Stream</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocLz4</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>org.lz4.lz4-archive</string>
+                <string>public.lz4-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>lz4</string>
             </array>
         </dict>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Disk Image &amp; Package Archive</string>
+            <string>Windows Cabinet Archive</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocCab</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.microsoft.cab</string>
+                <string>com.microsoft.cab-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>cab</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>XAR Archive</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocXar</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.apple.xar-archive</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>xar</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>ISO Disk Image</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>DocIso</string>
             <key>CFBundleTypeRole</key>
             <string>Viewer</string>
             <key>LSHandlerRank</key>
@@ -340,16 +551,10 @@ cat <<PLIST > "$CONTENTS/Info.plist"
             <key>LSItemContentTypes</key>
             <array>
                 <string>public.iso-image</string>
-                <string>com.microsoft.cab</string>
-                <string>com.microsoft.cab-archive</string>
-                <string>com.apple.xar-archive</string>
             </array>
             <key>CFBundleTypeExtensions</key>
             <array>
                 <string>iso</string>
-                <string>cab</string>
-                <string>xar</string>
-                <string>pkg</string>
             </array>
         </dict>
     </array>
@@ -360,6 +565,8 @@ cat <<PLIST > "$CONTENTS/Info.plist"
             <string>com.rarlab.rar-archive</string>
             <key>UTTypeDescription</key>
             <string>RAR Archive</string>
+            <key>UTTypeIconFile</key>
+            <string>DocRar</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.archive</string>
@@ -381,6 +588,8 @@ cat <<PLIST > "$CONTENTS/Info.plist"
             <string>org.7-zip.7-zip-archive</string>
             <key>UTTypeDescription</key>
             <string>7-Zip Archive</string>
+            <key>UTTypeIconFile</key>
+            <string>Doc7z</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.archive</string>
@@ -397,9 +606,31 @@ cat <<PLIST > "$CONTENTS/Info.plist"
         </dict>
         <dict>
             <key>UTTypeIdentifier</key>
+            <string>com.winzip.zipx-archive</string>
+            <key>UTTypeDescription</key>
+            <string>Extended ZIP Archive</string>
+            <key>UTTypeIconFile</key>
+            <string>DocZip</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.zip-archive</string>
+                <string>public.archive</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>zipx</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
             <string>com.facebook.zstandard-archive</string>
             <key>UTTypeDescription</key>
             <string>Zstandard Archive</string>
+            <key>UTTypeIconFile</key>
+            <string>DocZst</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.archive</string>
@@ -419,6 +650,8 @@ cat <<PLIST > "$CONTENTS/Info.plist"
             <string>com.facebook.zstandard-tar-archive</string>
             <key>UTTypeDescription</key>
             <string>TAR + Zstandard Archive</string>
+            <key>UTTypeIconFile</key>
+            <string>DocTzst</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.archive</string>
@@ -437,7 +670,9 @@ cat <<PLIST > "$CONTENTS/Info.plist"
             <key>UTTypeIdentifier</key>
             <string>org.tukaani.xz-archive</string>
             <key>UTTypeDescription</key>
-            <string>XZ / LZMA Archive</string>
+            <string>XZ Compressed Archive</string>
+            <key>UTTypeIconFile</key>
+            <string>DocXz</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.archive</string>
@@ -448,6 +683,25 @@ cat <<PLIST > "$CONTENTS/Info.plist"
                 <key>public.filename-extension</key>
                 <array>
                     <string>xz</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>org.tukaani.lzma-archive</string>
+            <key>UTTypeDescription</key>
+            <string>LZMA Compressed Archive</string>
+            <key>UTTypeIconFile</key>
+            <string>DocXz</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.archive</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
                     <string>lzma</string>
                 </array>
             </dict>
@@ -457,6 +711,8 @@ cat <<PLIST > "$CONTENTS/Info.plist"
             <string>org.tukaani.tar-xz-archive</string>
             <key>UTTypeDescription</key>
             <string>TAR + XZ Archive</string>
+            <key>UTTypeIconFile</key>
+            <string>DocTxz</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.archive</string>
@@ -476,6 +732,8 @@ cat <<PLIST > "$CONTENTS/Info.plist"
             <string>org.lz4.lz4-archive</string>
             <key>UTTypeDescription</key>
             <string>LZ4 Archive</string>
+            <key>UTTypeIconFile</key>
+            <string>DocLz4</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.archive</string>
@@ -494,6 +752,8 @@ cat <<PLIST > "$CONTENTS/Info.plist"
             <string>public.lz4-tar-archive</string>
             <key>UTTypeDescription</key>
             <string>TAR + LZ4 Archive</string>
+            <key>UTTypeIconFile</key>
+            <string>DocTlz4</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.archive</string>
@@ -508,15 +768,44 @@ cat <<PLIST > "$CONTENTS/Info.plist"
                 </array>
             </dict>
         </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.microsoft.cab</string>
+            <key>UTTypeDescription</key>
+            <string>Windows Cabinet Archive</string>
+            <key>UTTypeIconFile</key>
+            <string>DocCab</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.archive</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>cab</string>
+                </array>
+            </dict>
+        </dict>
     </array>
 </dict>
 </plist>
 PLIST
 
-echo "==> Ad-hoc code signing helpers, FinderSync.appex, and BoltZip.app..."
-codesign --force --sign - "$CONTENTS/Helpers/boltzip"
-codesign --force --sign - --entitlements "$ROOT_DIR/Sources/BoltZipFinderSync/FinderSync.entitlements" "$APPEX_DIR"
-codesign --force --sign - "$APP_DIR"
+SIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
+NOTARY_PROFILE="${BOLTZIP_NOTARY_PROFILE:-}"
+
+echo "==> Code signing helpers, FinderSync.appex, and BoltZip.app (identity: $SIGN_IDENTITY)..."
+if [ "$SIGN_IDENTITY" = "-" ]; then
+    codesign --force --sign - "$CONTENTS/Helpers/boltzip"
+    codesign --force --sign - --entitlements "$ROOT_DIR/Sources/BoltZipFinderSync/FinderSync.entitlements" "$APPEX_DIR"
+    codesign --force --sign - "$APP_DIR"
+else
+    codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$CONTENTS/Helpers/boltzip"
+    codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" --entitlements "$ROOT_DIR/Sources/BoltZipFinderSync/FinderSync.entitlements" "$APPEX_DIR"
+    codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP_DIR"
+fi
 
 echo "==> Registering BoltZip.app and FinderSync extension..."
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR"
@@ -540,6 +829,18 @@ ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$RELEASE_ZIP"
 
 echo "==> Creating drag-to-Applications installer DMG ($RELEASE_DMG)..."
 "$ROOT_DIR/Scripts/create_dmg.sh" "$APP_DIR" "$RELEASE_DMG" "BoltZip" "v${APP_VERSION} · Apple Silicon"
+
+if [ "$SIGN_IDENTITY" != "-" ]; then
+    codesign --force --timestamp --sign "$SIGN_IDENTITY" "$RELEASE_DMG"
+    if [ -n "$NOTARY_PROFILE" ]; then
+        echo "==> Submitting DMG for Apple notarization (profile: $NOTARY_PROFILE)..."
+        xcrun notarytool submit "$RELEASE_DMG" --keychain-profile "$NOTARY_PROFILE" --wait
+        xcrun stapler staple "$APP_DIR"
+        xcrun stapler staple "$RELEASE_DMG"
+        rm -f "$RELEASE_ZIP"
+        ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$RELEASE_ZIP"
+    fi
+fi
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && [ -z "$(git status --porcelain --untracked-files=no)" ]; then
     echo "==> Creating clean source archives from git HEAD ($APP_VERSION)..."

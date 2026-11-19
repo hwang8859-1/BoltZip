@@ -22,6 +22,13 @@ struct CreateArchiveSheet: View {
     @State private var customSplitMB: String = "50"
     @State private var excludeMacJunk: Bool
     @State private var encoding: FilenameEncodingOption = .utf8
+    @State private var archiveComment: String = ""
+    @State private var moveSourcesToTrash: Bool = false
+    @State private var isDropTargeted: Bool = false
+    /// `-1` = follow global `BoltConcurrency`, `0` = auto, `>= 1` = explicit core count.
+    @State private var workerSelection: Int = -1
+
+    private static let unifiedControlWidth: CGFloat = 248
 
     enum SplitPreset: String, CaseIterable, Identifiable {
         case none
@@ -33,7 +40,18 @@ struct CreateArchiveSheet: View {
 
         var id: String { rawValue }
 
-        func title(_ l: L10n) -> String {
+        func compactTitle(_ l: L10n) -> String {
+            switch self {
+            case .none: return l.splitPresetNone
+            case .mb10: return "10 MB"
+            case .mb100: return "100 MB"
+            case .mb700: return "700 MB"
+            case .gb4: return "4 GB"
+            case .custom: return l.customSplitShortTitle
+            }
+        }
+
+        func menuTitle(_ l: L10n) -> String {
             switch self {
             case .none: return l.splitPresetNone
             case .mb10: return l.splitPreset10MB
@@ -69,43 +87,10 @@ struct CreateArchiveSheet: View {
         let glassEnabled = vm.effectiveWindowTranslucency
 
         VStack(spacing: 10) {
-            BoltGlassContainer(spacing: 8) {
-                HStack(spacing: 10) {
-                    BoltHeaderIconBadge(symbol: "bolt.fill", tint: .cyan)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(l.createArchiveTitle)
-                            .font(BoltType.windowTitle)
-                        Text(l.createArchiveSub)
-                            .font(BoltType.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Text(format.fileExtension.uppercased())
-                        .font(BoltType.badge)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .boltLayeredSurface(
-                            glassEnabled: glassEnabled,
-                            tone: .regular,
-                            tint: .cyan.opacity(0.18),
-                            in: Capsule()
-                        )
-                }
-                .padding(.horizontal, BoltMetrics.cardHeaderHPad)
-                .padding(.vertical, BoltMetrics.cardHeaderVPad)
-                .boltLayeredSurface(
-                    glassEnabled: glassEnabled,
-                    level: .elevated,
-                    tone: .regular,
-                    in: RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous)
-                )
-            }
+            headerCard(l: l, glassEnabled: glassEnabled)
 
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(spacing: 9) {
+                VStack(spacing: 10) {
                     outputTargetCard(l: l, glassEnabled: glassEnabled)
                     formatAlgorithmCard(l: l, glassEnabled: glassEnabled)
                     if format.supportsEncryption {
@@ -120,37 +105,24 @@ struct CreateArchiveSheet: View {
             .compositingGroup()
             .clipShape(RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous))
 
-            BoltGlassContainer(spacing: 10) {
-                HStack(spacing: 10) {
-                    Image(systemName: "doc.zipper")
-                        .font(BoltType.caption)
-                        .foregroundStyle(.secondary)
-                    Text("\(l.willGeneratePrefix)\(resolvedOutputURL.lastPathComponent)")
-                        .font(BoltType.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer()
-                    Button(l.cancel) { closeSheetOrWindow() }
-                        .boltGlassButton()
-                        .keyboardShortcut(.cancelAction)
-                    Button(l.startCompress) { startCompress() }
-                        .boltGlassProminentButton()
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(!isValidInput)
-                }
-                .padding(.horizontal, BoltMetrics.cardFooterHPad)
-                .padding(.vertical, BoltMetrics.cardFooterVPad)
-                .boltLayeredSurface(
-                    glassEnabled: glassEnabled,
-                    level: .elevated,
-                    tone: .regular,
-                    in: RoundedRectangle(cornerRadius: BoltRadius.bar, style: .continuous)
-                )
-            }
+            footerCard(l: l, glassEnabled: glassEnabled)
         }
         .padding(12)
-        .frame(width: 496, height: isStandaloneWindow ? 508 : 520)
+        .frame(width: 496, height: isStandaloneWindow ? 536 : 528)
+        .overlay {
+            if isDropTargeted {
+                RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous)
+                    .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
+                    .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous))
+                    .padding(6)
+                    .allowsHitTesting(false)
+            }
+        }
+        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+            DropHelper.extractFileURLs(from: providers) { urls in
+                appendInputURLs(urls)
+            }
+        }
         .modifier(CreateArchiveContainerStyleModifier(
             vm: vm,
             isStandaloneWindow: isStandaloneWindow,
@@ -158,104 +130,173 @@ struct CreateArchiveSheet: View {
         ))
     }
 
+    // MARK: - Top Header & Bottom Footer
+
+    @ViewBuilder
+    private func headerCard(l: L10n, glassEnabled: Bool) -> some View {
+        BoltGlassContainer(spacing: 8) {
+            HStack(spacing: 10) {
+                BoltDocumentIconView(
+                    kind: format.documentIconKind,
+                    appTheme: vm.appTheme,
+                    renderSize: 40,
+                    displaySize: 36
+                )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(l.createArchiveTitle)
+                        .font(BoltType.windowTitle)
+                    Text(l.createArchiveSub)
+                        .font(BoltType.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+
+                Spacer(minLength: 8)
+
+                BoltReadOnlyBadge(
+                    text: format.fileExtension.uppercased(),
+                    isEmphasized: true
+                )
+            }
+            .padding(.horizontal, BoltMetrics.cardHeaderHPad)
+            .padding(.vertical, BoltMetrics.cardHeaderVPad)
+            .background {
+                if isStandaloneWindow {
+                    BoltWindowDragHandle()
+                }
+            }
+            .boltLayeredSurface(
+                glassEnabled: glassEnabled,
+                level: .elevated,
+                tone: .regular,
+                in: RoundedRectangle(cornerRadius: BoltRadius.card, style: .continuous)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func footerCard(l: L10n, glassEnabled: Bool) -> some View {
+        BoltSheetFooterBar(glassEnabled: glassEnabled) {
+            Image(systemName: "doc.zipper")
+                .font(BoltType.captionMedium)
+                .foregroundStyle(Color.accentColor)
+            Text("\(l.willGeneratePrefix)\(resolvedOutputURL.lastPathComponent)")
+                .font(BoltType.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 8)
+            Button(l.cancel) { closeSheetOrWindow() }
+                .boltGlassButton()
+                .keyboardShortcut(.cancelAction)
+            Button(l.startCompress) { startCompress() }
+                .boltGlassProminentButton()
+                .keyboardShortcut(.defaultAction)
+                .disabled(!isValidInput)
+        }
+    }
+
+    // MARK: - Section Cards
+
     @ViewBuilder
     private func outputTargetCard(l: L10n, glassEnabled: Bool) -> some View {
-        BoltGlassSectionCard(l.outputTargetSection, icon: "folder.fill", glassEnabled: glassEnabled) {
-            HStack(spacing: 8) {
-                Text(l.archiveNameField)
-                    .lineLimit(1)
-                    .frame(width: 146, alignment: .leading)
+        BoltGlassSectionCard(
+            l.outputTargetSection,
+            icon: "folder.fill",
+            iconColor: .accentColor,
+            glassEnabled: glassEnabled,
+            contentSpacing: 7
+        ) {
+            CompressInputRow(
+                title: l.archiveNameField,
+                trailingSuffix: ".\(format.fileExtension)",
+                controlWidth: Self.unifiedControlWidth
+            ) {
                 TextField(l.archiveNameField, text: $archiveName)
                     .textFieldStyle(.roundedBorder)
             }
 
             BoltSectionDivider(glassEnabled: glassEnabled)
 
-            HStack(spacing: 10) {
-                Text(l.saveLocationLabel)
-                Spacer(minLength: 8)
-                Text(destinationDir.path)
-                    .font(BoltType.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Button(l.change) { chooseDestinationDir() }
-                    .controlSize(.small)
-                    .boltGlassButton()
+            CompressActionRow(
+                title: l.saveLocationLabel,
+                valueSubtitle: destinationDir.path,
+                buttonTitle: l.createChooseBtn
+            ) {
+                chooseDestinationDir()
             }
 
             BoltSectionDivider(glassEnabled: glassEnabled)
 
-            HStack(spacing: 10) {
-                Text("\(l.inputItemsLabel) (\(inputs.count))")
-                Spacer(minLength: 8)
-                Text(inputs.map(\.lastPathComponent).joined(separator: ", "))
-                    .font(BoltType.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Button(l.add) { addMoreInputs() }
-                    .controlSize(.small)
-                    .boltGlassButton()
+            CompressActionRow(
+                title: "\(l.inputItemsLabel) (\(inputs.count))",
+                valueSubtitle: inputs.map(\.lastPathComponent).joined(separator: ", "),
+                buttonTitle: l.createAddBtn
+            ) {
+                addMoreInputs()
             }
         }
     }
 
     @ViewBuilder
     private func formatAlgorithmCard(l: L10n, glassEnabled: Bool) -> some View {
-        BoltGlassSectionCard(l.formatAlgoSection, icon: "gearshape.2.fill", glassEnabled: glassEnabled) {
-            HStack {
-                Text(l.archiveFormatLabel)
-                Spacer()
-                Picker("", selection: $format) {
-                    ForEach(ArchiveFormat.creatableFormats) { fmt in
-                        Text(fmt.displayName).tag(fmt)
+        BoltGlassSectionCard(
+            l.formatAlgoSection,
+            icon: "gearshape.2.fill",
+            iconColor: .accentColor,
+            glassEnabled: glassEnabled,
+            contentSpacing: 7
+        ) {
+            BoltFormMenuRow(
+                title: l.archiveFormatLabel,
+                selectedTitle: format.displayName
+            ) {
+                ForEach(ArchiveFormat.creatableFormats) { fmt in
+                    BoltMenuOptionButton(
+                        title: fmt.displayName,
+                        isSelected: format == fmt
+                    ) {
+                        selectFormat(fmt)
                     }
-                }
-                .labelsHidden()
-                .frame(maxWidth: BoltMetrics.createPickerWidth)
-                .onChange(of: format) { _, newFmt in
-                    if !newFmt.supportedAlgorithms.contains(algorithm) {
-                        algorithm = newFmt.defaultAlgorithm
-                    }
-                    level = preset.level(for: algorithm)
-                    if !newFmt.supportsEncryption { encryption = .none }
-                    if !newFmt.supportsSplitVolumes { splitPreset = .none }
                 }
             }
 
             BoltSectionDivider(glassEnabled: glassEnabled)
 
-            HStack {
-                Text(l.compressionAlgoLabel)
-                Spacer()
-                Picker("", selection: $algorithm) {
-                    ForEach(format.supportedAlgorithms) { algo in
-                        Text("\(algo.displayName) — \(algo.openSourceLicenseNote)").tag(algo)
+            BoltFormMenuRow(
+                title: l.compressionAlgoLabel,
+                subtitle: algorithm.openSourceLicenseNote,
+                selectedTitle: algorithm.displayName
+            ) {
+                ForEach(format.supportedAlgorithms) { algo in
+                    BoltMenuOptionButton(
+                        title: "\(algo.displayName) — \(algo.openSourceLicenseNote)",
+                        isSelected: algorithm == algo
+                    ) {
+                        algorithm = algo
+                        level = preset.level(for: algo)
                     }
-                }
-                .labelsHidden()
-                .frame(maxWidth: BoltMetrics.createPickerWidth)
-                .onChange(of: algorithm) { _, newAlgo in
-                    level = preset.level(for: newAlgo)
                 }
             }
 
             if algorithm != .store {
                 BoltSectionDivider(glassEnabled: glassEnabled)
 
-                HStack {
+                HStack(alignment: .center, spacing: 10) {
                     Text(l.compressionPresetLabel)
-                    Spacer()
+                        .font(BoltType.subbodyMedium)
+                    Spacer(minLength: 8)
                     Picker("", selection: $preset) {
                         ForEach(CompressionPreset.allCases.filter { $0 != .store }) { p in
-                            Text(p.displayName).tag(p)
+                            Text(l.createPresetShortTitle(p)).tag(p)
                         }
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
                     .controlSize(.small)
-                    .frame(maxWidth: 264)
+                    .fixedSize()
                     .onChange(of: preset) { _, newPreset in
                         level = newPreset.level(for: algorithm)
                     }
@@ -263,10 +304,11 @@ struct CreateArchiveSheet: View {
 
                 let range = algorithm.levelRange
                 if range.lowerBound < range.upperBound {
-                    HStack(spacing: 10) {
-                        Text("\(l.fineLevelLabel): \(level)")
-                            .monospacedDigit()
-                            .frame(width: 104, alignment: .leading)
+                    BoltSectionDivider(glassEnabled: glassEnabled)
+
+                    HStack(alignment: .center, spacing: 10) {
+                        Text(l.fineLevelLabel)
+                            .font(BoltType.subbodyMedium)
                         Slider(
                             value: Binding(
                                 get: { Double(level) },
@@ -274,6 +316,11 @@ struct CreateArchiveSheet: View {
                             ),
                             in: Double(range.lowerBound)...Double(range.upperBound),
                             step: 1
+                        )
+                        .controlSize(.small)
+                        BoltReadOnlyBadge(
+                            text: "\(level)",
+                            isEmphasized: true
                         )
                     }
                 }
@@ -283,33 +330,48 @@ struct CreateArchiveSheet: View {
 
     @ViewBuilder
     private func encryptionCard(l: L10n, glassEnabled: Bool) -> some View {
-        BoltGlassSectionCard(l.encryptionSection, icon: "lock.shield.fill", glassEnabled: glassEnabled) {
-            HStack {
-                Text(l.encryptionMethodLabel)
-                Spacer()
-                Picker("", selection: $encryption) {
-                    ForEach(EncryptionMethod.allCases) { enc in
-                        Text(enc.displayName).tag(enc)
+        BoltGlassSectionCard(
+            l.encryptionSection,
+            icon: "lock.shield.fill",
+            iconColor: .accentColor,
+            glassEnabled: glassEnabled,
+            contentSpacing: 7
+        ) {
+            BoltFormMenuRow(
+                title: l.encryptionMethodLabel,
+                selectedTitle: l.encryptionCompactTitle(encryption)
+            ) {
+                ForEach(EncryptionMethod.allCases) { enc in
+                    BoltMenuOptionButton(
+                        title: enc.displayName,
+                        isSelected: encryption == enc
+                    ) {
+                        encryption = enc
                     }
                 }
-                .labelsHidden()
-                .frame(maxWidth: BoltMetrics.createPickerWidth)
             }
 
             if encryption != .none {
                 BoltSectionDivider(glassEnabled: glassEnabled)
-                HStack(spacing: 8) {
-                    Text(l.passwordPlaceholder)
-                        .frame(width: 104, alignment: .leading)
+
+                CompressInputRow(
+                    title: l.passwordPlaceholder,
+                    controlWidth: Self.unifiedControlWidth
+                ) {
                     SecureField(l.passwordPlaceholder, text: $password)
                         .textFieldStyle(.roundedBorder)
                 }
-                HStack(spacing: 8) {
-                    Text(l.confirmPasswordField)
-                        .frame(width: 104, alignment: .leading)
+
+                BoltSectionDivider(glassEnabled: glassEnabled)
+
+                CompressInputRow(
+                    title: l.confirmPasswordField,
+                    controlWidth: Self.unifiedControlWidth
+                ) {
                     SecureField(l.confirmPasswordField, text: $confirmPassword)
                         .textFieldStyle(.roundedBorder)
                 }
+
                 if !password.isEmpty && !confirmPassword.isEmpty && password != confirmPassword {
                     Text(l.passwordMismatch)
                         .font(BoltType.caption)
@@ -321,47 +383,144 @@ struct CreateArchiveSheet: View {
 
     @ViewBuilder
     private func advancedCard(l: L10n, glassEnabled: Bool) -> some View {
-        BoltGlassSectionCard(l.advancedOptionsSection, icon: "slider.horizontal.3", glassEnabled: glassEnabled) {
+        BoltGlassSectionCard(
+            l.advancedOptionsSection,
+            icon: "slider.horizontal.3",
+            iconColor: .accentColor,
+            glassEnabled: glassEnabled,
+            contentSpacing: 7
+        ) {
             if format.supportsSplitVolumes {
-                HStack {
-                    Text(l.splitVolumeLabel)
-                    Spacer()
-                    Picker("", selection: $splitPreset) {
-                        ForEach(SplitPreset.allCases) { sp in
-                            Text(sp.title(l)).tag(sp)
+                BoltFormMenuRow(
+                    title: l.splitVolumeLabel,
+                    selectedTitle: splitPreset.compactTitle(l)
+                ) {
+                    ForEach(SplitPreset.allCases) { sp in
+                        BoltMenuOptionButton(
+                            title: sp.menuTitle(l),
+                            isSelected: splitPreset == sp
+                        ) {
+                            splitPreset = sp
                         }
                     }
-                    .labelsHidden()
-                    .frame(maxWidth: BoltMetrics.createPickerWidth)
                 }
+
                 if splitPreset == .custom {
-                    HStack(spacing: 8) {
-                        Text(l.customSplitMBField)
-                            .frame(width: 114, alignment: .leading)
+                    BoltSectionDivider(glassEnabled: glassEnabled)
+
+                    CompressInputRow(
+                        title: l.customSplitMBField,
+                        trailingSuffix: "MB",
+                        controlWidth: Self.unifiedControlWidth
+                    ) {
                         TextField(l.customSplitMBField, text: $customSplitMB)
                             .textFieldStyle(.roundedBorder)
                     }
                 }
+
                 BoltSectionDivider(glassEnabled: glassEnabled)
             }
 
-            Toggle(l.stripMacJunkToggle, isOn: $excludeMacJunk)
+            BoltFormSwitchRow(
+                title: l.stripMacJunkTitle,
+                subtitle: l.stripMacJunkSubtitle,
+                isOn: $excludeMacJunk
+            )
 
             if format == .zip {
                 BoltSectionDivider(glassEnabled: glassEnabled)
-                HStack {
-                    Text(l.filenameEncoding)
-                    Spacer()
-                    Picker("", selection: $encoding) {
-                        ForEach([FilenameEncodingOption.utf8, .gb18030, .cp437]) { enc in
-                            Text(l.encodingTitle(enc)).tag(enc)
+
+                BoltFormMenuRow(
+                    title: l.filenameEncoding,
+                    selectedTitle: l.encodingCompactTitle(encoding)
+                ) {
+                    ForEach([FilenameEncodingOption.utf8, .gb18030, .big5, .shiftJIS, .eucKR, .cp437]) { enc in
+                        BoltMenuOptionButton(
+                            title: l.encodingTitle(enc),
+                            isSelected: encoding == enc
+                        ) {
+                            encoding = enc
                         }
                     }
-                    .labelsHidden()
-                    .frame(maxWidth: BoltMetrics.createPickerWidth)
+                }
+
+                BoltSectionDivider(glassEnabled: glassEnabled)
+
+                CompressInputRow(
+                    title: l.archiveCommentTitle,
+                    controlWidth: Self.unifiedControlWidth
+                ) {
+                    TextField(l.archiveCommentPlaceholder, text: $archiveComment)
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+
+            BoltSectionDivider(glassEnabled: glassEnabled)
+
+            BoltFormSwitchRow(
+                title: l.moveSourcesToTrashToggle,
+                isOn: $moveSourcesToTrash
+            )
+
+            if format == .zip || algorithm == .zstd || algorithm == .xz {
+                let hwCores = vm.hardwareCoreCount
+                let selectedLabel = selectedWorkersSummary(l)
+
+                BoltSectionDivider(glassEnabled: glassEnabled)
+
+                BoltFormMenuRow(
+                    title: l.multiCoreCountLabel,
+                    selectedTitle: selectedLabel
+                ) {
+                    BoltMenuOptionButton(
+                        title: l.multiCoreFollowGlobal(vm.multiCoreStatusSummary(l)),
+                        isSelected: workerSelection == -1
+                    ) {
+                        workerSelection = -1
+                    }
+
+                    Divider()
+
+                    BoltMenuOptionButton(
+                        title: l.multiCoreMenuAuto(vm.autoWorkerCount),
+                        isSelected: workerSelection == 0
+                    ) {
+                        workerSelection = 0
+                    }
+
+                    ForEach(1...hwCores, id: \.self) { cores in
+                        BoltMenuOptionButton(
+                            title: l.multiCoreMenuCoreOption(cores, total: hwCores),
+                            isSelected: workerSelection == cores
+                        ) {
+                            workerSelection = cores
+                        }
+                    }
                 }
             }
         }
+    }
+
+    // MARK: - Actions & Logic
+
+    private func selectFormat(_ newFmt: ArchiveFormat) {
+        format = newFmt
+        if !newFmt.supportedAlgorithms.contains(algorithm) {
+            algorithm = newFmt.defaultAlgorithm
+        }
+        level = preset.level(for: algorithm)
+        if !newFmt.supportsEncryption { encryption = .none }
+        if !newFmt.supportsSplitVolumes { splitPreset = .none }
+    }
+
+    private func selectedWorkersSummary(_ l: L10n) -> String {
+        if workerSelection < 0 {
+            return l.createFollowGlobalWorkers(vm.multiCoreStatusSummary(l))
+        }
+        if workerSelection == 0 {
+            return l.multiCoreBadgeAuto(vm.autoWorkerCount)
+        }
+        return l.multiCoreBadgeManual(workerSelection)
     }
 
     private var resolvedOutputURL: URL {
@@ -406,10 +565,21 @@ struct CreateArchiveSheet: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
         if panel.runModal() == .OK {
-            let existing = Set(inputs)
-            for u in panel.urls where !existing.contains(u) {
-                inputs.append(u)
+            appendInputURLs(panel.urls)
+        }
+    }
+
+    private func appendInputURLs(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        let existing = Set(inputs.map(\.path))
+        for url in urls {
+            let std = url.standardizedFileURL
+            if !existing.contains(std.path) && !inputs.contains(where: { $0.path == std.path }) {
+                inputs.append(std)
             }
+        }
+        if inputs.count == 1, archiveName == "Archive", let first = inputs.first {
+            archiveName = first.deletingPathExtension().lastPathComponent
         }
     }
 
@@ -422,6 +592,7 @@ struct CreateArchiveSheet: View {
     }
 
     private func startCompress() {
+        let overrideWorkers: Int? = workerSelection < 0 ? nil : workerSelection
         let opts = CreateArchiveOptions(
             format: format,
             algorithm: algorithm,
@@ -430,12 +601,75 @@ struct CreateArchiveSheet: View {
             password: encryption == .none ? nil : password,
             splitVolumeSizeBytes: resolvedSplitBytes,
             excludeMacJunk: excludeMacJunk,
-            encoding: encoding
+            encoding: encoding,
+            archiveComment: format == .zip ? archiveComment : "",
+            workerCount: overrideWorkers,
+            preserveSymlinks: vm.preserveSymlinksOnCreate
         )
         let out = resolvedOutputURL
         let useFloatingHUD = isStandaloneWindow && !vm.hasVisibleMainWindow
+        let trashSources = moveSourcesToTrash
         closeSheetOrWindow()
-        vm.createArchive(inputs: inputs, outputURL: out, options: opts, useFloatingHUD: useFloatingHUD)
+        vm.createArchive(
+            inputs: inputs,
+            outputURL: out,
+            options: opts,
+            useFloatingHUD: useFloatingHUD,
+            trashSourcesOnCompletion: trashSources
+        )
+    }
+}
+
+// MARK: - Unified Compress Row Primitives
+
+private struct CompressInputRow<Field: View>: View {
+    let title: String
+    var trailingSuffix: String? = nil
+    let controlWidth: CGFloat
+    @ViewBuilder let field: () -> Field
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Text(title)
+                .font(BoltType.subbodyMedium)
+            Spacer(minLength: 8)
+            HStack(spacing: 6) {
+                field()
+                if let trailingSuffix, !trailingSuffix.isEmpty {
+                    Text(trailingSuffix)
+                        .font(BoltType.monoCaption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                }
+            }
+            .frame(width: controlWidth)
+        }
+    }
+}
+
+private struct CompressActionRow: View {
+    let title: String
+    let valueSubtitle: String
+    let buttonTitle: String
+    let action: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(BoltType.subbodyMedium)
+                Text(valueSubtitle)
+                    .font(BoltType.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 8)
+            Button(buttonTitle, action: action)
+                .controlSize(.small)
+                .boltGlassButton()
+                .fixedSize()
+        }
     }
 }
 
