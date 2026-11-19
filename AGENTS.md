@@ -10,7 +10,7 @@ Welcome! This file gives human contributors and AI coding agents an accurate map
 - **Branch Governance (Option A — One `dev-X.Y.Z` branch per release)**:
   - **Active `dev-*` branch** (`dev-1.0.3` currently, set as GitHub **default branch**): All new feature work and contributor PRs must target this branch. Protected via repository ruleset against force-pushes and accidental deletion.
   - **Archived `dev-*` branches**: Every released `dev-X.Y.Z` branch is kept permanently as a **read-only archive**. No commits, pushes, force-pushes, merges, or deletions are allowed on it; fixes must go through the active `dev-*` branch and the next release.
-  - **`main` (Protected Release Branch)**: Release-only. Direct pushes are blocked (`enforce_admins: true`); merges require a PR from the active `dev-*` branch using **Merge Commit** and passing `.github/workflows/pr-target-guard.yml`.
+  - **`main` (Protected Release Branch)**: Release-only. Direct pushes are blocked (`enforce_admins: true`); release merges require a PR from the same repository’s active `dev-*` branch or a designated `release/X.Y.Z-hotfix` branch using **Merge Commit** and passing `.github/workflows/pr-target-guard.yml`.
   - **`legacy/macos-12` (`v0.9.3` LTS)**: Critical Intel / macOS 12–26 fixes only; protected against force-pushes and deletion.
   - **Version Cutover**: After releasing `dev-X.Y.Z -> main` + tagging `vX.Y.Z`, run `./Scripts/cut_next_dev_branch.sh dev-X.Y.(Z+1)` (never pass `--cleanup-old`) to branch from `main` and advance GitHub's default branch, then immediately lock the previous `dev-X.Y.Z` branch with a ruleset (`Restrict updates` + `Restrict deletions`).
 - **License**: MIT ([LICENSE](LICENSE))
@@ -25,6 +25,8 @@ BoltZip/
 ├── Package.swift                        # SwiftPM manifest (CBoltCompression, BoltZipCore, boltzip, BoltZipApp, tests)
 ├── Scripts/
 │   ├── build_app.sh                     # Release Apple Silicon (arm64, minOS 26.0) build -> dist/BoltZip.app + .dmg + BoltZipFinderSync.appex + codesign
+│   ├── verify_release.sh                # Verify bundle, DMG, checksums, packaged CLI and showcase
+│   ├── e2e_finder_ui.sh                 # Exercise Finder URL actions against a packaged app
 │   ├── create_dmg.sh                    # Creates drag-to-Applications HFS+ UDZO .dmg installer with custom Retina background & volume icon
 │   ├── cut_next_dev_branch.sh           # Option-A release transition helper (cuts dev-X.Y.Z, switches default branch; --cleanup-old is forbidden)
 │   ├── generate_dmg_bg.swift            # CoreGraphics Retina 1x/2x DMG drag-to-Applications backdrop generator
@@ -34,11 +36,13 @@ BoltZip/
 ├── Sources/
 │   ├── CBoltCompression/                # C wrapper statically linking zlib, libzstd, liblzma, libbz2, liblz4
 │   │   ├── include/bolt_compression.h
-│   │   └── bolt_compression.c
+│   │   ├── bolt_compression.c
+│   │   └── bolt_libarchive.c            # Streaming bridge to the system libarchive
 │   ├── BoltZipCore/                     # Platform-agnostic Swift archive engine (Sendable)
 │   │   ├── Models/
 │   │   │   ├── ArchiveModels.swift      # Formats, CompressionAlgorithm, EncryptionMethod, Entry, Options
-│   │   │   └── BoltZipError.swift
+│   │   │   ├── BoltZipError.swift
+│   │   │   └── BoltZipVersion.swift     # Shared application, CLI and packaging version
 │   │   ├── Codecs/
 │   │   │   ├── CompressionCodec.swift   # Swift bridge over CBoltCompression + CRC32
 │   │   │   ├── FilenameEncoding.swift   # Auto-detection for UTF-8, GB18030/GBK, Big5, Shift-JIS, EUC-KR, CP437
@@ -48,7 +52,7 @@ BoltZip/
 │   │   │   ├── ZipReader.swift          # ZIP/ZIP64/split-volume reader, decryption, integrity check
 │   │   │   ├── ZipWriter.swift          # ZIP/ZIP64 writer, split volumes (.z01/.zip), zero-recompress editing
 │   │   │   ├── TarCodec.swift           # Pure Swift USTAR/PAX tar + .tar.{gz,zst,xz,bz2,lz4} + single-stream
-│   │   │   └── ExtendedArchiveDriver.swift # .7z / .iso / .cab / .xar bridge via /usr/bin/tar (libarchive)
+│   │   │   └── ExtendedArchiveDriver.swift # System libarchive reader for extended formats; /usr/bin/tar for 7z creation
 │   │   ├── Engine/
 │   │   │   ├── ArchiveAssociationService.swift # Shared LaunchServices UTI & default app association logic
 │   │   │   ├── BoltArchiveSession.swift # High-level BoltArchiveEngine (inspect, extract, create, editZip, test)
@@ -64,17 +68,18 @@ BoltZip/
 │   │   ├── FinderSync.swift             # Top-level Finder right-click "Bolt >" menu extension (sandboxed .appex)
 │   │   └── FinderSync.entitlements
 │   └── BoltZipApp/                      # Native macOS Liquid Glass desktop app
-│       ├── BoltZipApp.swift             # App entry, NSApplicationDelegate, URL scheme (`boltzip://`) handler
+│       ├── App/                        # App entry, delegate, menu and boltzip:// routing
 │       ├── Icons/                       # Cached AppKit bridge, SwiftUI icon views & entry file-icon resolver
 │       │   ├── BoltIconRenderer.swift
 │       │   ├── BoltBrandIconViews.swift
 │       │   └── BoltFileIconCatalog.swift
 │       ├── Localization/L10n.swift      # Idiomatic multi-language engine (Follow System / zh-Hans / zh-Hant / en / ja)
-│       ├── Models/WorkspaceViewModel.swift
+│       ├── Models/                    # Workspace state, archive operations, navigation and Finder HUD
 │       ├── Services/
 │       │   ├── DropHelper.swift
 │       │   ├── QuickActionInstaller.swift # pluginkit + lsregister manager for BoltZipFinderSync.appex
 │       │   ├── QuickLookPreviewer.swift
+│       │   ├── UpdateCheckerService.swift
 │       │   └── WindowStyleConfigurator.swift # NSWindow translucency & background bridge
 │       └── Views/                       # WelcomeDropZoneView, MainWindowView, CreateArchiveSheet, ActionSheets, GlassDesignSystem
 ├── Tests/BoltZipCoreTests/
@@ -94,8 +99,11 @@ swift test
 swift run -c release boltzip engines
 swift run -c release boltzip bench
 
-# Build self-contained macOS .app bundle + FinderSync extension + AppIcon
-./Scripts/build_app.sh
+# Build the app bundle for local validation
+./Scripts/build_app.sh --app-only --no-register
+
+# Build release artifacts from a clean Git checkout
+./Scripts/build_app.sh --no-register
 codesign --verify --deep --strict dist/BoltZip.app
 open dist/BoltZip.app
 ```
@@ -132,6 +140,6 @@ open dist/BoltZip.app
 ## 5. Verification Checklist Before Committing
 
 1. `swift test` passes with 0 failures.
-2. `./Scripts/build_app.sh` builds cleanly and `codesign --verify --deep --strict dist/BoltZip.app` passes.
+2. `./Scripts/build_app.sh --app-only --no-register` builds cleanly and `codesign --verify --deep --strict dist/BoltZip.app` passes. For release packaging, run `./Scripts/build_app.sh --no-register` from a clean Git checkout.
 3. `plutil -lint dist/BoltZip.app/Contents/Info.plist dist/BoltZip.app/Contents/PlugIns/BoltZipFinderSync.appex/Contents/Info.plist` outputs `OK`.
 4. Check `git status` and `grep -rn "/Users/" Sources showcase Scripts` to ensure no personal paths or build artifacts leak into git.

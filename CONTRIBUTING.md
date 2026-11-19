@@ -25,7 +25,7 @@
 2. 提交前请遵守 [`AGENTS.md`](AGENTS.md) 中的开发规范并运行验证：
    ```bash
    swift test
-   ./Scripts/build_app.sh
+   ./Scripts/build_app.sh --app-only --no-register
    codesign --verify --deep --strict dist/BoltZip.app
    ```
 3. 请勿引入本地个人路径（`/Users/...`），新增用户界面文案请完整补充 `L10n.swift` 四语支持（`zh-Hans` / `zh-Hant` / `en` / `ja`）。
@@ -38,7 +38,7 @@
 ./Scripts/cut_next_dev_branch.sh dev-1.0.4
 ```
 
-切勿传 `--cleanup-old`。发布后的旧 `dev-*` 分支必须原样保留，并立即在 GitHub `Settings → Rules` 中为其设置 `Restrict updates` 与 `Restrict deletions`；任何修复只能进入当前活跃分支并随下一版本发布。
+脚本会在任何分支操作前拒绝 `--cleanup-old`。发布后的旧 `dev-*` 分支必须原样保留，并立即在 GitHub `Settings → Rules` 中为其设置 `Restrict updates` 与 `Restrict deletions`；任何修复只能进入当前活跃分支并随下一版本发布。
 
 ---
 
@@ -46,5 +46,5 @@
 
 - **[Default `dev-*` branch](../../)** *(currently `dev-1.0.3`)*: Active development branch. Always branch from it and target it as your PR base branch (protected against force pushes and deletion via repository rulesets).
 - **Archived `dev-*` branches**: Released `dev-X.Y.Z` branches are kept permanently as read-only archives. Never commit, push, merge, or delete them; fixes belong to the active `dev-*` branch and the next release.
-- **`main`** *(protected)*: Release-only branch. Direct pushes are blocked, and non-release PRs targeting `main` are automatically closed by [`pr-target-guard`](.github/workflows/pr-target-guard.yml).
+- **`main`** *(protected)*: Release-only branch. Direct pushes are blocked. Release PRs must come from the same repository's active development branch or a designated `release/X.Y.Z-hotfix` branch. Other PRs targeting `main` are closed by [`pr-target-guard`](.github/workflows/pr-target-guard.yml).
 - **`legacy/macos-12`**: Maintenance branch for macOS 12–26 Universal (`arm64` + `x86_64`) v0.9.x releases.
