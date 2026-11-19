@@ -30,6 +30,11 @@ public enum TarCodec {
         let fm = FileManager.default
         try fm.createDirectory(at: destinationFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 
+        let root = destinationFileURL.deletingLastPathComponent()
+        let stage = try BoltArchiveEngine.makeExtractionStage(near: destinationFileURL, under: root)
+        defer { try? fm.removeItem(at: stage) }
+        let stagedItem = stage.appendingPathComponent("payload")
+
         switch format {
         case .gz, .zst, .xz, .bz2, .lz4:
             let entries = try listSingleStream(at: url, format: format)
@@ -40,7 +45,7 @@ public enum TarCodec {
             guard first.path == targetNorm || targetNorm == url.lastPathComponent else {
                 throw BoltZipError.entryNotFound(path)
             }
-            try decompressStreamFile(from: url, to: destinationFileURL, format: format, controller: controller)
+            try decompressStreamFile(from: url, to: stagedItem, format: format, controller: controller)
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4:
             let target = ArchiveEntry.normalizePath(path, isDirectory: path.hasSuffix("/"))
             var found = false
@@ -50,13 +55,13 @@ public enum TarCodec {
                     found = true
                     if info.entry.isSymbolicLink {
                         let data = Data(info.symlinkTarget.utf8)
-                        try data.write(to: destinationFileURL, options: .atomic)
+                        try data.write(to: stagedItem, options: .atomic)
                     } else if info.entry.isDirectory {
-                        try fm.createDirectory(at: destinationFileURL, withIntermediateDirectories: true)
+                        try fm.createDirectory(at: stagedItem, withIntermediateDirectories: true)
                     } else {
                         try fh.seek(toOffset: info.payloadOffset)
-                        fm.createFile(atPath: destinationFileURL.path, contents: nil)
-                        let outHandle = try FileHandle(forWritingTo: destinationFileURL)
+                        fm.createFile(atPath: stagedItem.path, contents: nil)
+                        let outHandle = try FileHandle(forWritingTo: stagedItem)
                         var closeOut = true
                         defer { if closeOut { try? outHandle.close() } }
                         var rem = info.payloadSize
@@ -64,7 +69,7 @@ public enum TarCodec {
                             try controller?.checkpoint()
                             let want = Int(min(UInt64(BoltConcurrency.streamChunkSize), rem))
                             let chunk = try fh.read(upToCount: want) ?? Data()
-                            if chunk.isEmpty { break }
+                            guard !chunk.isEmpty else { throw BoltZipError.invalidArchive("Truncated TAR entry") }
                             try outHandle.write(contentsOf: chunk)
                             rem -= UInt64(chunk.count)
                         }
@@ -80,6 +85,8 @@ public enum TarCodec {
         default:
             throw BoltZipError.unsupportedFormat(format.displayName)
         }
+        try BoltArchiveEngine.commitExtractedItem(stagedItem, to: destinationFileURL, under: root,
+                                                  policy: .overwrite, controller: controller)
     }
 
     public static func readEntryData(at url: URL, format: ArchiveFormat, path: String) throws -> Data {
@@ -141,8 +148,9 @@ public enum TarCodec {
                 return
             }
 
-            let stageURL = fm.temporaryDirectory.appendingPathComponent("boltzip-sgz-\(UUID().uuidString).tmp")
-            defer { try? fm.removeItem(at: stageURL) }
+            let stage = try BoltArchiveEngine.makeExtractionStage(near: targetURL, under: destinationURL)
+            defer { try? fm.removeItem(at: stage) }
+            let stageURL = stage.appendingPathComponent("payload")
             try decompressStreamFile(from: url, to: stageURL, format: format, controller: controller) { readBytes, totalComp in
                 let frac = totalComp > 0 ? min(0.99, Double(readBytes) / Double(totalComp)) : 0.2
                 progress?(OperationProgress(
@@ -153,11 +161,8 @@ public enum TarCodec {
                 ))
             }
 
-            try BoltArchiveEngine.assertNoSymlinkTraversal(at: targetURL, under: destinationURL)
-            if fm.fileExists(atPath: targetURL.path) {
-                try fm.removeItem(at: targetURL)
-            }
-            try fm.moveItem(at: stageURL, to: targetURL)
+            try BoltArchiveEngine.commitExtractedItem(stageURL, to: targetURL, under: destinationURL,
+                                                      policy: overwritePolicy, controller: controller)
             let attrs: [FileAttributeKey: Any] = [
                 .modificationDate: first.modifiedDate,
                 .posixPermissions: NSNumber(value: first.permissions)
@@ -509,11 +514,11 @@ public enum TarCodec {
             let prefix = readTarString(header, start: 345, length: 155)
 
             let resolvedSize = nextPaxAttributes["size"].flatMap(UInt64.init) ?? sizeVal
-            let paddedLen = ((resolvedSize + UInt64(blockSize) - 1) / UInt64(blockSize)) * UInt64(blockSize)
-
-            guard offset + resolvedSize <= fileSize else {
+            guard resolvedSize <= fileSize - offset else {
                 throw BoltZipError.invalidArchive(BoltCoreLocalization.t("TAR 数据块提前结束", "TAR 資料區塊提前結束", "Unexpected EOF in TAR data block", "TAR データブロックが途中で終了しました"))
             }
+
+            let paddedLen = ((resolvedSize + UInt64(blockSize) - 1) / UInt64(blockSize)) * UInt64(blockSize)
 
             // PAX extended header ('x'), GNU long name ('L'), GNU long link ('K')
             if typeFlag == UInt8(ascii: "x") || typeFlag == UInt8(ascii: "g") || typeFlag == UInt8(ascii: "L") || typeFlag == UInt8(ascii: "K") {
@@ -679,9 +684,12 @@ public enum TarCodec {
                 return true
             }
 
+            let stage = try BoltArchiveEngine.makeExtractionStage(near: targetURL, under: destinationURL)
+            defer { try? fm.removeItem(at: stage) }
+            let stagedFile = stage.appendingPathComponent("payload")
             try fh.seek(toOffset: info.payloadOffset)
-            fm.createFile(atPath: targetURL.path, contents: nil)
-            let outHandle = try FileHandle(forWritingTo: targetURL)
+            fm.createFile(atPath: stagedFile.path, contents: nil)
+            let outHandle = try FileHandle(forWritingTo: stagedFile)
             var closeOut = true
             defer { if closeOut { try? outHandle.close() } }
 
@@ -690,7 +698,7 @@ public enum TarCodec {
                 try controller?.checkpoint()
                 let want = Int(min(UInt64(BoltConcurrency.streamChunkSize), rem))
                 let chunk = try fh.read(upToCount: want) ?? Data()
-                if chunk.isEmpty { break }
+                guard !chunk.isEmpty else { throw BoltZipError.invalidArchive("Truncated TAR entry") }
                 try outHandle.write(contentsOf: chunk)
                 rem -= UInt64(chunk.count)
                 processedBytes += UInt64(chunk.count)
@@ -712,7 +720,9 @@ public enum TarCodec {
                 .modificationDate: entry.modifiedDate,
                 .posixPermissions: NSNumber(value: entry.permissions)
             ]
-            try? fm.setAttributes(attrs, ofItemAtPath: targetURL.path)
+            try? fm.setAttributes(attrs, ofItemAtPath: stagedFile.path)
+            try BoltArchiveEngine.commitExtractedItem(stagedFile, to: targetURL, under: destinationURL,
+                                                      policy: overwritePolicy, controller: controller)
             return true
         }
     }

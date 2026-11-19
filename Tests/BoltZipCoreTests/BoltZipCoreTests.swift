@@ -923,6 +923,80 @@ final class BoltZipCoreTests: XCTestCase {
         #endif
     }
 
+    func testStreamingOverwritePreservesExistingFileUntilExtractionSucceeds() throws {
+        let oldThreshold = BoltConcurrency.streamingThresholdBytes
+        BoltConcurrency.streamingThresholdBytes = 64 * 1024
+        defer { BoltConcurrency.streamingThresholdBytes = oldThreshold }
+
+        let fm = FileManager.default
+        let input = tempDir.appendingPathComponent("payload.txt")
+        let payload = Data(repeating: 0x41, count: 128 * 1024)
+        try payload.write(to: input)
+        let archive = tempDir.appendingPathComponent("protected.zip")
+        let password = "BoltZip-test-password"
+        try BoltArchiveEngine.createArchive(
+            from: [input], to: archive,
+            options: CreateArchiveOptions(format: .zip, algorithm: .deflate, encryption: .aes256, password: password)
+        )
+
+        let folder = tempDir.appendingPathComponent("output", isDirectory: true)
+        try fm.createDirectory(at: folder, withIntermediateDirectories: false)
+        let destination = folder.appendingPathComponent(input.lastPathComponent)
+        let previous = Data("existing file".utf8)
+        try previous.write(to: destination)
+
+        var options = ExtractOptions(destinationURL: folder, mode: .here, overwritePolicy: .overwrite, password: "wrong")
+        XCTAssertThrowsError(try BoltArchiveEngine.extract(archiveURL: archive, options: options)) { error in
+            guard case BoltZipError.wrongPassword = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+        XCTAssertEqual(try Data(contentsOf: destination), previous)
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: folder.path), [destination.lastPathComponent])
+
+        options.password = password
+        let controller = ArchiveTaskController()
+        XCTAssertThrowsError(try BoltArchiveEngine.extract(archiveURL: archive, options: options, controller: controller) {
+            if $0.processedBytes > 0 { controller.cancel() }
+        }) { error in
+            guard case BoltZipError.cancelled = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+        XCTAssertEqual(try Data(contentsOf: destination), previous)
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: folder.path), [destination.lastPathComponent])
+
+        try BoltArchiveEngine.extract(archiveURL: archive, options: options)
+        XCTAssertEqual(try Data(contentsOf: destination), payload)
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: folder.path), [destination.lastPathComponent])
+    }
+
+    func testArchiveSizeAggregationRejectsUnsupportedTotals() throws {
+        let maxSize = UInt64(Int64.max)
+        XCTAssertEqual(try BoltArchiveEngine.checkedArchiveSize(maxSize - 1, adding: 1), maxSize)
+        XCTAssertThrowsError(try BoltArchiveEngine.checkedArchiveSize(maxSize, adding: 1))
+        XCTAssertThrowsError(try BoltArchiveEngine.checkedArchiveSize(1, adding: UInt64.max))
+    }
+
+    func testCodecEnforcesExactDecodedSizeForBufferFileAndVerification() throws {
+        let payload = Data(repeating: 0x41, count: 64 * 1024)
+        let compressed = try CompressionCodec.compress(data: payload, algorithm: .deflate)
+        let source = tempDir.appendingPathComponent("raw.deflate")
+        let destination = tempDir.appendingPathComponent("decoded")
+        try compressed.write(to: source)
+        let exactSize = UInt64(payload.count)
+
+        for wrongSize in [0, 1, exactSize + 1] {
+            XCTAssertThrowsError(try CompressionCodec.decompress(data: compressed, algorithm: .deflate, exactOutputSize: wrongSize))
+            XCTAssertThrowsError(try CompressionCodec.decompressFile(
+                sourceURL: source, destinationURL: destination, algorithm: .deflate, exactOutputSize: wrongSize
+            ))
+            XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+            XCTAssertThrowsError(try CompressionCodec.verifyFile(sourceURL: source, algorithm: .deflate, exactOutputSize: wrongSize))
+        }
+
+        XCTAssertEqual(try CompressionCodec.decompress(data: compressed, algorithm: .deflate, exactOutputSize: exactSize), payload)
+        try CompressionCodec.decompressFile(sourceURL: source, destinationURL: destination, algorithm: .deflate, exactOutputSize: exactSize)
+        XCTAssertEqual(try Data(contentsOf: destination), payload)
+        XCTAssertEqual(try CompressionCodec.verifyFile(sourceURL: source, algorithm: .deflate, exactOutputSize: exactSize).uncompressedSize, exactSize)
+    }
+
     func testStreamingChunkedZipAE2AndTarZstRoundtrip() throws {
         BoltConcurrency.streamingThresholdBytes = 64 * 1024
         defer { BoltConcurrency.streamingThresholdBytes = BoltConcurrency.defaultStreamThresholdBytes }

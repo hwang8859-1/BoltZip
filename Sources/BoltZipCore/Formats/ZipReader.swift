@@ -29,31 +29,38 @@ final class ZipVolumeAccessor: @unchecked Sendable {
     func configureVolumes(totalDisks: Int) throws {
         ioLock.lock()
         defer { ioLock.unlock() }
-        if totalDisks <= 1 {
-            allVolumes = [mainURL]
-            return
-        }
-        let stem = mainURL.deletingPathExtension()
         var urls: [URL] = []
-        for idx in 0..<(totalDisks - 1) {
-            let ext = String(format: "z%02d", idx + 1)
-            let part = stem.appendingPathExtension(ext)
-            guard FileManager.default.fileExists(atPath: part.path) else {
-                throw BoltZipError.missingSplitVolume(part.lastPathComponent)
+        if totalDisks > 1 {
+            let stem = mainURL.deletingPathExtension()
+            for idx in 0..<(totalDisks - 1) {
+                let ext = String(format: "z%02d", idx + 1)
+                let part = stem.appendingPathExtension(ext)
+                guard FileManager.default.fileExists(atPath: part.path) else {
+                    throw BoltZipError.missingSplitVolume(part.lastPathComponent)
+                }
+                urls.append(part)
             }
-            urls.append(part)
         }
         urls.append(mainURL)
-        allVolumes = urls
+        if urls != allVolumes {
+            // Before configuration, disk zero refers to the main file rather than the first split volume.
+            if !(allVolumes.isEmpty && urls == [mainURL]) {
+                closeHandlesLocked()
+            }
+            allVolumes = urls
+        }
     }
 
     func closeAll() {
         ioLock.lock()
         defer { ioLock.unlock() }
-        for (_, fh) in handles {
-            try? fh.close()
-        }
+        closeHandlesLocked()
+    }
+
+    private func closeHandlesLocked() {
+        for handle in handles.values { try? handle.close() }
         handles.removeAll()
+        sizes.removeAll()
     }
 
     deinit {
@@ -91,7 +98,7 @@ final class ZipVolumeAccessor: @unchecked Sendable {
         var total: UInt64 = 0
         for disk in 0..<list.count {
             let (_, sz) = try handleLocked(forDisk: disk)
-            total += sz
+            total = try BoltArchiveEngine.checkedArchiveSize(total, adding: sz)
         }
         return total
     }
@@ -327,6 +334,11 @@ public final class ZipReader: @unchecked Sendable {
                 disk32: diskStart16
             )
 
+            guard parsedExtra.compressedSize <= availableBytes,
+                  parsedExtra.uncompressedSize <= UInt64(Int64.max) else {
+                throw BoltZipError.invalidArchive("ZIP entry size exceeds archive bounds or the supported range")
+            }
+
             records.append(
                 ZipRecord(
                     rawPathBytes: rawPath,
@@ -495,6 +507,11 @@ public final class ZipReader: @unchecked Sendable {
         let actualMethod = record.aesExtra?.actualMethod ?? record.compressionMethod
         let skipCRC32 = (record.compressionMethod == 99 && record.aesExtra?.vendorVersion == 2)
 
+        let bufferLimit: UInt64 = 256 * 1024 * 1024
+        guard record.compressedSize <= bufferLimit, record.uncompressedSize <= bufferLimit else {
+            throw BoltZipError.invalidArchive("ZIP entry exceeds the memory limit for reading into a buffer")
+        }
+
         // Read-only fallback via macOS system libarchive for Deflate64 (method 9) and LZMA (method 14)
         if actualMethod == 9 || actualMethod == 14 {
             do {
@@ -504,7 +521,8 @@ public final class ZipReader: @unchecked Sendable {
                     format: .zip,
                     path: entryPath,
                     password: password,
-                    encoding: .auto
+                    encoding: .auto,
+                    exactOutputSize: record.uncompressedSize
                 )
                 try controller?.checkpoint()
                 if !skipCRC32 {
@@ -562,6 +580,7 @@ public final class ZipReader: @unchecked Sendable {
             algorithm: algo,
             gzipContainer: false,
             expectedSize: Int(record.uncompressedSize),
+            exactOutputSize: record.uncompressedSize,
             controller: controller,
             progress: progress
         )
@@ -601,15 +620,17 @@ public final class ZipReader: @unchecked Sendable {
                 controller: controller,
                 progress: progress
             )
-            try BoltArchiveEngine.assertNoSymlinkTraversal(at: initialURL, under: destinationRoot)
-            try BoltArchiveEngine.writeExtractedFile(plain, to: initialURL, entry: entry, policy: overwritePolicy)
+            try BoltArchiveEngine.writeExtractedFile(plain, to: initialURL, under: destinationRoot, entry: entry,
+                                                     policy: overwritePolicy, controller: controller)
             return
         }
 
         let fm = FileManager.default
         if actualMethod == 9 || actualMethod == 14 {
-            let stageDir = fm.temporaryDirectory.appendingPathComponent("boltzip-la-entry-\(UUID().uuidString)", isDirectory: true)
-            try fm.createDirectory(at: stageDir, withIntermediateDirectories: true)
+            guard let targetURL = try BoltArchiveEngine.prepareExtractTargetURL(
+                initialURL: initialURL, under: destinationRoot, policy: overwritePolicy
+            ) else { return }
+            let stageDir = try BoltArchiveEngine.makeExtractionStage(near: targetURL, under: destinationRoot)
             defer { try? fm.removeItem(at: stageDir) }
             try ExtendedArchiveDriver.extract(
                 at: url,
@@ -622,6 +643,7 @@ public final class ZipReader: @unchecked Sendable {
                 stripMacJunk: false,
                 restoreSymlinks: false,
                 expectedTotalBytes: record.uncompressedSize,
+                exactEntrySize: record.uncompressedSize,
                 controller: controller,
                 progress: progress.map { cb in
                     { @Sendable (p: OperationProgress) in
@@ -639,14 +661,8 @@ public final class ZipReader: @unchecked Sendable {
                     try throwCRC32Mismatch(entryPath: entryPath, expected: record.crc32, actual: actualCRC)
                 }
             }
-            guard let targetURL = try BoltArchiveEngine.prepareExtractTargetURL(
-                initialURL: initialURL,
-                under: destinationRoot,
-                policy: overwritePolicy
-            ) else {
-                return
-            }
-            try fm.moveItem(at: stagedURL, to: targetURL)
+            try BoltArchiveEngine.commitExtractedItem(stagedURL, to: targetURL, under: destinationRoot,
+                                                      policy: overwritePolicy, controller: controller)
             let attrs: [FileAttributeKey: Any] = [
                 .modificationDate: entry.modifiedDate,
                 .posixPermissions: NSNumber(value: entry.permissions)
@@ -669,24 +685,15 @@ public final class ZipReader: @unchecked Sendable {
         let (payloadDisk, payloadOffset) = try resolvePayloadStart(for: record, accessor: accessor)
         let cursor = accessor.makeSpanningCursor(disk: payloadDisk, offset: payloadOffset, totalLength: record.compressedSize)
 
-        let stagePlainURL = fm.temporaryDirectory.appendingPathComponent("boltzip-plain-\(UUID().uuidString).tmp")
-        var tempURLs: [URL] = [stagePlainURL]
-        defer {
-            for t in tempURLs { try? fm.removeItem(at: t) }
-        }
+        let stage = try BoltArchiveEngine.makeExtractionStage(near: targetURL, under: destinationRoot)
+        defer { try? fm.removeItem(at: stage) }
+        let stagePlainURL = stage.appendingPathComponent("payload")
 
         if isEncrypted {
             guard let pw = password, !pw.isEmpty else {
                 throw BoltZipError.passwordRequired(entryPath)
             }
-            let compTargetURL: URL
-            if algo == .store {
-                compTargetURL = stagePlainURL
-            } else {
-                let tmp = fm.temporaryDirectory.appendingPathComponent("boltzip-dec-\(UUID().uuidString).tmp")
-                tempURLs.append(tmp)
-                compTargetURL = tmp
-            }
+            let compTargetURL = algo == .store ? stagePlainURL : stage.appendingPathComponent("decrypted")
 
             fm.createFile(atPath: compTargetURL.path, contents: nil)
             let compHandle = try FileHandle(forWritingTo: compTargetURL)
@@ -697,6 +704,11 @@ public final class ZipReader: @unchecked Sendable {
             let totalOut = max(record.compressedSize, 1)
 
             let writeDecChunk: (Data) throws -> Void = { chunk in
+                if algo == .store {
+                    guard UInt64(chunk.count) <= record.uncompressedSize - processed else {
+                        throw self.decodedSizeMismatch(entryPath)
+                    }
+                }
                 if algo == .store && !skipCRC32 {
                     streamCRC = CompressionCodec.crc32(chunk, initial: streamCRC)
                 }
@@ -735,12 +747,16 @@ public final class ZipReader: @unchecked Sendable {
             try compHandle.close()
             closeComp = false
 
+            if algo == .store && processed != record.uncompressedSize {
+                throw decodedSizeMismatch(entryPath)
+            }
             if algo != .store {
                 try CompressionCodec.decompressFile(
                     sourceURL: compTargetURL,
                     destinationURL: stagePlainURL,
                     algorithm: algo,
                     gzipContainer: false,
+                    exactOutputSize: record.uncompressedSize,
                     controller: controller,
                     progress: { r, tot in
                         let base = record.uncompressedSize / 2
@@ -756,6 +772,7 @@ public final class ZipReader: @unchecked Sendable {
                 try throwCRC32Mismatch(entryPath: entryPath, expected: record.crc32, actual: streamCRC)
             }
         } else if algo == .store {
+            guard record.compressedSize == record.uncompressedSize else { throw decodedSizeMismatch(entryPath) }
             fm.createFile(atPath: stagePlainURL.path, contents: nil)
             let outHandle = try FileHandle(forWritingTo: stagePlainURL)
             var closeOut = true
@@ -777,8 +794,7 @@ public final class ZipReader: @unchecked Sendable {
                 try throwCRC32Mismatch(entryPath: entryPath, expected: record.crc32, actual: streamCRC)
             }
         } else {
-            let rawTmpURL = fm.temporaryDirectory.appendingPathComponent("boltzip-raw-\(UUID().uuidString).tmp")
-            tempURLs.append(rawTmpURL)
+            let rawTmpURL = stage.appendingPathComponent("compressed")
             fm.createFile(atPath: rawTmpURL.path, contents: nil)
             let rawHandle = try FileHandle(forWritingTo: rawTmpURL)
             var closeRaw = true
@@ -797,6 +813,7 @@ public final class ZipReader: @unchecked Sendable {
                 destinationURL: stagePlainURL,
                 algorithm: algo,
                 gzipContainer: false,
+                exactOutputSize: record.uncompressedSize,
                 controller: controller,
                 progress: { r, tot in
                     let frac = tot > 0 ? Double(r) / Double(tot) : 0
@@ -810,11 +827,8 @@ public final class ZipReader: @unchecked Sendable {
             }
         }
 
-        try BoltArchiveEngine.assertNoSymlinkTraversal(at: targetURL, under: destinationRoot)
-        if fm.fileExists(atPath: targetURL.path) {
-            try fm.removeItem(at: targetURL)
-        }
-        try fm.moveItem(at: stagePlainURL, to: targetURL)
+        try BoltArchiveEngine.commitExtractedItem(stagePlainURL, to: targetURL, under: destinationRoot,
+                                                  policy: overwritePolicy, controller: controller)
         let attrs: [FileAttributeKey: Any] = [
             .modificationDate: entry.modifiedDate,
             .posixPermissions: NSNumber(value: entry.permissions)
@@ -830,8 +844,20 @@ public final class ZipReader: @unchecked Sendable {
     ) throws {
         let threshold = BoltConcurrency.streamingThresholdBytes
         let actualMethod = record.aesExtra?.actualMethod ?? record.compressionMethod
-        if (record.compressedSize < threshold && record.uncompressedSize < threshold) || actualMethod == 9 || actualMethod == 14 {
+        if record.compressedSize < threshold && record.uncompressedSize < threshold {
             _ = try decodePayload(record: record, entryPath: entryPath, accessor: accessor, password: password)
+            return
+        }
+
+        if actualMethod == 9 || actualMethod == 14 {
+            let fm = FileManager.default
+            let stage = fm.temporaryDirectory.appendingPathComponent("boltzip-verify-\(UUID().uuidString)", isDirectory: true)
+            try fm.createDirectory(at: stage, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+            defer { try? fm.removeItem(at: stage) }
+            try decodePayloadToFile(record: record, entryPath: entryPath, accessor: accessor,
+                                    destinationURL: stage.appendingPathComponent("payload"), destinationRoot: stage,
+                                    entry: Self.makeEntry(from: record, encoding: .auto),
+                                    overwritePolicy: .overwrite, password: password)
             return
         }
 
@@ -857,11 +883,16 @@ public final class ZipReader: @unchecked Sendable {
                 tmpHandle = try FileHandle(forWritingTo: tmpURL)
             }
             var streamCRC: UInt32 = 0
+            var decodedBytes: UInt64 = 0
             let onChunk: (Data) throws -> Void = { chunk in
                 if let tmpHandle {
                     try tmpHandle.write(contentsOf: chunk)
-                } else if !skipCRC32 {
-                    streamCRC = CompressionCodec.crc32(chunk, initial: streamCRC)
+                } else {
+                    guard UInt64(chunk.count) <= record.uncompressedSize - decodedBytes else {
+                        throw self.decodedSizeMismatch(entryPath)
+                    }
+                    decodedBytes += UInt64(chunk.count)
+                    if !skipCRC32 { streamCRC = CompressionCodec.crc32(chunk, initial: streamCRC) }
                 }
             }
             if record.compressionMethod == 99, let aes = record.aesExtra {
@@ -888,14 +919,18 @@ public final class ZipReader: @unchecked Sendable {
             try tmpHandle?.close()
             tmpHandle = nil
             if let tmpURL {
-                let verified = try CompressionCodec.verifyFile(sourceURL: tmpURL, algorithm: algo, gzipContainer: false)
+                let verified = try CompressionCodec.verifyFile(sourceURL: tmpURL, algorithm: algo, exactOutputSize: record.uncompressedSize)
                 if !skipCRC32 && verified.crc32 != record.crc32 {
                     try throwCRC32Mismatch(entryPath: entryPath, expected: record.crc32, actual: verified.crc32)
                 }
-            } else if !skipCRC32 && streamCRC != record.crc32 {
-                try throwCRC32Mismatch(entryPath: entryPath, expected: record.crc32, actual: streamCRC)
+            } else {
+                guard decodedBytes == record.uncompressedSize else { throw decodedSizeMismatch(entryPath) }
+                if !skipCRC32 && streamCRC != record.crc32 {
+                    try throwCRC32Mismatch(entryPath: entryPath, expected: record.crc32, actual: streamCRC)
+                }
             }
         } else if algo == .store {
+            guard record.compressedSize == record.uncompressedSize else { throw decodedSizeMismatch(entryPath) }
             var streamCRC: UInt32 = 0
             while cursor.remaining > 0 {
                 let chunk = try cursor.readNext(maxBytes: BoltConcurrency.streamChunkSize)
@@ -916,11 +951,18 @@ public final class ZipReader: @unchecked Sendable {
                 try rawHandle.write(contentsOf: chunk)
             }
             try rawHandle.close()
-            let verified = try CompressionCodec.verifyFile(sourceURL: rawTmp, algorithm: algo, gzipContainer: false)
+            let verified = try CompressionCodec.verifyFile(sourceURL: rawTmp, algorithm: algo, exactOutputSize: record.uncompressedSize)
             if verified.crc32 != record.crc32 {
                 try throwCRC32Mismatch(entryPath: entryPath, expected: record.crc32, actual: verified.crc32)
             }
         }
+    }
+
+    private func decodedSizeMismatch(_ entryPath: String) -> BoltZipError {
+        .corruptedEntry(entry: entryPath, detail: BoltCoreLocalization.t(
+            "解压大小与声明不符", "解壓縮大小與宣告不符",
+            "Decoded size does not match the declared entry size", "展開サイズが宣言と一致しません"
+        ))
     }
 
     private func throwCRC32Mismatch(entryPath: String, expected: UInt32, actual: UInt32) throws -> Never {

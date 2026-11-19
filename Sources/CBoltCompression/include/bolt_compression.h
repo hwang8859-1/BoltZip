@@ -103,6 +103,7 @@ bolt_status_t bolt_decompress_buffer_ex(
     const uint8_t *input,
     size_t input_len,
     size_t expected_output_len, /* 0 if unknown */
+    uint64_t exact_output_len, /* UINT64_MAX if unknown */
     bolt_buffer_t *output,
     bolt_control_cb control_cb,
     void *ctx
@@ -146,6 +147,7 @@ bolt_status_t bolt_decompress_file_ex(
     bolt_container_t container,
     const char *src_path,
     const char *dst_path,
+    uint64_t exact_output_len, /* UINT64_MAX if unknown */
     bolt_control_cb control_cb,
     void *ctx
 );
@@ -156,6 +158,7 @@ bolt_status_t bolt_verify_file(
     const char *src_path,
     uint32_t *out_crc32,
     uint64_t *out_uncompressed_size,
+    uint64_t exact_output_len, /* UINT64_MAX if unknown */
     bolt_control_cb control_cb,
     void *ctx
 );

@@ -151,22 +151,27 @@ public enum ExtendedArchiveDriver {
         format: ArchiveFormat? = nil,
         path: String,
         password: String? = nil,
-        encoding: FilenameEncodingOption = .auto
+        encoding: FilenameEncodingOption = .auto,
+        exactOutputSize: UInt64? = nil
     ) throws -> Data {
         final class ReadState {
             let targetPath: String
             let encoding: FilenameEncodingOption
             var matched = false
+            var sizeMismatch = false
             var data = Data()
 
-            init(targetPath: String, encoding: FilenameEncodingOption) {
+            let exactOutputSize: UInt64?
+
+            init(targetPath: String, encoding: FilenameEncodingOption, exactOutputSize: UInt64?) {
                 self.targetPath = ArchiveEntry.normalizePath(targetPath, isDirectory: false)
                 self.encoding = encoding
+                self.exactOutputSize = exactOutputSize
             }
         }
 
         let resolvedFormat = format ?? ArchiveFormat.detect(from: url) ?? .sevenZip
-        let state = ReadState(targetPath: path, encoding: encoding)
+        let state = ReadState(targetPath: path, encoding: encoding, exactOutputSize: exactOutputSize)
         let volumePaths = resolveVolumePaths(for: url, format: resolvedFormat)
         var errBuf = [CChar](repeating: 0, count: 512)
 
@@ -198,6 +203,11 @@ public enum ExtendedArchiveDriver {
                             guard let rawCtx else { return -1 }
                             let st = Unmanaged<ReadState>.fromOpaque(rawCtx).takeUnretainedValue()
                             if let chunkPtr, chunkLen > 0 {
+                                if let exactOutputSize = st.exactOutputSize,
+                                   UInt64(chunkLen) > exactOutputSize - UInt64(st.data.count) {
+                                    st.sizeMismatch = true
+                                    return -1
+                                }
                                 st.data.append(chunkPtr, count: chunkLen)
                                 return 0
                             }
@@ -211,6 +221,9 @@ public enum ExtendedArchiveDriver {
             }
         }
 
+        if state.sizeMismatch || (rc == 0 && state.matched && exactOutputSize.map { $0 != UInt64(state.data.count) } == true) {
+            throw BoltZipError.corruptedEntry(entry: path, detail: "Decoded size does not match the declared entry size")
+        }
         try throwIfLibarchiveError(rc, errBuf: errBuf, contextName: path)
         guard state.matched else {
             throw BoltZipError.entryNotFound(path)
@@ -229,6 +242,7 @@ public enum ExtendedArchiveDriver {
         stripMacJunk: Bool = true,
         restoreSymlinks: Bool = true,
         expectedTotalBytes: UInt64 = 0,
+        exactEntrySize: UInt64? = nil,
         topLevelDirRenameMap: [String: String] = [:],
         controller: ArchiveTaskController? = nil,
         progress: (@Sendable (OperationProgress) -> Void)? = nil
@@ -245,6 +259,7 @@ public enum ExtendedArchiveDriver {
             let stripMacJunk: Bool
             let restoreSymlinks: Bool
             let expectedTotalBytes: UInt64
+            let exactEntrySize: UInt64?
             let renameMap: [String: String]
             let controller: ArchiveTaskController?
             let progress: (@Sendable (OperationProgress) -> Void)?
@@ -253,7 +268,8 @@ public enum ExtendedArchiveDriver {
             var activeFileHandle: FileHandle?
             var activeModDate: Date = Date()
             var activePermissions: UInt16 = 0o644
-            var activeEntryCreated = false
+            var activeStage: URL?
+            var activeEntryBytes: UInt64 = 0
             var activePathName: String = ""
             var processedBytes: UInt64 = 0
             var lastProgressEmitTime: CFAbsoluteTime = 0
@@ -267,6 +283,7 @@ public enum ExtendedArchiveDriver {
                 stripMacJunk: Bool,
                 restoreSymlinks: Bool,
                 expectedTotalBytes: UInt64,
+                exactEntrySize: UInt64?,
                 renameMap: [String: String],
                 controller: ArchiveTaskController?,
                 progress: (@Sendable (OperationProgress) -> Void)?
@@ -278,6 +295,7 @@ public enum ExtendedArchiveDriver {
                 self.stripMacJunk = stripMacJunk
                 self.restoreSymlinks = restoreSymlinks
                 self.expectedTotalBytes = expectedTotalBytes
+                self.exactEntrySize = exactEntrySize
                 self.renameMap = renameMap
                 self.controller = controller
                 self.progress = progress
@@ -286,11 +304,9 @@ public enum ExtendedArchiveDriver {
             func cleanupActivePartialFile() {
                 try? activeFileHandle?.close()
                 activeFileHandle = nil
-                if activeEntryCreated, let url = activeTargetURL {
-                    try? FileManager.default.removeItem(at: url)
-                }
+                if let activeStage { try? FileManager.default.removeItem(at: activeStage) }
+                activeStage = nil
                 activeTargetURL = nil
-                activeEntryCreated = false
             }
         }
 
@@ -303,6 +319,7 @@ public enum ExtendedArchiveDriver {
             stripMacJunk: stripMacJunk,
             restoreSymlinks: restoreSymlinks,
             expectedTotalBytes: expectedTotalBytes,
+            exactEntrySize: exactEntrySize,
             renameMap: topLevelDirRenameMap,
             controller: controller,
             progress: progress
@@ -344,11 +361,10 @@ public enum ExtendedArchiveDriver {
 
                                 let outputPath = BoltArchiveEngine.remapTopLevelFolder(in: normalized, renameMap: st.renameMap)
                                 let initialDest = try BoltArchiveEngine.safeDestinationURL(for: outputPath, under: st.destinationURL)
-                                let fm = FileManager.default
 
                                 if isDir {
                                     try BoltArchiveEngine.assertNoSymlinkTraversal(at: initialDest, under: st.destinationURL)
-                                    try fm.createDirectory(at: initialDest, withIntermediateDirectories: true)
+                                    try FileManager.default.createDirectory(at: initialDest, withIntermediateDirectories: true)
                                     return 0
                                 }
                                 if info.is_symlink != 0 {
@@ -372,8 +388,14 @@ public enum ExtendedArchiveDriver {
                                     return 0
                                 }
                                 st.activeTargetURL = finalDest
-                                st.activeFileHandle = nil
-                                st.activeEntryCreated = false
+                                let stage = try BoltArchiveEngine.makeExtractionStage(near: finalDest, under: st.destinationURL)
+                                st.activeStage = stage
+                                let stagedFile = stage.appendingPathComponent("payload")
+                                guard FileManager.default.createFile(atPath: stagedFile.path, contents: nil) else {
+                                    throw BoltZipError.ioError("Unable to create extraction staging file")
+                                }
+                                st.activeFileHandle = try FileHandle(forWritingTo: stagedFile)
+                                st.activeEntryBytes = 0
                                 st.activeModDate = info.mtime > 0 ? Date(timeIntervalSince1970: TimeInterval(info.mtime)) : Date()
                                 st.activePermissions = info.permissions
                                 st.activePathName = normalized
@@ -402,24 +424,17 @@ public enum ExtendedArchiveDriver {
                             let st = Unmanaged<ExtractState>.fromOpaque(rawCtx).takeUnretainedValue()
                             do {
                                 try st.controller?.checkpoint()
-                                guard let targetURL = st.activeTargetURL else { return -1 }
-                                let fm = FileManager.default
-
+                                guard let targetURL = st.activeTargetURL, let stage = st.activeStage,
+                                      let handle = st.activeFileHandle else { return -1 }
+                                let stagedFile = stage.appendingPathComponent("payload")
                                 if let chunkPtr, chunkLen > 0 {
-                                    if st.activeFileHandle == nil {
-                                        guard fm.createFile(atPath: targetURL.path, contents: nil) else {
-                                            throw BoltZipError.ioError(BoltCoreLocalization.t(
-                                                "无法创建解压目标文件：\(targetURL.lastPathComponent)",
-                                                "無法建立解壓縮目標檔案：\(targetURL.lastPathComponent)",
-                                                "Unable to create extracted file: \(targetURL.lastPathComponent)",
-                                                "展開先ファイルを作成できません: \(targetURL.lastPathComponent)"
-                                            ))
-                                        }
-                                        st.activeEntryCreated = true
-                                        st.activeFileHandle = try FileHandle(forWritingTo: targetURL)
+                                    if let expected = st.exactEntrySize,
+                                       UInt64(chunkLen) > expected - st.activeEntryBytes {
+                                        throw BoltZipError.corruptedEntry(entry: st.activePathName, detail: "Decoded size exceeds the declared entry size")
                                     }
                                     let buffer = UnsafeBufferPointer(start: chunkPtr, count: chunkLen)
-                                    try st.activeFileHandle?.write(contentsOf: buffer)
+                                    try handle.write(contentsOf: buffer)
+                                    st.activeEntryBytes += UInt64(chunkLen)
                                     st.processedBytes += UInt64(chunkLen)
 
                                     let now = CFAbsoluteTimeGetCurrent()
@@ -437,29 +452,19 @@ public enum ExtendedArchiveDriver {
                                     }
                                     return 0
                                 } else {
-                                    // End of entry: ensure zero-byte regular files are created, then close & set metadata
-                                    if !st.activeEntryCreated {
-                                        guard fm.createFile(atPath: targetURL.path, contents: nil) else {
-                                            throw BoltZipError.ioError(BoltCoreLocalization.t(
-                                                "无法创建解压目标文件：\(targetURL.lastPathComponent)",
-                                                "無法建立解壓縮目標檔案：\(targetURL.lastPathComponent)",
-                                                "Unable to create extracted file: \(targetURL.lastPathComponent)",
-                                                "展開先ファイルを作成できません: \(targetURL.lastPathComponent)"
-                                            ))
-                                        }
-                                        st.activeEntryCreated = true
+                                    if let expected = st.exactEntrySize, expected != st.activeEntryBytes {
+                                        throw BoltZipError.corruptedEntry(entry: st.activePathName, detail: "Decoded size does not match the declared entry size")
                                     }
-                                    try st.activeFileHandle?.close()
+                                    try handle.close()
                                     st.activeFileHandle = nil
-
                                     let attrs: [FileAttributeKey: Any] = [
                                         .modificationDate: st.activeModDate,
                                         .posixPermissions: NSNumber(value: st.activePermissions)
                                     ]
-                                    try? fm.setAttributes(attrs, ofItemAtPath: targetURL.path)
-
-                                    st.activeTargetURL = nil
-                                    st.activeEntryCreated = false
+                                    try? FileManager.default.setAttributes(attrs, ofItemAtPath: stagedFile.path)
+                                    try BoltArchiveEngine.commitExtractedItem(stagedFile, to: targetURL, under: st.destinationURL,
+                                                                              policy: st.overwritePolicy, controller: st.controller)
+                                    st.cleanupActivePartialFile()
                                     return 0
                                 }
                             } catch {
