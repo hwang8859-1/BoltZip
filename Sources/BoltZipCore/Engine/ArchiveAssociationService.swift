@@ -99,7 +99,9 @@ public enum ArchiveAssociationGroup: String, CaseIterable, Identifiable, Sendabl
         if !declared.isEmpty {
             return declared
         }
-        return fallbackExtensions.compactMap { UTType(filenameExtension: $0) }.filter { !$0.isDynamic }
+        let fallback = fallbackExtensions.compactMap { UTType(filenameExtension: $0) }
+        let nonDynamicFallback = fallback.filter { !$0.isDynamic }
+        return nonDynamicFallback.isEmpty ? fallback : nonDynamicFallback
     }
 
     public var systemDefaultAppURL: URL? {
