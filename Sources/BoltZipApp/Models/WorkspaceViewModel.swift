@@ -188,7 +188,7 @@ final class WorkspaceViewModel {
             guard oldValue != appIconStyle else { return }
             UserDefaults.standard.set(appIconStyle.rawValue, forKey: Keys.appIconStyle)
             if let app = NSApp as NSApplication? {
-                BoltAppIconRenderer.apply(style: appIconStyle, animated: true, in: app)
+                BoltAppIconRenderer.apply(style: appIconStyle, in: app)
             }
         }
     }

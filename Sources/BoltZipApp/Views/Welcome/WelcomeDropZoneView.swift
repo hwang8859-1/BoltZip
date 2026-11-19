@@ -7,7 +7,6 @@ struct WelcomeDropZoneView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var isDropTargeted = false
-    @State private var logoScale: CGFloat = 0.82
     @State private var finderActionToast: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -44,16 +43,6 @@ struct WelcomeDropZoneView: View {
         }
         .ignoresSafeArea(.container, edges: .top)
         .onAppear { vm.refreshQuickActionsStatus() }
-        .task {
-            guard !reduceMotion else {
-                logoScale = 1
-                return
-            }
-            logoScale = 0.82
-            try? await Task.sleep(for: .milliseconds(140))
-            guard !Task.isCancelled else { return }
-            withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { logoScale = 1 }
-        }
     }
 
     private func hideButton(_ label: String, action: @escaping () -> Void) -> some View {
@@ -69,7 +58,6 @@ struct WelcomeDropZoneView: View {
         return VStack(spacing: 12) {
             BoltLogoBadge(size: 48, whiteBackground: vm.effectiveWhiteAppIcon(for: colorScheme),
                           glassEnabled: vm.effectiveWindowTranslucency)
-                .scaleEffect(reduceMotion ? 1 : logoScale)
                 .accessibilityHidden(true)
 
             Text(l.dropZoneTitle)

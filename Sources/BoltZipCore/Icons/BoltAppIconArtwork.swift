@@ -6,7 +6,7 @@ import Foundation
 extension BoltIconArtwork {
     // MARK: - App Icon (Liquid / Deep Glass Plate + Signature Z-Bolt + Split Zipper Seal)
 
-    public static func drawAppIcon(in ctx: CGContext, size s: CGFloat, whiteBackground: Bool) {
+    public static func drawAppIcon(in ctx: CGContext, size s: CGFloat, whiteBackground: Bool, goldSweepProgress: CGFloat? = nil) {
         let inset = s * 0.0975
         let rect = CGRect(x: inset, y: inset, width: s - inset * 2, height: s - inset * 2)
         let corner = rect.width * 0.225
@@ -124,7 +124,7 @@ extension BoltIconArtwork {
         }
 
         // 3 & 4. Zipper Seal + Signature Z-Bolt
-        drawForegroundEmblems(in: ctx, size: s, whiteBackground: whiteBackground)
+        drawForegroundEmblems(in: ctx, size: s, whiteBackground: whiteBackground, goldSweepProgress: goldSweepProgress)
 
         ctx.restoreGState()
 
@@ -136,7 +136,7 @@ extension BoltIconArtwork {
     /// without any clipped background aura plate, so macOS 26 `actool` (`AppIcon.icon`)
     /// applies native Liquid Glass specular highlights cleanly around the artwork itself.
     public static func drawAppIconForeground(in ctx: CGContext, size s: CGFloat, whiteBackground: Bool) {
-        drawForegroundEmblems(in: ctx, size: s, whiteBackground: whiteBackground)
+        drawForegroundEmblems(in: ctx, size: s, whiteBackground: whiteBackground, goldSweepProgress: nil)
     }
 
     private static func drawCyanAura(in ctx: CGContext, rect: CGRect, isDark: Bool) {
@@ -160,7 +160,7 @@ extension BoltIconArtwork {
         }
     }
 
-    private static func drawForegroundEmblems(in ctx: CGContext, size s: CGFloat, whiteBackground: Bool) {
+    private static func drawForegroundEmblems(in ctx: CGContext, size s: CGFloat, whiteBackground: Bool, goldSweepProgress: CGFloat?) {
         let isDark = !whiteBackground
         if s >= 128 {
             let toothTint = isDark
@@ -174,6 +174,7 @@ extension BoltIconArtwork {
             in: ctx,
             bounds: boltBounds,
             whiteBackdrop: whiteBackground,
+            goldSweepProgress: goldSweepProgress,
             strokeWeight: boltOpticalStrokeWidth(for: s)
         )
     }
@@ -297,6 +298,7 @@ extension BoltIconArtwork {
         in ctx: CGContext,
         bounds: CGRect,
         whiteBackdrop: Bool,
+        goldSweepProgress: CGFloat?,
         strokeWeight: CGFloat
     ) {
         let s = min(bounds.width, bounds.height)
@@ -333,24 +335,32 @@ extension BoltIconArtwork {
             .translatedBy(x: -bounds.midX, y: -bounds.midY)
         let tiltedBolt = zBolt.copy(using: &xform) ?? zBolt
 
-        // 6-stop cyan -> amber transition bypassing muted gray RGB interpolation zone
-        let boltStops: [CGColor] = whiteBackdrop
+        // Keep the shape and first three gradient stops identical between states.
+        let blueStops: [CGColor] = whiteBackdrop
             ? [
-                NSColor(srgbRed: 0.000, green: 0.796, blue: 0.961, alpha: 1.0).cgColor, // #00CBF5
-                NSColor(srgbRed: 0.231, green: 0.635, blue: 1.000, alpha: 1.0).cgColor, // #3BA2FF
-                NSColor(srgbRed: 0.353, green: 0.486, blue: 1.000, alpha: 1.0).cgColor, // #5A7CFF
-                NSColor(srgbRed: 0.784, green: 0.667, blue: 0.314, alpha: 1.0).cgColor, // #C8AA50
-                NSColor(srgbRed: 0.941, green: 0.761, blue: 0.227, alpha: 1.0).cgColor, // #F0C23A
-                NSColor(srgbRed: 1.000, green: 0.824, blue: 0.180, alpha: 1.0).cgColor  // #FFD22E
+                NSColor(srgbRed: 0.000, green: 0.796, blue: 0.961, alpha: 1.0).cgColor,
+                NSColor(srgbRed: 0.231, green: 0.635, blue: 1.000, alpha: 1.0).cgColor,
+                NSColor(srgbRed: 0.353, green: 0.486, blue: 1.000, alpha: 1.0).cgColor
             ]
             : [
-                NSColor(srgbRed: 0.498, green: 0.941, blue: 1.000, alpha: 1.0).cgColor, // #7FF0FF
-                NSColor(srgbRed: 0.486, green: 0.784, blue: 1.000, alpha: 1.0).cgColor, // #7CC8FF
-                NSColor(srgbRed: 0.471, green: 0.698, blue: 1.000, alpha: 1.0).cgColor, // #78B2FF
-                NSColor(srgbRed: 0.878, green: 0.769, blue: 0.392, alpha: 1.0).cgColor, // #E0C464
-                NSColor(srgbRed: 0.969, green: 0.816, blue: 0.239, alpha: 1.0).cgColor, // #F7D03D
-                NSColor(srgbRed: 1.000, green: 0.839, blue: 0.161, alpha: 1.0).cgColor  // #FFD629
+                NSColor(srgbRed: 0.498, green: 0.941, blue: 1.000, alpha: 1.0).cgColor,
+                NSColor(srgbRed: 0.486, green: 0.784, blue: 1.000, alpha: 1.0).cgColor,
+                NSColor(srgbRed: 0.471, green: 0.698, blue: 1.000, alpha: 1.0).cgColor
             ]
+        let tailStops: [CGColor]
+        if goldSweepProgress == nil {
+            tailStops = [
+                NSColor(srgbRed: 0.849, green: 0.686, blue: 0.285, alpha: 1.0).cgColor,
+                NSColor(srgbRed: 0.969, green: 0.789, blue: 0.202, alpha: 1.0).cgColor,
+                NSColor(srgbRed: 1.000, green: 0.839, blue: 0.161, alpha: 1.0).cgColor
+            ]
+        } else {
+            let tail = whiteBackdrop
+                ? NSColor(srgbRed: 0.224, green: 0.337, blue: 0.863, alpha: 1.0)
+                : NSColor(srgbRed: 0.322, green: 0.553, blue: 0.961, alpha: 1.0)
+            tailStops = [blueStops[2], tail.cgColor, tail.cgColor]
+        }
+        let boltStops = blueStops + tailStops
         guard let bGrad = CGGradient(
             colorsSpace: colorSpace,
             colors: boltStops as CFArray,
@@ -373,38 +383,49 @@ extension BoltIconArtwork {
             )
         }
 
-        // Transparency layer lets fill + same-gradient round-joined optical stroke share one smooth silhouette & shadow
-        ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+        let sweepGradient = goldSweepProgress.flatMap { _ in
+            CGGradient(
+                colorsSpace: colorSpace,
+                colors: [
+                    NSColor(srgbRed: 1, green: 0.79, blue: 0.15, alpha: 0).cgColor,
+                    NSColor(srgbRed: 1, green: 0.83, blue: 0.19, alpha: 1).cgColor,
+                    NSColor(srgbRed: 1, green: 0.92, blue: 0.53, alpha: 1).cgColor,
+                    NSColor(srgbRed: 1, green: 0.79, blue: 0.15, alpha: 0).cgColor
+                ] as CFArray,
+                locations: [0, 0.36, 0.62, 1]
+            )
+        }
 
+        func paint(_ path: CGPath) {
+            ctx.saveGState()
+            ctx.addPath(path)
+            ctx.clip()
+            ctx.drawLinearGradient(
+                bGrad, start: gradStart, end: gradEnd,
+                options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+            )
+            if let progress = goldSweepProgress, let sweepGradient {
+                let center = min(max(progress, 0), 1)
+                let dx = gradEnd.x - gradStart.x
+                let dy = gradEnd.y - gradStart.y
+                let start = CGPoint(x: gradStart.x + dx * (center - 0.16), y: gradStart.y + dy * (center - 0.16))
+                let end = CGPoint(x: gradStart.x + dx * (center + 0.16), y: gradStart.y + dy * (center + 0.16))
+                ctx.drawLinearGradient(sweepGradient, start: start, end: end, options: [])
+            }
+            ctx.restoreGState()
+        }
+
+        // The fill and optical stroke retain the same shape throughout the sweep.
+        ctx.beginTransparencyLayer(auxiliaryInfo: nil)
         if strokeWeight > 0 {
-            let strokedBolt = tiltedBolt.copy(
+            paint(tiltedBolt.copy(
                 strokingWithWidth: strokeWeight,
                 lineCap: .round,
                 lineJoin: .round,
                 miterLimit: 4.0
-            )
-            ctx.saveGState()
-            ctx.addPath(strokedBolt)
-            ctx.clip()
-            ctx.drawLinearGradient(
-                bGrad,
-                start: gradStart,
-                end: gradEnd,
-                options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
-            )
-            ctx.restoreGState()
+            ))
         }
-
-        ctx.saveGState()
-        ctx.addPath(tiltedBolt)
-        ctx.clip()
-        ctx.drawLinearGradient(
-            bGrad,
-            start: gradStart,
-            end: gradEnd,
-            options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
-        )
-        ctx.restoreGState()
+        paint(tiltedBolt)
 
         ctx.endTransparencyLayer()
         ctx.restoreGState()

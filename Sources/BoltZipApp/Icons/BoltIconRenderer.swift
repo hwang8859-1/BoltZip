@@ -9,21 +9,23 @@ enum BoltAppIconRenderer {
     private static var cachedDarkIcon: NSImage?
     private static var cachedWhiteIcon: NSImage?
     private static var cachedDocumentIcons: [String: NSImage] = [:]
+    private static var sweepTask: Task<Void, Never>?
 
-    private static var dockAnimation: Task<Void, Never>?
-
-    static func apply(style: AppIconStyle, animated: Bool, in app: NSApplication) {
-        dockAnimation?.cancel()
-        dockAnimation = nil
-
-        let original: NSImage?
+    static func apply(style: AppIconStyle, in app: NSApplication) {
+        sweepTask?.cancel()
+        sweepTask = nil
+        let white: Bool
         switch style {
+        case .light: white = true
+        case .dark: white = false
         case .system:
-            app.applicationIconImage = nil
-            original = app.applicationIconImage
-        case .light, .dark:
-            original = appIconImage(whiteBackground: style == .light, size: 512)
+            let systemStyle = UserDefaults.standard.string(forKey: "AppleInterfaceStyle")
+            white = systemStyle != "Dark"
         }
+
+        let restingIcon = appIconImage(whiteBackground: white)
+        app.applicationIconImage = restingIcon
+        app.dockTile.display()
 
         if let bundleID = Bundle.main.bundleIdentifier {
             DistributedNotificationCenter.default().post(
@@ -33,43 +35,50 @@ enum BoltAppIconRenderer {
             )
         }
 
-        guard animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-              let original else {
-            setDockIcon(style == .system ? nil : original, in: app)
-            return
-        }
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        sweepTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled else { return }
 
-        let final = style == .system ? nil : original
-        let frameCount = 19
-        let startScale: CGFloat = 0.82
-        let firstFrame = scaledDockIcon(original, scale: startScale)
-        setDockIcon(firstFrame, in: app)
-        dockAnimation = Task { @MainActor in
-            // Let the initial tile appear before starting the rise.
-            try? await Task.sleep(for: .milliseconds(120))
-            for frame in 1...frameCount {
-                guard !Task.isCancelled else { return }
-                let remaining = 1 - CGFloat(frame) / CGFloat(frameCount)
-                let scale = 1 - (1 - startScale) * remaining * remaining
-                setDockIcon(scaledDockIcon(original, scale: scale), in: app)
-                try? await Task.sleep(for: .milliseconds(20))
+            let renderFrames = Task.detached(priority: .utility) {
+                var rendered: [Data] = []
+                for step in 0..<18 {
+                    guard !Task.isCancelled else { return [Data]() }
+                    let progress = 0.06 + 0.90 * CGFloat(step) / 17
+                    if let png = BoltIconArtwork.renderAppIconPNG(
+                        pixelSize: 256, whiteBackground: white, goldSweepProgress: progress
+                    ) {
+                        rendered.append(png)
+                    }
+                }
+                return rendered
+            }
+            let pngs = await withTaskCancellationHandler {
+                await renderFrames.value
+            } onCancel: {
+                renderFrames.cancel()
             }
             guard !Task.isCancelled else { return }
-            setDockIcon(final, in: app)
-        }
-    }
+            let frames = pngs.compactMap { png -> NSImage? in
+                guard let image = NSImage(data: png) else { return nil }
+                image.size = restingIcon.size
+                return image
+            }
+            guard !frames.isEmpty else { return }
 
-    private static func setDockIcon(_ image: NSImage?, in app: NSApplication) {
-        app.applicationIconImage = image
-        app.dockTile.display()
-    }
-
-    private static func scaledDockIcon(_ icon: NSImage, scale: CGFloat) -> NSImage {
-        NSImage(size: icon.size, flipped: false) { canvas in
-            let insetX = canvas.width * (1 - scale) / 2
-            let insetY = canvas.height * (1 - scale) / 2
-            icon.draw(in: canvas.insetBy(dx: insetX, dy: insetY), from: .zero, operation: .sourceOver, fraction: 1)
-            return true
+            while !Task.isCancelled && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                for image in frames {
+                    guard !Task.isCancelled else { return }
+                    if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { break }
+                    app.applicationIconImage = image
+                    app.dockTile.display()
+                    try? await Task.sleep(for: .milliseconds(55))
+                }
+                guard !Task.isCancelled else { return }
+                app.applicationIconImage = restingIcon
+                app.dockTile.display()
+                try? await Task.sleep(for: .seconds(8))
+            }
         }
     }
 

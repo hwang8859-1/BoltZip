@@ -6,6 +6,7 @@ static NSString * const StyleChangedNotification = @"dev.boltzip.macos.dockIconS
 @interface BoltZipDockTile : NSObject <NSDockTilePlugIn>
 @property (nonatomic, strong) NSDockTile *tile;
 @property (nonatomic, strong) NSBundle *applicationBundle;
+@property (nonatomic, copy) NSString *style;
 
 @end
 
@@ -28,40 +29,56 @@ static NSString * const StyleChangedNotification = @"dev.boltzip.macos.dockIconS
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:identifier];
     NSString *style = [defaults stringForKey:StyleKey];
     if (!style && [defaults boolForKey:@"BoltZip.UseWhiteAppIcon"]) style = @"light";
-    [self updateIcon:style];
+    self.style = style;
+    [self updateIcon];
 
     [notifications addObserver:self
                        selector:@selector(styleChanged:)
                            name:StyleChangedNotification
                          object:identifier
              suspensionBehavior:NSNotificationSuspensionBehaviorDeliverImmediately];
+    [notifications addObserver:self
+                       selector:@selector(systemAppearanceChanged:)
+                           name:@"AppleInterfaceThemeChangedNotification"
+                         object:nil
+             suspensionBehavior:NSNotificationSuspensionBehaviorDeliverImmediately];
 }
 
 - (void)styleChanged:(NSNotification *)note {
     id style = note.userInfo[StyleKey];
-    [self updateIcon:[style isKindOfClass:NSString.class] ? style : nil];
+    self.style = [style isKindOfClass:NSString.class] ? style : nil;
+    [self updateIcon];
 }
 
-- (void)updateIcon:(NSString *)style {
+- (void)systemAppearanceChanged:(NSNotification *)note {
+    if (![self.style isEqualToString:@"light"] && ![self.style isEqualToString:@"dark"]) {
+        [self updateIcon];
+    }
+}
+
+- (void)updateIcon {
     NSDockTile *tile = self.tile;
     if (!tile) return;
 
-    NSString *assetName = nil;
-    if ([style isEqualToString:@"light"]) assetName = @"BoltZipDockLight";
-    if ([style isEqualToString:@"dark"]) assetName = @"BoltZipDockDark";
-    NSURL *assetURL = assetName ? [self.applicationBundle URLForResource:assetName withExtension:@"png"] : nil;
+    BOOL dark;
+    if ([self.style isEqualToString:@"light"]) {
+        dark = NO;
+    } else if ([self.style isEqualToString:@"dark"]) {
+        dark = YES;
+    } else {
+        NSString *systemStyle = [NSUserDefaults.standardUserDefaults stringForKey:@"AppleInterfaceStyle"];
+        dark = [systemStyle isEqualToString:@"Dark"];
+    }
+
+    NSString *assetName = dark ? @"BoltZipDockDark" : @"BoltZipDockLight";
+    NSURL *assetURL = [self.applicationBundle URLForResource:assetName withExtension:@"png"];
     NSImage *image = assetURL ? [[NSImage alloc] initWithContentsOfURL:assetURL] : nil;
     if (image) {
-        NSRect tileRect = (NSRect){NSZeroPoint, tile.size};
-        NSView *content = [[NSView alloc] initWithFrame:tileRect];
-        content.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-        NSRect iconRect = NSInsetRect(tileRect, tile.size.width * 0.045, tile.size.height * 0.045);
-        NSImageView *view = [[NSImageView alloc] initWithFrame:iconRect];
+        NSImageView *view = [[NSImageView alloc] initWithFrame:(NSRect){NSZeroPoint, tile.size}];
         view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
         view.imageScaling = NSImageScaleProportionallyUpOrDown;
         view.image = image;
-        [content addSubview:view];
-        tile.contentView = content;
+        tile.contentView = view;
     } else {
         tile.contentView = nil;
     }

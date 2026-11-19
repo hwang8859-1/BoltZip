@@ -44,6 +44,7 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
     private var didSettleNormalLaunch = false
     private var windowObserversInstalled = false
     private var keyMonitor: Any?
+    private var dockMotionObserver: NSObjectProtocol?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
@@ -79,11 +80,20 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if let app {
-            BoltAppIconRenderer.apply(
-                style: viewModel.appIconStyle,
-                animated: !suppressMainWindowOnLaunch || explicitMainWindowRequested,
-                in: app
-            )
+            BoltAppIconRenderer.apply(style: viewModel.appIconStyle, in: app)
+        }
+        DistributedNotificationCenter.default().addObserver(
+            self, selector: #selector(systemIconAppearanceChanged(_:)),
+            name: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil
+        )
+        dockMotionObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                if let self, let app = NSApp as NSApplication? {
+                    BoltAppIconRenderer.apply(style: self.viewModel.appIconStyle, in: app)
+                }
+            }
         }
 
         if suppressMainWindowOnLaunch && !explicitMainWindowRequested {
@@ -142,7 +152,16 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    @objc private func systemIconAppearanceChanged(_: Notification) {
+        guard viewModel.appIconStyle == .system, let app = NSApp as NSApplication? else { return }
+        BoltAppIconRenderer.apply(style: .system, in: app)
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        DistributedNotificationCenter.default().removeObserver(self)
+        if let dockMotionObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(dockMotionObserver)
+        }
         viewModel.cleanupPreviewTempFiles()
     }
 

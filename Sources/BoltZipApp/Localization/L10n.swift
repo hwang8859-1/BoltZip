@@ -211,10 +211,10 @@ struct L10n: Sendable {
     var appIconStyleLabel: String { t("应用图标样式", "App 圖示樣式", "App Icon Style", "アプリアイコン") }
     var appIconStyleHint: String {
         t(
-            "固定在程序坞时，退出后仍保留所选配色。",
-            "固定在 Dock 時，結束 App 後仍保留所選配色。",
-            "When kept in the Dock, the icon retains its selected appearance after quitting.",
-            "Dock に追加しておくと、終了後も選択したアイコンの外観が保たれます。"
+            "运行时金光掠过闪电。退出后，固定在程序坞的图标保留配色和金色尾部。",
+            "執行時金光掠過閃電。結束 App 後，固定在 Dock 的圖示保留配色與金色尾部。",
+            "Gold sweeps across the bolt while running. A pinned Dock icon keeps its color and gold tip after quitting.",
+            "起動中は金色の光が稲妻を流れます。Dock に追加したアイコンは、終了後も選んだ色と金色の先端を保ちます。"
         )
     }
     var glassIntensityLabel: String { t("玻璃通透度", "玻璃通透度", "Glass Intensity", "ガラス透過強度") }

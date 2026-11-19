@@ -1387,6 +1387,48 @@ final class BoltZipCoreTests: XCTestCase {
         XCTAssertEqual(unzipProc.terminationStatus, 0, "unzip -t failed on edited bit-3 ZipCrypto archive: \(unzipLog)")
     }
 
+    func testAppIconGoldSweepMovesWithoutChangingItsSilhouette() throws {
+        #if canImport(AppKit)
+        let size = 128
+        func measure(white: Bool, progress: CGFloat?) throws -> (meanX: Double, meanY: Double, silhouette: [Bool]) {
+            let png = try XCTUnwrap(BoltIconArtwork.renderAppIconPNG(pixelSize: size, whiteBackground: white, goldSweepProgress: progress))
+            let bitmap = try XCTUnwrap(NSBitmapImageRep(data: png))
+            var points = 0
+            var sumX = 0
+            var sumY = 0
+            var silhouette: [Bool] = []
+            for y in 0..<size {
+                for x in 0..<size {
+                    let pixel = try XCTUnwrap(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB))
+                    silhouette.append(pixel.alphaComponent > 0.5)
+                    if pixel.alphaComponent > 0.9 && pixel.redComponent > 0.82 &&
+                        pixel.greenComponent > 0.6 && pixel.blueComponent < 0.57 {
+                        points += 1
+                        sumX += x
+                        sumY += y
+                    }
+                }
+            }
+            XCTAssertGreaterThan(points, 10)
+            let count = Double(max(1, points))
+            return (Double(sumX) / count, Double(sumY) / count, silhouette)
+        }
+
+        for white in [true, false] {
+            let head = try measure(white: white, progress: 0.12)
+            let middle = try measure(white: white, progress: 0.52)
+            let tail = try measure(white: white, progress: 0.92)
+            let resting = try measure(white: white, progress: nil)
+            XCTAssertGreaterThan(abs(head.meanY - middle.meanY), 10)
+            XCTAssertGreaterThan(abs(middle.meanY - tail.meanY), 8)
+            XCTAssertLessThan(hypot(tail.meanX - resting.meanX, tail.meanY - resting.meanY), 12)
+            XCTAssertEqual(head.silhouette, resting.silhouette)
+            XCTAssertEqual(middle.silhouette, resting.silhouette)
+            XCTAssertEqual(tail.silhouette, resting.silhouette)
+        }
+        #endif
+    }
+
     func testAppIconForegroundPNGExport() throws {
         #if canImport(AppKit)
         for isWhite in [false, true] {
