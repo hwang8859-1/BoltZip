@@ -9,8 +9,8 @@ struct MainWindowView: View {
 
     var body: some View {
         let l = vm.l10n
-        let minW: CGFloat = vm.listing == nil ? 350 : 560
-        let minH: CGFloat = vm.listing == nil ? 270 : 320
+        let minW: CGFloat = vm.listing == nil ? 336 : 560
+        let minH: CGFloat = vm.listing == nil ? 192 : 320
 
         Group {
             if let listing = vm.listing {

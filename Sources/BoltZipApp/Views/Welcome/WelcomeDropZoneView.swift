@@ -13,22 +13,24 @@ struct WelcomeDropZoneView: View {
     var body: some View {
         let l = vm.l10n
         GeometryReader { geometry in
-            let contentHeight = max(0, geometry.size.height - max(42, titlebarHeight))
+            let topBarHeight = max(42, titlebarHeight)
+            let contentHeight = max(0, geometry.size.height - topBarHeight)
             let compact = contentHeight < 310
+            let cardInset: CGFloat = 16
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     if !compact && vm.showFinderBanner {
                         finderBanner(l: l)
                     }
-                    dropCard(l: l)
+                    dropCard(l: l, minHeight: compact ? max(0, contentHeight - 2 * cardInset) : nil)
                     if !compact {
                         sections(l: l, wide: geometry.size.width >= 660)
                     }
                 }
                 .frame(maxWidth: 920, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity, minHeight: contentHeight, alignment: compact ? .center : .top)
+                .padding(.horizontal, cardInset)
+                .padding(.vertical, compact ? cardInset : 12)
+                .frame(maxWidth: .infinity, alignment: .top)
             }
             .contentShape(Rectangle())
             .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
@@ -37,7 +39,7 @@ struct WelcomeDropZoneView: View {
                 }
             }
             .boltTitlebarScrollEdgeBar(
-                height: max(42, titlebarHeight),
+                height: topBarHeight,
                 glassEnabled: vm.effectiveWindowTranslucency
             )
         }
@@ -53,7 +55,7 @@ struct WelcomeDropZoneView: View {
         }
     }
 
-    private func dropCard(l: L10n) -> some View {
+    private func dropCard(l: L10n, minHeight: CGFloat?) -> some View {
         let shape = RoundedRectangle(cornerRadius: BoltRadius.hero, style: .continuous)
         return VStack(spacing: 12) {
             BoltLogoBadge(size: 48, whiteBackground: vm.effectiveWhiteAppIcon(for: colorScheme),
@@ -71,8 +73,8 @@ struct WelcomeDropZoneView: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 18)
-        .frame(maxWidth: .infinity)
+        .padding(.vertical, minHeight == nil ? 18 : 14)
+        .frame(maxWidth: .infinity, minHeight: minHeight)
         .background {
             shape.fill(
                 RadialGradient(colors: [.cyan.opacity(colorScheme == .dark ? 0.12 : 0.08), .clear],
