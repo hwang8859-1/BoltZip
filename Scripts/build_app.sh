@@ -61,9 +61,10 @@ DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/BoltZip.app"
 CONTENTS="$APP_DIR/Contents"
 APPEX_DIR="$CONTENTS/PlugIns/BoltZipFinderSync.appex"
+DOCK_PLUGIN_DIR="$CONTENTS/PlugIns/BoltZipDockTile.plugin"
 
 rm -rf "$APP_DIR"
-mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources/showcase" "$CONTENTS/Helpers" "$APPEX_DIR/Contents/MacOS"
+mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources/showcase" "$CONTENTS/Helpers" "$APPEX_DIR/Contents/MacOS" "$DOCK_PLUGIN_DIR/Contents/MacOS"
 
 cp "$BIN_DIR/BoltZipApp" "$CONTENTS/MacOS/BoltZipApp"
 cp "$BIN_DIR/boltzip" "$CONTENTS/Helpers/boltzip"
@@ -128,6 +129,31 @@ cat <<APPEX_PLIST > "$APPEX_DIR/Contents/Info.plist"
 </dict>
 </plist>
 APPEX_PLIST
+
+echo "==> Building BoltZip Dock tile plug-in..."
+xcrun clang -O2 -fobjc-arc -bundle -arch arm64 -mmacosx-version-min="$MIN_MACOS" \
+    -isysroot "$SDK_PATH" -framework AppKit \
+    "$ROOT_DIR/Sources/BoltZipDockTile/BoltZipDockTile.m" \
+    -o "$DOCK_PLUGIN_DIR/Contents/MacOS/BoltZipDockTile"
+
+cat <<DOCK_PLIST > "$DOCK_PLUGIN_DIR/Contents/Info.plist"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>BoltZipDockTile</string>
+    <key>CFBundleIdentifier</key>
+    <string>dev.boltzip.macos.DockTile</string>
+    <key>CFBundlePackageType</key>
+    <string>BNDL</string>
+    <key>CFBundleVersion</key>
+    <string>$APP_BUILD</string>
+    <key>NSPrincipalClass</key>
+    <string>BoltZipDockTile</string>
+</dict>
+</plist>
+DOCK_PLIST
 
 echo "==> Generating bundle localization resources (.lproj)..."
 for lang in zh-Hans zh-Hant en ja; do
@@ -235,6 +261,8 @@ cat <<PLIST > "$CONTENTS/Info.plist"
     <string>AppIcon</string>
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
+    <key>NSDockTilePlugIn</key>
+    <string>BoltZipDockTile.plugin</string>
     <key>CFBundleIdentifier</key>
     <string>dev.boltzip.macos</string>
     <key>CFBundleInfoDictionaryVersion</key>
@@ -834,10 +862,12 @@ echo "==> Code signing helpers, FinderSync.appex, and BoltZip.app (identity: $SI
 if [ "$SIGN_IDENTITY" = "-" ]; then
     codesign --force --sign - "$CONTENTS/Helpers/boltzip"
     codesign --force --sign - --entitlements "$ROOT_DIR/Sources/BoltZipFinderSync/FinderSync.entitlements" "$APPEX_DIR"
+    codesign --force --sign - "$DOCK_PLUGIN_DIR"
     codesign --force --sign - "$APP_DIR"
 else
     codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$CONTENTS/Helpers/boltzip"
     codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" --entitlements "$ROOT_DIR/Sources/BoltZipFinderSync/FinderSync.entitlements" "$APPEX_DIR"
+    codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$DOCK_PLUGIN_DIR"
     codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP_DIR"
 fi
 

@@ -10,18 +10,67 @@ enum BoltAppIconRenderer {
     private static var cachedWhiteIcon: NSImage?
     private static var cachedDocumentIcons: [String: NSImage] = [:]
 
-    static func apply(style: AppIconStyle) {
-        guard let app = NSApp as NSApplication? else { return }
+    private static var dockAnimation: Task<Void, Never>?
+
+    static func apply(style: AppIconStyle, animated: Bool, in app: NSApplication) {
+        dockAnimation?.cancel()
+        dockAnimation = nil
+
+        let original: NSImage?
         switch style {
         case .system:
-            // Clearing the runtime override lets the Dock render the adaptive Assets.car AppIcon live.
             app.applicationIconImage = nil
-        case .light:
-            app.applicationIconImage = appIconImage(whiteBackground: true, size: 512)
-        case .dark:
-            app.applicationIconImage = appIconImage(whiteBackground: false, size: 512)
+            original = app.applicationIconImage
+        case .light, .dark:
+            original = appIconImage(whiteBackground: style == .light, size: 512)
         }
+
+        if let bundleID = Bundle.main.bundleIdentifier {
+            DistributedNotificationCenter.default().post(
+                name: Notification.Name("dev.boltzip.macos.dockIconStyleDidChange"),
+                object: bundleID,
+                userInfo: [WorkspaceViewModel.Keys.appIconStyle: style.rawValue]
+            )
+        }
+
+        guard animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              let original else {
+            setDockIcon(style == .system ? nil : original, in: app)
+            return
+        }
+
+        let final = style == .system ? nil : original
+        let frameCount = 19
+        let startScale: CGFloat = 0.82
+        let firstFrame = scaledDockIcon(original, scale: startScale)
+        setDockIcon(firstFrame, in: app)
+        dockAnimation = Task { @MainActor in
+            // Let the initial tile appear before starting the rise.
+            try? await Task.sleep(for: .milliseconds(120))
+            for frame in 1...frameCount {
+                guard !Task.isCancelled else { return }
+                let remaining = 1 - CGFloat(frame) / CGFloat(frameCount)
+                let scale = 1 - (1 - startScale) * remaining * remaining
+                setDockIcon(scaledDockIcon(original, scale: scale), in: app)
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            guard !Task.isCancelled else { return }
+            setDockIcon(final, in: app)
+        }
+    }
+
+    private static func setDockIcon(_ image: NSImage?, in app: NSApplication) {
+        app.applicationIconImage = image
         app.dockTile.display()
+    }
+
+    private static func scaledDockIcon(_ icon: NSImage, scale: CGFloat) -> NSImage {
+        NSImage(size: icon.size, flipped: false) { canvas in
+            let insetX = canvas.width * (1 - scale) / 2
+            let insetY = canvas.height * (1 - scale) / 2
+            icon.draw(in: canvas.insetBy(dx: insetX, dy: insetY), from: .zero, operation: .sourceOver, fraction: 1)
+            return true
+        }
     }
 
     static func appIconImage(whiteBackground: Bool, size: CGFloat = 512) -> NSImage {

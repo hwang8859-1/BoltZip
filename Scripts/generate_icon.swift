@@ -65,6 +65,13 @@ struct BoltIconGeneratorCLI {
             let fm = FileManager.default
             try fm.createDirectory(at: resourcesURL, withIntermediateDirectories: true)
 
+            for (name, whiteBackground) in [("BoltZipDockLight", true), ("BoltZipDockDark", false)] {
+                guard let png = BoltIconArtwork.renderAppIconPNG(pixelSize: 512, whiteBackground: whiteBackground) else {
+                    throw CocoaError(.fileWriteUnknown)
+                }
+                try png.write(to: resourcesURL.appendingPathComponent(name).appendingPathExtension("png"))
+            }
+
             let workDir = fm.temporaryDirectory.appendingPathComponent("boltzip-iconsets-\(UUID().uuidString)", isDirectory: true)
             try fm.createDirectory(at: workDir, withIntermediateDirectories: true)
             defer { try? fm.removeItem(at: workDir) }

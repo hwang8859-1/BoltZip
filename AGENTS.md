@@ -34,6 +34,7 @@ BoltZip/
 │   └── generate_icon.swift              # CoreGraphics procedural 1024x1024 macOS iconset generator
 ├── Vendor/Compression/                  # Prebuilt Apple Silicon (arm64, minOS 26.0) headers & static libs (zstd, xz, lz4)
 ├── Sources/
+│   ├── BoltZipDockTile/                 # Keeps the selected icon for the pinned Dock tile after quitting
 │   ├── CBoltCompression/                # C wrapper statically linking zlib, libzstd, liblzma, libbz2, liblz4
 │   │   ├── include/bolt_compression.h
 │   │   ├── bolt_compression.c
@@ -130,6 +131,7 @@ open dist/BoltZip.app
 6. **FinderSync Extension Signing & IPC**:
    - `BoltZipFinderSync.appex` runs inside App Sandbox (`FinderSync.entitlements`).
    - In `build_app.sh`, sign `.appex` first **with `--entitlements`**, then sign the outer `BoltZip.app` **without `--deep`** so the extension's sandbox entitlements are not stripped.
+   - Sign the embedded `BoltZipDockTile.plugin` before signing the outer app. The plug-in draws the pinned Dock tile in a system process using bundled icon images and the saved preference.
    - Finder menu clicks dispatch `boltzip://finder?op=...&path=...` URLs back to `BoltZipApp`, where the single-instance `Window("BoltZip", id: "main").handlesExternalEvents(matching: Set(["*"]))` prevents spawning duplicate windows and `boltActivateAppToForeground` reliably orders the main window to the front.
 7. **Portability & Localization**:
    - **Never** hardcode local user home paths (`/Users/<someone>/...`) in source code, scripts, or `showcase/`. Always resolve relative to `Bundle.main`, current working directory, or repository root.

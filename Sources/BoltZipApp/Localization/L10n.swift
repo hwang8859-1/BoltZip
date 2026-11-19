@@ -211,10 +211,10 @@ struct L10n: Sendable {
     var appIconStyleLabel: String { t("应用图标样式", "App 圖示樣式", "App Icon Style", "アプリアイコン") }
     var appIconStyleHint: String {
         t(
-            "「跟随系统」模式下，关闭应用后访达与启动台仍会自动适配系统深浅色外观。",
-            "在「跟隨系統」模式下，關閉 App 後 Finder 與啟動台仍會自動配合系統深淺色外觀。",
-            "In System mode, Finder and Launchpad automatically match macOS Light or Dark appearance even when BoltZip is closed.",
-            "「自動」では、アプリ終了後も Finder や Launchpad のアイコンがシステムのライト／ダーク外観に自動追従します。"
+            "固定在程序坞时，退出后仍保留所选配色。",
+            "固定在 Dock 時，結束 App 後仍保留所選配色。",
+            "When kept in the Dock, the icon retains its selected appearance after quitting.",
+            "Dock に追加しておくと、終了後も選択したアイコンの外観が保たれます。"
         )
     }
     var glassIntensityLabel: String { t("玻璃通透度", "玻璃通透度", "Glass Intensity", "ガラス透過強度") }

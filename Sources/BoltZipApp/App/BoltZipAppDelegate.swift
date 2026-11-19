@@ -50,7 +50,6 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         let app = (notification.object as? NSApplication) ?? (NSApp as NSApplication?)
         app?.setActivationPolicy(.regular)
         app?.appearance = viewModel.appTheme.nsAppearance
-        BoltAppIconRenderer.apply(style: viewModel.appIconStyle)
         wireLifecycleCallbacks()
         viewModel.configureHUD()
         installWindowObservers()
@@ -66,7 +65,6 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         let app = (notification.object as? NSApplication) ?? (NSApp as NSApplication?)
         app?.setActivationPolicy(.regular)
         app?.appearance = viewModel.appTheme.nsAppearance
-        BoltAppIconRenderer.apply(style: viewModel.appIconStyle)
         viewModel.refreshQuickActionsStatus()
         wireLifecycleCallbacks()
         viewModel.configureHUD()
@@ -78,6 +76,14 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
             let urls = pendingURLs
             pendingURLs.removeAll()
             viewModel.handleIncomingURLs(urls)
+        }
+
+        if let app {
+            BoltAppIconRenderer.apply(
+                style: viewModel.appIconStyle,
+                animated: !suppressMainWindowOnLaunch || explicitMainWindowRequested,
+                in: app
+            )
         }
 
         if suppressMainWindowOnLaunch && !explicitMainWindowRequested {
