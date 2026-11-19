@@ -509,33 +509,29 @@ struct SettingsView: View {
 
             BoltSectionDivider(glassEnabled: glassEnabled)
 
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 8) {
-                    BoltAppIconView(
-                        style: vm.appIconStyle,
-                        appTheme: vm.appTheme,
-                        renderSize: 28,
-                        displaySize: 22
-                    )
-                    Text(l.appIconStyleLabel)
-                        .font(BoltType.subbodyMedium)
-                    Spacer()
-                    Picker("", selection: $vm.appIconStyle) {
-                        ForEach(AppIconStyle.allCases) { style in
-                            Text(style.title(l)).tag(style)
-                        }
+            HStack(spacing: 8) {
+                BoltAppIconView(
+                    style: vm.appIconStyle,
+                    appTheme: vm.appTheme,
+                    renderSize: 28,
+                    displaySize: 22
+                )
+                Text(l.appIconStyleLabel)
+                    .font(BoltType.subbodyMedium)
+                Spacer()
+                Picker("", selection: $vm.appIconStyle) {
+                    ForEach(AppIconStyle.allCases) { style in
+                        Text(style.title(l)).tag(style)
                     }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .controlSize(.small)
-                    .frame(width: 196)
                 }
-
-                Text(l.appIconStyleHint)
-                    .font(BoltType.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .controlSize(.small)
+                .frame(width: 196)
             }
+
+            BoltSectionDivider(glassEnabled: glassEnabled)
+            BoltFormSwitchRow(title: l.appIconAnimationLabel, isOn: $vm.appIconAnimationEnabled)
 
             if vm.supportsLiquidGlass {
                 BoltSectionDivider(glassEnabled: glassEnabled)

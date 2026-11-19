@@ -79,9 +79,7 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
             viewModel.handleIncomingURLs(urls)
         }
 
-        if let app {
-            BoltAppIconRenderer.apply(style: viewModel.appIconStyle, in: app)
-        }
+        viewModel.refreshAppIcon()
         DistributedNotificationCenter.default().addObserver(
             self, selector: #selector(systemIconAppearanceChanged(_:)),
             name: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil
@@ -90,9 +88,7 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                if let self, let app = NSApp as NSApplication? {
-                    BoltAppIconRenderer.apply(style: self.viewModel.appIconStyle, in: app)
-                }
+                self?.viewModel.refreshAppIcon()
             }
         }
 
@@ -153,8 +149,8 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func systemIconAppearanceChanged(_: Notification) {
-        guard viewModel.appIconStyle == .system, let app = NSApp as NSApplication? else { return }
-        BoltAppIconRenderer.apply(style: .system, in: app)
+        guard viewModel.appIconStyle == .system else { return }
+        viewModel.refreshAppIcon()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

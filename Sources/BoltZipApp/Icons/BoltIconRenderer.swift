@@ -11,7 +11,7 @@ enum BoltAppIconRenderer {
     private static var cachedDocumentIcons: [String: NSImage] = [:]
     private static var sweepTask: Task<Void, Never>?
 
-    static func apply(style: AppIconStyle, in app: NSApplication) {
+    static func apply(style: AppIconStyle, animationEnabled: Bool, in app: NSApplication) {
         sweepTask?.cancel()
         sweepTask = nil
         let white: Bool
@@ -35,7 +35,7 @@ enum BoltAppIconRenderer {
             )
         }
 
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        guard animationEnabled, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
         sweepTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(450))
             guard !Task.isCancelled else { return }

@@ -746,7 +746,7 @@ struct BoltFormSwitchRow<Leading: View>: View {
                 }
             }
             Spacer(minLength: 8)
-            Toggle("", isOn: $isOn)
+            Toggle(title, isOn: $isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.mini)
