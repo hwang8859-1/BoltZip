@@ -9,6 +9,8 @@ struct RecentArchiveRow: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: BoltRadius.row, style: .continuous)
+        let folder = url.deletingLastPathComponent()
+        let folderPath = (folder.path as NSString).abbreviatingWithTildeInPath
         HStack(spacing: 6) {
             Button {
                 vm.openArchive(url: url)
@@ -25,7 +27,7 @@ struct RecentArchiveRow: View {
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                             .truncationMode(.middle)
-                        Text((url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)
+                        Text(folder.lastPathComponent.isEmpty ? folderPath : folder.lastPathComponent)
                             .font(BoltType.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -37,6 +39,7 @@ struct RecentArchiveRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .help(folderPath)
 
             BoltCloseIconButton(
                 helpText: l.ctxRemoveRecent,

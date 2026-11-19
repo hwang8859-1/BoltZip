@@ -40,6 +40,11 @@ jobs:
             -sdk "$(xcrun --show-sdk-path)" \
             -target arm64-apple-macos26.0
 
+      - name: Typecheck Dock tile plug-in
+        run: |
+          xcrun clang -fsyntax-only -fobjc-arc -arch arm64 -mmacosx-version-min=26.0 \
+            -isysroot "$(xcrun --show-sdk-path)" Sources/BoltZipDockTile/BoltZipDockTile.m
+
       - name: Validate showcase JS, i18n keys & path safety
         run: |
           if command -v node >/dev/null 2>&1; then

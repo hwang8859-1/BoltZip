@@ -44,13 +44,13 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
     private var didSettleNormalLaunch = false
     private var windowObserversInstalled = false
     private var keyMonitor: Any?
+    private var dockMotionObserver: NSObjectProtocol?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
         let app = (notification.object as? NSApplication) ?? (NSApp as NSApplication?)
         app?.setActivationPolicy(.regular)
         app?.appearance = viewModel.appTheme.nsAppearance
-        BoltAppIconRenderer.apply(style: viewModel.appIconStyle)
         wireLifecycleCallbacks()
         viewModel.configureHUD()
         installWindowObservers()
@@ -66,7 +66,6 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         let app = (notification.object as? NSApplication) ?? (NSApp as NSApplication?)
         app?.setActivationPolicy(.regular)
         app?.appearance = viewModel.appTheme.nsAppearance
-        BoltAppIconRenderer.apply(style: viewModel.appIconStyle)
         viewModel.refreshQuickActionsStatus()
         wireLifecycleCallbacks()
         viewModel.configureHUD()
@@ -78,6 +77,19 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
             let urls = pendingURLs
             pendingURLs.removeAll()
             viewModel.handleIncomingURLs(urls)
+        }
+
+        viewModel.refreshAppIcon()
+        DistributedNotificationCenter.default().addObserver(
+            self, selector: #selector(systemIconAppearanceChanged(_:)),
+            name: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil
+        )
+        dockMotionObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.viewModel.refreshAppIcon()
+            }
         }
 
         if suppressMainWindowOnLaunch && !explicitMainWindowRequested {
@@ -136,7 +148,16 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    @objc private func systemIconAppearanceChanged(_: Notification) {
+        guard viewModel.appIconStyle == .system else { return }
+        viewModel.refreshAppIcon()
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        DistributedNotificationCenter.default().removeObserver(self)
+        if let dockMotionObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(dockMotionObserver)
+        }
         viewModel.cleanupPreviewTempFiles()
     }
 

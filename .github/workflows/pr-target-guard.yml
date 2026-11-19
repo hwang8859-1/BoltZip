@@ -18,7 +18,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          OWNER: ${{ github.repository_owner }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
@@ -30,20 +29,20 @@ jobs:
 
           echo "PR #${PR_NUMBER}: ${HEAD_REPO}:${HEAD_REF} by @${AUTHOR} -> main (default dev branch: ${DEFAULT_BRANCH})"
 
-          if [[ "$HEAD_REPO" == "$REPO" ]] && { [[ "$HEAD_REF" == "$DEFAULT_BRANCH" ]] || [[ "$HEAD_REF" == dev-* ]] || [[ "$HEAD_REF" == release/* ]]; }; then
-            echo "Allowed: release/dev PR from same repository."
+          if [[ "$HEAD_REPO" == "$REPO" && "$HEAD_REF" == "$DEFAULT_BRANCH" && "$HEAD_REF" =~ ^dev-[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9._-]+)?$ ]]; then
+            echo "Allowed: release from the active development branch."
             exit 0
           fi
 
-          if [[ "$AUTHOR" == "$OWNER" ]]; then
-            echo "Allowed: PR opened by repository owner (@${OWNER})."
+          if [[ "$HEAD_REPO" == "$REPO" && "$HEAD_REF" =~ ^release/[0-9]+\.[0-9]+\.[0-9]+-hotfix$ ]]; then
+            echo "Allowed: maintenance release from a designated hotfix branch."
             exit 0
           fi
 
           MARKER="<!-- boltzip-pr-target-guard -->"
           EXISTING_COMMENTS=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --jq '.[].body' || true)
           if [[ "$EXISTING_COMMENTS" != *"$MARKER"* ]]; then
-            BODY=$(cat <<EOF
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file - <<EOF
           ${MARKER}
           ⚠️ **请将此 PR 的目标分支调整为当前活跃开发分支 \`${DEFAULT_BRANCH}\`**
 
@@ -55,13 +54,11 @@ jobs:
 
           \`main\` is BoltZip's protected release-only branch. Active development happens on **\`${DEFAULT_BRANCH}\`** (the repository's default branch). Please reopen your PR targeting **\`${DEFAULT_BRANCH}\`** — thank you!
           EOF
-          )
-            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$BODY"
           fi
 
           if [[ "$PR_STATE" == "open" ]]; then
             gh pr close "$PR_NUMBER" --repo "$REPO"
           fi
 
-          echo "::error::PRs targeting main are restricted to release merges from ${DEFAULT_BRANCH}. Please target ${DEFAULT_BRANCH}."
+          echo "::error::PRs targeting main require the active development branch or a designated same-repository hotfix branch."
           exit 1

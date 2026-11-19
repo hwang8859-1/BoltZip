@@ -9,19 +9,77 @@ enum BoltAppIconRenderer {
     private static var cachedDarkIcon: NSImage?
     private static var cachedWhiteIcon: NSImage?
     private static var cachedDocumentIcons: [String: NSImage] = [:]
+    private static var sweepTask: Task<Void, Never>?
 
-    static func apply(style: AppIconStyle) {
-        guard let app = NSApp as NSApplication? else { return }
+    static func apply(style: AppIconStyle, animationEnabled: Bool, in app: NSApplication) {
+        sweepTask?.cancel()
+        sweepTask = nil
+        let white: Bool
         switch style {
+        case .light: white = true
+        case .dark: white = false
         case .system:
-            // Clearing the runtime override lets the Dock render the adaptive Assets.car AppIcon live.
-            app.applicationIconImage = nil
-        case .light:
-            app.applicationIconImage = appIconImage(whiteBackground: true, size: 512)
-        case .dark:
-            app.applicationIconImage = appIconImage(whiteBackground: false, size: 512)
+            let systemStyle = UserDefaults.standard.string(forKey: "AppleInterfaceStyle")
+            white = systemStyle != "Dark"
         }
+
+        let restingIcon = appIconImage(whiteBackground: white)
+        app.applicationIconImage = restingIcon
         app.dockTile.display()
+
+        if let bundleID = Bundle.main.bundleIdentifier {
+            DistributedNotificationCenter.default().post(
+                name: Notification.Name("dev.boltzip.macos.dockIconStyleDidChange"),
+                object: bundleID,
+                userInfo: [WorkspaceViewModel.Keys.appIconStyle: style.rawValue]
+            )
+        }
+
+        guard animationEnabled, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        sweepTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled else { return }
+
+            let renderFrames = Task.detached(priority: .utility) {
+                var rendered: [Data] = []
+                for step in 0..<18 {
+                    guard !Task.isCancelled else { return [Data]() }
+                    let progress = 0.06 + 0.90 * CGFloat(step) / 17
+                    if let png = BoltIconArtwork.renderAppIconPNG(
+                        pixelSize: 256, whiteBackground: white, goldSweepProgress: progress
+                    ) {
+                        rendered.append(png)
+                    }
+                }
+                return rendered
+            }
+            let pngs = await withTaskCancellationHandler {
+                await renderFrames.value
+            } onCancel: {
+                renderFrames.cancel()
+            }
+            guard !Task.isCancelled else { return }
+            let frames = pngs.compactMap { png -> NSImage? in
+                guard let image = NSImage(data: png) else { return nil }
+                image.size = restingIcon.size
+                return image
+            }
+            guard !frames.isEmpty else { return }
+
+            while !Task.isCancelled && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                for image in frames {
+                    guard !Task.isCancelled else { return }
+                    if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { break }
+                    app.applicationIconImage = image
+                    app.dockTile.display()
+                    try? await Task.sleep(for: .milliseconds(55))
+                }
+                guard !Task.isCancelled else { return }
+                app.applicationIconImage = restingIcon
+                app.dockTile.display()
+                try? await Task.sleep(for: .seconds(8))
+            }
+        }
     }
 
     static func appIconImage(whiteBackground: Bool, size: CGFloat = 512) -> NSImage {

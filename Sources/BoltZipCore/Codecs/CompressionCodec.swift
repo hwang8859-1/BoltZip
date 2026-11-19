@@ -139,11 +139,15 @@ public enum CompressionCodec {
         algorithm: CompressionAlgorithm,
         gzipContainer: Bool = false,
         expectedSize: Int = 0,
+        exactOutputSize: UInt64? = nil,
         controller: ArchiveTaskController? = nil,
         progress: ((UInt64, UInt64) -> Void)? = nil
     ) throws -> Data {
         try controller?.checkpoint()
         if algorithm == .store {
+            if let exactOutputSize, UInt64(data.count) != exactOutputSize {
+                throw BoltZipError.invalidArchive("Decoded size does not match the declared entry size")
+            }
             progress?(UInt64(data.count), UInt64(data.count))
             return data
         }
@@ -158,7 +162,7 @@ public enum CompressionCodec {
             let cb: bolt_control_cb? = needsBridge ? boltCodecControlBridge : nil
             return data.withUnsafeBytes { rawBuf -> bolt_status_t in
                 let ptr = rawBuf.bindMemory(to: UInt8.self).baseAddress
-                return bolt_decompress_buffer_ex(mapAlgo(algorithm), container, ptr, data.count, max(0, expectedSize), &outBuf, cb, rawCtx)
+                return bolt_decompress_buffer_ex(mapAlgo(algorithm), container, ptr, data.count, max(0, expectedSize), exactOutputSize ?? UInt64.max, &outBuf, cb, rawCtx)
             }
         }
         if status.code == BOLT_STATUS_CANCELLED {
@@ -215,6 +219,7 @@ public enum CompressionCodec {
         destinationURL: URL,
         algorithm: CompressionAlgorithm,
         gzipContainer: Bool = false,
+        exactOutputSize: UInt64? = nil,
         controller: ArchiveTaskController? = nil,
         progress: ((UInt64, UInt64) -> Void)? = nil
     ) throws {
@@ -230,6 +235,7 @@ public enum CompressionCodec {
                 container,
                 sourceURL.path,
                 destinationURL.path,
+                exactOutputSize ?? UInt64.max,
                 cb,
                 rawCtx
             )
@@ -241,6 +247,7 @@ public enum CompressionCodec {
         sourceURL: URL,
         algorithm: CompressionAlgorithm,
         gzipContainer: Bool = false,
+        exactOutputSize: UInt64? = nil,
         controller: ArchiveTaskController? = nil,
         progress: ((UInt64, UInt64) -> Void)? = nil
     ) throws -> (crc32: UInt32, uncompressedSize: UInt64) {
@@ -259,6 +266,7 @@ public enum CompressionCodec {
                 sourceURL.path,
                 &crcOut,
                 &sizeOut,
+                exactOutputSize ?? UInt64.max,
                 cb,
                 rawCtx
             )

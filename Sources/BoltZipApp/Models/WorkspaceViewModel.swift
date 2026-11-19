@@ -185,9 +185,22 @@ final class WorkspaceViewModel {
     }
     var appIconStyle: AppIconStyle = .system {
         didSet {
+            guard oldValue != appIconStyle else { return }
             UserDefaults.standard.set(appIconStyle.rawValue, forKey: Keys.appIconStyle)
-            BoltAppIconRenderer.apply(style: appIconStyle)
+            refreshAppIcon()
         }
+    }
+    var appIconAnimationEnabled = true {
+        didSet {
+            guard oldValue != appIconAnimationEnabled else { return }
+            UserDefaults.standard.set(appIconAnimationEnabled, forKey: Keys.appIconAnimationEnabled)
+            refreshAppIcon()
+        }
+    }
+
+    func refreshAppIcon() {
+        guard let app = NSApp as NSApplication? else { return }
+        BoltAppIconRenderer.apply(style: appIconStyle, animationEnabled: appIconAnimationEnabled, in: app)
     }
 
     func effectiveWhiteAppIcon(for colorScheme: ColorScheme) -> Bool {
@@ -250,6 +263,7 @@ final class WorkspaceViewModel {
         static let showInspector = "BoltZip.ShowSidebarInspector"
         static let showStatusBar = "BoltZip.ShowStatusBar"
         static let appIconStyle = "BoltZip.AppIconStyle"
+        static let appIconAnimationEnabled = "BoltZip.AppIconAnimationEnabled"
         static let whiteAppIcon = "BoltZip.UseWhiteAppIcon"
         static let workerCoreCount = BoltConcurrency.userDefaultsKey
         static let lastManualCoreCount = "BoltZip.LastManualCoreCount"
@@ -369,6 +383,9 @@ final class WorkspaceViewModel {
             self.appIconStyle = parsedIconStyle
         } else if defaults.object(forKey: Keys.whiteAppIcon) != nil, defaults.bool(forKey: Keys.whiteAppIcon) {
             self.appIconStyle = .light
+        }
+        if defaults.object(forKey: Keys.appIconAnimationEnabled) != nil {
+            self.appIconAnimationEnabled = defaults.bool(forKey: Keys.appIconAnimationEnabled)
         }
         let hwCores = BoltConcurrency.hardwareCoreCount
         let savedManual = defaults.integer(forKey: Keys.lastManualCoreCount)

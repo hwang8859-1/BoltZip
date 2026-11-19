@@ -56,6 +56,7 @@ static int dyn_buf_init(dyn_buf_t *b, size_t initial_cap) {
 
 static int dyn_buf_append(dyn_buf_t *b, const uint8_t *src, size_t len) {
     if (len == 0) return 0;
+    if (len > SIZE_MAX - b->size) return -1;
     if (b->size + len > b->capacity) {
         size_t new_cap = b->capacity;
         while (new_cap < b->size + len) {
@@ -106,10 +107,17 @@ typedef struct {
     dyn_buf_t buf;
     uint32_t crc;
     uint64_t bytes_written;
+    uint64_t output_limit; /* 0 means unspecified unless exact_size is set */
+    int exact_size;
+    int size_exceeded;
 } bolt_sink_t;
 
 static int sink_write(bolt_sink_t *sink, const uint8_t *data, size_t len) {
     if (len == 0) return 0;
+    if (sink->exact_size && (uint64_t)len > sink->output_limit - sink->bytes_written) {
+        sink->size_exceeded = 1;
+        return -1;
+    }
     if (sink->track_crc) {
         sink->crc = bolt_crc32(sink->crc, data, len);
     }
@@ -640,7 +648,7 @@ static bolt_status_t run_compress_xz(bolt_source_t *src, bolt_sink_t *sink, int3
 
 static bolt_status_t run_decompress_xz(bolt_source_t *src, bolt_sink_t *sink) {
     lzma_stream strm = LZMA_STREAM_INIT;
-    lzma_ret lret = lzma_stream_decoder(&strm, UINT64_MAX, LZMA_CONCATENATED);
+    lzma_ret lret = lzma_stream_decoder(&strm, UINT64_C(256) * 1024 * 1024, LZMA_CONCATENATED);
     if (lret != LZMA_OK) {
         return status_err((int32_t)lret, "liblzma decoder init failed", NULL);
     }
@@ -971,6 +979,13 @@ bolt_status_t bolt_compress_buffer_workers(
     return status;
 }
 
+static bolt_status_t finish_decompression(bolt_status_t status, const bolt_sink_t *sink) {
+    if (sink->size_exceeded || (status.code == 0 && sink->exact_size && sink->bytes_written != sink->output_limit)) {
+        return status_err(EINVAL, "Decoded size does not match the declared entry size", NULL);
+    }
+    return status;
+}
+
 bolt_status_t bolt_decompress_buffer(
     bolt_algo_t algo,
     bolt_container_t container,
@@ -979,7 +994,7 @@ bolt_status_t bolt_decompress_buffer(
     size_t expected_output_len,
     bolt_buffer_t *output
 ) {
-    return bolt_decompress_buffer_ex(algo, container, input, input_len, expected_output_len, output, NULL, NULL);
+    return bolt_decompress_buffer_ex(algo, container, input, input_len, expected_output_len, UINT64_MAX, output, NULL, NULL);
 }
 
 bolt_status_t bolt_decompress_buffer_ex(
@@ -988,6 +1003,7 @@ bolt_status_t bolt_decompress_buffer_ex(
     const uint8_t *input,
     size_t input_len,
     size_t expected_output_len,
+    uint64_t exact_output_len,
     bolt_buffer_t *output,
     bolt_control_cb control_cb,
     void *ctx
@@ -999,12 +1015,6 @@ bolt_status_t bolt_decompress_buffer_ex(
     if (input_len > 0 && !input) {
         return status_err(EINVAL, "Input pointer is NULL", NULL);
     }
-    if (algo == BOLT_ALGO_STORE && input_len == 0) {
-        output->data = (uint8_t *)malloc(1);
-        output->size = 0;
-        return status_ok();
-    }
-
     bolt_source_t src = {
         .is_file = 0,
         .fp = NULL,
@@ -1020,15 +1030,18 @@ bolt_status_t bolt_decompress_buffer_ex(
     };
 
     bolt_sink_t sink = {0};
-    sink.is_file = 0;
-    sink.fp = NULL;
-    size_t initial = expected_output_len > 0 ? expected_output_len : (input_len * 2 + 1024);
-    if (initial > 64 * 1024 * 1024) initial = 64 * 1024 * 1024;
+    sink.output_limit = exact_output_len;
+    sink.exact_size = exact_output_len != UINT64_MAX;
+    const size_t max_initial = 64 * 1024 * 1024;
+    size_t initial = expected_output_len > 0 ? expected_output_len
+        : (input_len > (max_initial - 1024) / 2 ? max_initial : input_len * 2 + 1024);
+    if (initial > max_initial) initial = max_initial;
+    if (sink.exact_size && exact_output_len < initial) initial = (size_t)exact_output_len;
     if (dyn_buf_init(&sink.buf, initial) != 0) {
         return status_err(ENOMEM, "Out of memory", NULL);
     }
 
-    bolt_status_t status = dispatch_decompress(algo, container, &src, &sink);
+    bolt_status_t status = finish_decompression(dispatch_decompress(algo, container, &src, &sink), &sink);
     if (status.code != 0) {
         dyn_buf_free(&sink.buf);
         return status;
@@ -1126,6 +1139,7 @@ static bolt_status_t run_decompress_file_internal(
     int is_verify_only,
     uint32_t *out_crc32,
     uint64_t *out_uncompressed_size,
+    uint64_t exact_output_len,
     bolt_progress_cb progress_cb,
     bolt_control_cb control_cb,
     void *ctx
@@ -1170,10 +1184,12 @@ static bolt_status_t run_decompress_file_internal(
         .track_crc = is_verify_only ? 1 : 0,
         .fp = out_fp,
         .crc = 0,
-        .bytes_written = 0
+        .bytes_written = 0,
+        .output_limit = exact_output_len,
+        .exact_size = exact_output_len != UINT64_MAX
     };
 
-    bolt_status_t status = dispatch_decompress(algo, container, &src, &sink);
+    bolt_status_t status = finish_decompression(dispatch_decompress(algo, container, &src, &sink), &sink);
     fclose(in_fp);
     if (out_fp) {
         if (fclose(out_fp) != 0 && status.code == 0) {
@@ -1198,7 +1214,7 @@ bolt_status_t bolt_decompress_file(
     bolt_progress_cb progress_cb,
     void *ctx
 ) {
-    return run_decompress_file_internal(algo, container, src_path, dst_path, 0, NULL, NULL, progress_cb, NULL, ctx);
+    return run_decompress_file_internal(algo, container, src_path, dst_path, 0, NULL, NULL, UINT64_MAX, progress_cb, NULL, ctx);
 }
 
 bolt_status_t bolt_decompress_file_ex(
@@ -1206,10 +1222,11 @@ bolt_status_t bolt_decompress_file_ex(
     bolt_container_t container,
     const char *src_path,
     const char *dst_path,
+    uint64_t exact_output_len,
     bolt_control_cb control_cb,
     void *ctx
 ) {
-    return run_decompress_file_internal(algo, container, src_path, dst_path, 0, NULL, NULL, NULL, control_cb, ctx);
+    return run_decompress_file_internal(algo, container, src_path, dst_path, 0, NULL, NULL, exact_output_len, NULL, control_cb, ctx);
 }
 
 bolt_status_t bolt_verify_file(
@@ -1218,10 +1235,11 @@ bolt_status_t bolt_verify_file(
     const char *src_path,
     uint32_t *out_crc32,
     uint64_t *out_uncompressed_size,
+    uint64_t exact_output_len,
     bolt_control_cb control_cb,
     void *ctx
 ) {
-    return run_decompress_file_internal(algo, container, src_path, NULL, 1, out_crc32, out_uncompressed_size, NULL, control_cb, ctx);
+    return run_decompress_file_internal(algo, container, src_path, NULL, 1, out_crc32, out_uncompressed_size, exact_output_len, NULL, control_cb, ctx);
 }
 
 const char *bolt_zlib_version(void) { return zlibVersion(); }

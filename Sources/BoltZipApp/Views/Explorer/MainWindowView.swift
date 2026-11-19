@@ -9,8 +9,8 @@ struct MainWindowView: View {
 
     var body: some View {
         let l = vm.l10n
-        let minW: CGFloat = vm.listing == nil ? 350 : 560
-        let minH: CGFloat = vm.listing == nil ? 270 : 320
+        let minW: CGFloat = vm.listing == nil ? 336 : 560
+        let minH: CGFloat = vm.listing == nil ? 192 : 320
 
         Group {
             if let listing = vm.listing {
@@ -326,31 +326,13 @@ struct MainWindowView: View {
             }
 
             ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 1) {
-                    ToolbarPillIconButton(
-                        systemImage: "plus.rectangle.on.folder",
-                        label: l.newCompress,
-                        helpText: l.newArchive
-                    ) {
-                        vm.startNewArchivePanel()
-                    }
-
-                    ToolbarPillIconButton(
-                        systemImage: "folder",
-                        label: l.open,
-                        helpText: l.openArchive
-                    ) {
-                        vm.openArchivePanel()
-                    }
-
-                    ToolbarPillIconButton(
-                        systemImage: "gearshape",
-                        label: l.settingsMenuTitle,
-                        helpText: l.settingsMenuTitle
-                    ) {
-                        boltActivateAppToForeground()
-                        openSettings()
-                    }
+                ToolbarPillIconButton(
+                    systemImage: "gearshape",
+                    label: l.settingsMenuTitle,
+                    helpText: l.settingsMenuTitle
+                ) {
+                    boltActivateAppToForeground()
+                    openSettings()
                 }
                 .padding(.horizontal, 4)
                 .frame(height: 30)

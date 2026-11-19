@@ -10,17 +10,17 @@ public enum BoltIconArtwork {
 
     // MARK: - Public Image & PNG Renderers
 
-    public static func renderAppIconNSImage(size: CGFloat, whiteBackground: Bool) -> NSImage {
+    public static func renderAppIconNSImage(size: CGFloat, whiteBackground: Bool, goldSweepProgress: CGFloat? = nil) -> NSImage {
         NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-            drawAppIcon(in: ctx, size: size, whiteBackground: whiteBackground)
+            drawAppIcon(in: ctx, size: size, whiteBackground: whiteBackground, goldSweepProgress: goldSweepProgress)
             return true
         }
     }
 
-    public static func renderAppIconPNG(pixelSize: Int, whiteBackground: Bool) -> Data? {
+    public static func renderAppIconPNG(pixelSize: Int, whiteBackground: Bool, goldSweepProgress: CGFloat? = nil) -> Data? {
         renderPNG(pixelSize: pixelSize) { ctx, s in
-            drawAppIcon(in: ctx, size: s, whiteBackground: whiteBackground)
+            drawAppIcon(in: ctx, size: s, whiteBackground: whiteBackground, goldSweepProgress: goldSweepProgress)
         }
     }
 

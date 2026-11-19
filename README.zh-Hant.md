@@ -10,11 +10,11 @@
 
 ![macOS 26.0+](https://img.shields.io/badge/macOS-26.0%2B%20(Apple%20Silicon)-0ea5e9?style=flat-square)
 ![Swift 6.2](https://img.shields.io/badge/Swift-6.2-6366f1?style=flat-square)
-[![Release v1.0.2](https://img.shields.io/badge/release-v1.0.2-facc15?style=flat-square)](https://github.com/hwang8859-1/BoltZip/releases/latest)
+[![Release v1.0.3](https://img.shields.io/badge/release-v1.0.3-facc15?style=flat-square)](https://github.com/hwang8859-1/BoltZip/releases/latest)
 ![License MIT](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)
 
 <p>
-  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.dmg"><strong>⬇️ 直接下載最新版 v1.0.2 (.dmg · Apple Silicon)</strong></a>
+  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.3/BoltZip-1.0.3-macOS-arm64.dmg"><strong>⬇️ 直接下載最新版 v1.0.3 (.dmg · Apple Silicon)</strong></a>
   &nbsp;·&nbsp;
   <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg">🛡 下載相容版 v0.9.3 (.dmg · Intel / macOS 12–26)</a>
   &nbsp;·&nbsp;
@@ -38,7 +38,7 @@
 
 | 適用機型與系統 | 推薦版本 | 直接下載連結 | 發佈頁面 |
 | :--- | :--- | :--- | :--- |
-| **Apple Silicon (M 系列 `arm64`) · macOS 26.0+** | **`v1.0.2`**（最新正式版） | [下載 `.dmg` 安裝映像檔](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.dmg) · [可攜包 `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.2/BoltZip-1.0.2-macOS-arm64.zip) | [Release v1.0.2 ↗](https://github.com/hwang8859-1/BoltZip/releases/latest) |
+| **Apple Silicon (M 系列 `arm64`) · macOS 26.0+** | **`v1.0.3`**（最新正式版） | [下載 `.dmg` 安裝映像檔](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.3/BoltZip-1.0.3-macOS-arm64.dmg) · [可攜包 `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.3/BoltZip-1.0.3-macOS-arm64.zip) | [Release v1.0.3 ↗](https://github.com/hwang8859-1/BoltZip/releases/latest) |
 | **Intel (`x86_64`) 或 macOS 12.0–15 / 26+** | **`v0.9.3`**（Universal 全相容版） | [下載 `.dmg` 相容映像檔](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg) · [可攜包 `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.zip) | [Release v0.9.3 ↗](https://github.com/hwang8859-1/BoltZip/releases/tag/v0.9.3) |
 
 - **安裝步驟**：打開下載的 `.dmg` 映像檔 → 將 `BoltZip.app` 拖入右側 `Applications` 資料夾 → 啟動後可在「設定」一鍵啟用 **Finder 右鍵第一層選單 `Bolt ›`** 與 **預設檔案關聯**。
@@ -90,7 +90,7 @@ swift run -c release boltzip x release.zip ./out --mode smart
 
 ## 🧩 展示頁面與開發者文件
 
-- **線上產品展示與下載頁**：造訪公開展示網站 [**https://122.51.112.183/boltzip/**](https://122.51.112.183/boltzip/)，即可體驗互動式模擬器與演算法效能比較，並直接下載 `BoltZip v1.0.2 Apple Silicon` 安裝包與原始碼歸檔（原始檔案位於 [showcase/](showcase/)）。
+- **線上產品展示**：在 [產品展示站](https://122.51.112.183/boltzip/) 體驗介面模擬器、多語言切換和演算法比較。最新版可從上方的 GitHub Releases 下載，展示頁原始碼位於 [showcase/](showcase/)。
 - **AI Agent 與開發指南**：請參閱 [AGENTS.md](AGENTS.md)。
 - **版本更新紀錄**：請參閱 [CHANGELOG.md](CHANGELOG.md)。
 

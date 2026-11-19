@@ -4,6 +4,40 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
+APP_ONLY=0
+REGISTER_LOCAL=1
+for arg in "$@"; do
+    case "$arg" in
+        --app-only) APP_ONLY=1 ;;
+        --no-register) REGISTER_LOCAL=0 ;;
+        -h|--help)
+            echo "Usage: ./Scripts/build_app.sh [--app-only] [--no-register]"
+            echo "Full release packaging requires a clean Git checkout."
+            exit 0
+            ;;
+        *)
+            echo "Error: Unknown argument: $arg" >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [ "$APP_ONLY" -eq 0 ]; then
+    if [ "$(git rev-parse --show-toplevel 2>/dev/null || true)" != "$ROOT_DIR" ]; then
+        echo "Error: Release packaging requires a Git checkout. Use --app-only to build from a source archive." >&2
+        exit 1
+    fi
+    if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+        echo "Error: Commit tracked changes before packaging a release. Use --app-only for local builds." >&2
+        exit 1
+    fi
+    SOURCE_REV="$(git rev-parse --verify HEAD)"
+    if [ -n "$(git ls-tree --name-only "$SOURCE_REV" -- .workbuddy design doc marketing dist)" ]; then
+        echo "Error: Release source contains tracked local-only directories." >&2
+        exit 1
+    fi
+fi
+
 VERSION_FILE="$ROOT_DIR/Sources/BoltZipCore/Models/BoltZipVersion.swift"
 APP_VERSION="$(sed -n 's/.*public static let current = "\([^"]*\)".*/\1/p' "$VERSION_FILE" | head -n 1)"
 APP_BUILD="$(sed -n 's/.*public static let build = "\([^"]*\)".*/\1/p' "$VERSION_FILE" | head -n 1)"
@@ -27,9 +61,10 @@ DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/BoltZip.app"
 CONTENTS="$APP_DIR/Contents"
 APPEX_DIR="$CONTENTS/PlugIns/BoltZipFinderSync.appex"
+DOCK_PLUGIN_DIR="$CONTENTS/PlugIns/BoltZipDockTile.plugin"
 
 rm -rf "$APP_DIR"
-mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources/showcase" "$CONTENTS/Helpers" "$APPEX_DIR/Contents/MacOS"
+mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources/showcase" "$CONTENTS/Helpers" "$APPEX_DIR/Contents/MacOS" "$DOCK_PLUGIN_DIR/Contents/MacOS"
 
 cp "$BIN_DIR/BoltZipApp" "$CONTENTS/MacOS/BoltZipApp"
 cp "$BIN_DIR/boltzip" "$CONTENTS/Helpers/boltzip"
@@ -94,6 +129,31 @@ cat <<APPEX_PLIST > "$APPEX_DIR/Contents/Info.plist"
 </dict>
 </plist>
 APPEX_PLIST
+
+echo "==> Building BoltZip Dock tile plug-in..."
+xcrun clang -O2 -fobjc-arc -bundle -arch arm64 -mmacosx-version-min="$MIN_MACOS" \
+    -isysroot "$SDK_PATH" -framework AppKit \
+    "$ROOT_DIR/Sources/BoltZipDockTile/BoltZipDockTile.m" \
+    -o "$DOCK_PLUGIN_DIR/Contents/MacOS/BoltZipDockTile"
+
+cat <<DOCK_PLIST > "$DOCK_PLUGIN_DIR/Contents/Info.plist"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>BoltZipDockTile</string>
+    <key>CFBundleIdentifier</key>
+    <string>dev.boltzip.macos.DockTile</string>
+    <key>CFBundlePackageType</key>
+    <string>BNDL</string>
+    <key>CFBundleVersion</key>
+    <string>$APP_BUILD</string>
+    <key>NSPrincipalClass</key>
+    <string>BoltZipDockTile</string>
+</dict>
+</plist>
+DOCK_PLIST
 
 echo "==> Generating bundle localization resources (.lproj)..."
 for lang in zh-Hans zh-Hant en ja; do
@@ -201,6 +261,8 @@ cat <<PLIST > "$CONTENTS/Info.plist"
     <string>AppIcon</string>
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
+    <key>NSDockTilePlugIn</key>
+    <string>BoltZipDockTile.plugin</string>
     <key>CFBundleIdentifier</key>
     <string>dev.boltzip.macos</string>
     <key>CFBundleInfoDictionaryVersion</key>
@@ -800,22 +862,31 @@ echo "==> Code signing helpers, FinderSync.appex, and BoltZip.app (identity: $SI
 if [ "$SIGN_IDENTITY" = "-" ]; then
     codesign --force --sign - "$CONTENTS/Helpers/boltzip"
     codesign --force --sign - --entitlements "$ROOT_DIR/Sources/BoltZipFinderSync/FinderSync.entitlements" "$APPEX_DIR"
+    codesign --force --sign - "$DOCK_PLUGIN_DIR"
     codesign --force --sign - "$APP_DIR"
 else
     codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$CONTENTS/Helpers/boltzip"
     codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" --entitlements "$ROOT_DIR/Sources/BoltZipFinderSync/FinderSync.entitlements" "$APPEX_DIR"
+    codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$DOCK_PLUGIN_DIR"
     codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP_DIR"
 fi
 
-echo "==> Registering BoltZip.app and FinderSync extension..."
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR"
-pluginkit -a "$APPEX_DIR" || true
-pluginkit -e use -i dev.boltzip.macos.FinderSync || true
+if [ "$REGISTER_LOCAL" -eq 1 ]; then
+    echo "==> Registering BoltZip.app and FinderSync extension..."
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR"
+    pluginkit -a "$APPEX_DIR" || true
+    pluginkit -e use -i dev.boltzip.macos.FinderSync || true
 
-# Clean up legacy Services workflows so BoltZip only appears in top-level "Bolt >"
-if [ -d "$HOME/Library/Services" ]; then
-    find "$HOME/Library/Services" -maxdepth 1 -name "BoltZip*.workflow" -exec rm -rf {} + 2>/dev/null || true
-    /System/Library/CoreServices/pbs -update || true
+    # Clean up legacy Services workflows so BoltZip only appears in top-level "Bolt >"
+    if [ -d "$HOME/Library/Services" ]; then
+        find "$HOME/Library/Services" -maxdepth 1 -name "BoltZip*.workflow" -exec rm -rf {} + 2>/dev/null || true
+        /System/Library/CoreServices/pbs -update || true
+    fi
+fi
+
+if [ "$APP_ONLY" -eq 1 ]; then
+    echo "==> Done! App bundle created at: $APP_DIR"
+    exit 0
 fi
 
 RELEASE_DMG="$DIST_DIR/BoltZip-${APP_VERSION}-macOS-arm64.dmg"
@@ -842,29 +913,9 @@ if [ "$SIGN_IDENTITY" != "-" ]; then
     fi
 fi
 
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && [ -z "$(git status --porcelain --untracked-files=no)" ]; then
-    echo "==> Creating clean source archives from git HEAD ($APP_VERSION)..."
-    git archive --format=tar.gz --prefix="BoltZip-${APP_VERSION}/" -o "$SOURCE_TAR" HEAD
-    git archive --format=zip --prefix="BoltZip-${APP_VERSION}/" -o "$SOURCE_ZIP" HEAD
-else
-    echo "==> Creating clean source archives from workspace ($APP_VERSION)..."
-    STAGE_SRC="$(mktemp -d "${TMPDIR:-/tmp}/BoltZip-src.XXXXXX")"
-    trap 'rm -rf "$STAGE_SRC"' EXIT
-    mkdir -p "$STAGE_SRC/BoltZip-${APP_VERSION}"
-    COPYFILE_DISABLE=1 rsync -a \
-        --exclude='.git' \
-        --exclude='.build' \
-        --exclude='.swiftpm' \
-        --exclude='DerivedData' \
-        --exclude='dist' \
-        --exclude='.workbuddy' \
-        --exclude='marketing' \
-        --exclude='.DS_Store' \
-        --exclude='._*' \
-        "$ROOT_DIR/" "$STAGE_SRC/BoltZip-${APP_VERSION}/"
-    COPYFILE_DISABLE=1 tar -czf "$SOURCE_TAR" -C "$STAGE_SRC" "BoltZip-${APP_VERSION}"
-    ditto -c -k --sequesterRsrc --keepParent "$STAGE_SRC/BoltZip-${APP_VERSION}" "$SOURCE_ZIP"
-fi
+echo "==> Creating source archives from Git commit $SOURCE_REV ($APP_VERSION)..."
+git archive --format=tar.gz --prefix="BoltZip-${APP_VERSION}/" -o "$SOURCE_TAR" "$SOURCE_REV"
+git archive --format=zip --prefix="BoltZip-${APP_VERSION}/" -o "$SOURCE_ZIP" "$SOURCE_REV"
 
 (
     cd "$DIST_DIR"

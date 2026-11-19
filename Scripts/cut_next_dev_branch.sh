@@ -4,10 +4,14 @@ set -euo pipefail
 usage() {
     cat <<'EOF'
 Usage:
-  ./Scripts/cut_next_dev_branch.sh <new-dev-branch> [--cleanup-old <old-dev-branch>]
+  ./Scripts/cut_next_dev_branch.sh <new-dev-branch>
 
-Example (after releasing dev-1.0.1 -> main & tagging v1.0.1):
-  ./Scripts/cut_next_dev_branch.sh dev-1.0.2 --cleanup-old dev-1.0.1
+Note:
+  Released dev-* branches are kept permanently as read-only archives.
+  --cleanup-old is rejected before any branch operations.
+
+Example (after releasing dev-1.0.3 -> main & tagging v1.0.3):
+  ./Scripts/cut_next_dev_branch.sh dev-1.0.4
 EOF
 }
 
@@ -16,19 +20,25 @@ if [ $# -lt 1 ]; then
     exit 1
 fi
 
+case "$1" in
+    -h|--help)
+        usage
+        exit 0
+        ;;
+    --cleanup-old)
+        echo "Error: Released dev branches must be retained. --cleanup-old is no longer supported." >&2
+        exit 1
+        ;;
+esac
+
 NEW_BRANCH="$1"
 shift
-OLD_BRANCH=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --cleanup-old)
-            if [ $# -lt 2 ]; then
-                echo "Error: --cleanup-old requires a branch name." >&2
-                exit 1
-            fi
-            OLD_BRANCH="$2"
-            shift 2
+            echo "Error: Released dev branches must be retained. --cleanup-old is no longer supported." >&2
+            exit 1
             ;;
         -h|--help)
             usage
@@ -80,23 +90,5 @@ REPO_NWO="$("$GH_BIN" repo view --json nameWithOwner --jq '.nameWithOwner')"
 echo "==> Setting GitHub default branch of $REPO_NWO to '$NEW_BRANCH'..."
 "$GH_BIN" api -X PATCH "repos/$REPO_NWO" -f default_branch="$NEW_BRANCH" --silent
 git remote set-head origin "$NEW_BRANCH"
-
-if [ -n "$OLD_BRANCH" ]; then
-    if [ "$OLD_BRANCH" = "main" ] || [ "$OLD_BRANCH" = "$NEW_BRANCH" ] || [[ "$OLD_BRANCH" == legacy/* ]]; then
-        echo "Error: Refusing to delete protected branch '$OLD_BRANCH'." >&2
-        exit 1
-    fi
-    if git show-ref --verify --quiet "refs/remotes/origin/$OLD_BRANCH"; then
-        if ! git merge-base --is-ancestor "origin/$OLD_BRANCH" origin/main; then
-            echo "Error: 'origin/$OLD_BRANCH' is NOT yet merged into 'origin/main'; aborting cleanup." >&2
-            exit 1
-        fi
-        echo "==> Cleaning up merged remote branch 'origin/$OLD_BRANCH'..."
-        git push origin --delete "$OLD_BRANCH"
-    fi
-    if git show-ref --verify --quiet "refs/heads/$OLD_BRANCH"; then
-        git branch -d "$OLD_BRANCH"
-    fi
-fi
 
 echo "==> Done! Active default development branch is now '$NEW_BRANCH'."

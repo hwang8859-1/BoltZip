@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import os
 
@@ -33,9 +34,6 @@ public enum BoltArchiveEngine {
             throw BoltZipError.unsupportedFormat(archiveURL.pathExtension)
         }
 
-        let attrs = try FileManager.default.attributesOfItem(atPath: archiveURL.path)
-        let archiveFileSize = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
-
         let entries: [ArchiveEntry]
         var comment = ""
         var isSplitVolume = false
@@ -55,21 +53,8 @@ public enum BoltArchiveEngine {
             }
         }
 
-        let totalUncomp = entries.reduce(UInt64(0)) { $0 + ($1.isDirectory ? 0 : $1.uncompressedSize) }
-        let totalComp = entries.reduce(UInt64(0)) { $0 + ($1.isDirectory ? 0 : $1.compressedSize) }
-        let hasEnc = entries.contains { $0.isEncrypted }
-
-        return ArchiveListing(
-            archiveURL: archiveURL,
-            format: format,
-            entries: entries,
-            comment: comment,
-            totalUncompressedBytes: totalUncomp,
-            totalCompressedBytes: totalComp > 0 ? totalComp : archiveFileSize,
-            archiveFileSize: archiveFileSize,
-            hasEncryptedEntries: hasEnc,
-            isSplitVolume: isSplitVolume
-        )
+        return try makeListing(archiveURL: archiveURL, format: format, entries: entries,
+                               comment: comment, isSplitVolume: isSplitVolume)
     }
 
     public static func readEntryData(
@@ -149,8 +134,7 @@ public enum BoltArchiveEngine {
             )
 
         case .rar, .sevenZip, .iso, .cab, .xar:
-            let stageDir = fm.temporaryDirectory.appendingPathComponent("boltzip-single-\(UUID().uuidString)", isDirectory: true)
-            try fm.createDirectory(at: stageDir, withIntermediateDirectories: true)
+            let stageDir = try makeExtractionStage(near: destinationFileURL, under: destParent)
             defer { try? fm.removeItem(at: stageDir) }
             try ExtendedArchiveDriver.extract(
                 at: archiveURL,
@@ -169,10 +153,7 @@ public enum BoltArchiveEngine {
             guard fm.fileExists(atPath: stagedFile.path) else {
                 throw BoltZipError.entryNotFound(entryPath)
             }
-            if fm.fileExists(atPath: destinationFileURL.path) {
-                try fm.removeItem(at: destinationFileURL)
-            }
-            try fm.moveItem(at: stagedFile, to: destinationFileURL)
+            try commitExtractedItem(stagedFile, to: destinationFileURL, under: destParent, policy: .overwrite, controller: controller)
         }
     }
 
@@ -304,6 +285,16 @@ public enum BoltArchiveEngine {
         }
     }
 
+    static func checkedArchiveSize(_ total: UInt64, adding bytes: UInt64) throws -> UInt64 {
+        let (sum, overflow) = total.addingReportingOverflow(bytes)
+        guard !overflow, sum <= UInt64(Int64.max) else {
+            throw BoltZipError.invalidArchive(BoltCoreLocalization.t(
+                "归档大小超出支持范围", "封存檔大小超出支援範圍", "Archive size exceeds the supported range", "書庫サイズが対応範囲を超えています"
+            ))
+        }
+        return sum
+    }
+
     private static func makeListing(
         archiveURL: URL,
         format: ArchiveFormat,
@@ -313,8 +304,12 @@ public enum BoltArchiveEngine {
     ) throws -> ArchiveListing {
         let attrs = try FileManager.default.attributesOfItem(atPath: archiveURL.path)
         let archiveFileSize = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
-        let totalUncomp = entries.reduce(UInt64(0)) { $0 + ($1.isDirectory ? 0 : $1.uncompressedSize) }
-        let totalComp = entries.reduce(UInt64(0)) { $0 + ($1.isDirectory ? 0 : $1.compressedSize) }
+        let totalUncomp = try entries.reduce(UInt64(0)) {
+            try checkedArchiveSize($0, adding: $1.isDirectory ? 0 : $1.uncompressedSize)
+        }
+        let totalComp = try entries.reduce(UInt64(0)) {
+            try checkedArchiveSize($0, adding: $1.isDirectory ? 0 : $1.compressedSize)
+        }
         let hasEnc = entries.contains { $0.isEncrypted }
         return ArchiveListing(
             archiveURL: archiveURL,
@@ -363,7 +358,9 @@ public enum BoltArchiveEngine {
             }
         }
 
-        let totalBytes = entriesToExtract.reduce(UInt64(0)) { $0 + ($1.isDirectory ? 0 : $1.uncompressedSize) }
+        let totalBytes = try entriesToExtract.reduce(UInt64(0)) {
+            try checkedArchiveSize($0, adding: $1.isDirectory ? 0 : $1.uncompressedSize)
+        }
         return (targetRoot, entriesToExtract, topLevelDirRenameMap, totalBytes)
     }
 
@@ -826,14 +823,45 @@ public enum BoltArchiveEngine {
                 if isExistingDirectory {
                     // Never recursively delete an existing directory to overwrite it with a file
                     targetURL = uniqueNonCollidingURL(for: initialURL)
-                } else {
-                    try fm.removeItem(at: targetURL)
                 }
             case .rename:
                 targetURL = uniqueNonCollidingURL(for: initialURL)
             }
         }
         return targetURL
+    }
+
+    static func makeExtractionStage(near target: URL, under root: URL) throws -> URL {
+        try assertNoSymlinkTraversal(at: target, under: root)
+        let folder = target.deletingLastPathComponent()
+            .appendingPathComponent(".boltzip-stage-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false,
+                                                attributes: [.posixPermissions: 0o700])
+        return folder
+    }
+
+    static func commitExtractedItem(
+        _ staged: URL,
+        to target: URL,
+        under root: URL,
+        policy: OverwritePolicy,
+        controller: ArchiveTaskController? = nil
+    ) throws {
+        try controller?.checkpoint()
+        try assertNoSymlinkTraversal(at: target, under: root)
+        let result = staged.withUnsafeFileSystemRepresentation { source in
+            target.withUnsafeFileSystemRepresentation { destination in
+                guard let source, let destination else { return EINVAL }
+                if policy == .overwrite {
+                    return Darwin.rename(source, destination) == 0 ? 0 : errno
+                }
+                return renamex_np(source, destination, UInt32(RENAME_EXCL)) == 0 ? 0 : errno
+            }
+        }
+        if result != 0 {
+            if policy == .skip && result == EEXIST { return }
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(result), userInfo: [NSFilePathErrorKey: target.path])
+        }
     }
 
     static func createSafeSymlink(
@@ -860,57 +888,33 @@ public enum BoltArchiveEngine {
             throw BoltZipError.pathTraversalDetected("\(initialURL.lastPathComponent) -> \(cleanTarget)")
         }
 
-        var finalURL = initialURL
-        if let attrs = try? fm.attributesOfItem(atPath: finalURL.path) {
-            let isExistingDirectory = (attrs[.type] as? FileAttributeType) == .typeDirectory
-            switch overwritePolicy {
-            case .skip:
-                return
-            case .overwrite:
-                if isExistingDirectory {
-                    finalURL = uniqueNonCollidingURL(for: initialURL)
-                } else {
-                    try fm.removeItem(at: finalURL)
-                }
-            case .rename:
-                finalURL = uniqueNonCollidingURL(for: initialURL)
-            }
-        }
-        try fm.createSymbolicLink(atPath: finalURL.path, withDestinationPath: cleanTarget)
+        guard let finalURL = try prepareExtractTargetURL(initialURL: initialURL, under: rootURL, policy: overwritePolicy) else { return }
+        let stage = try makeExtractionStage(near: finalURL, under: rootURL)
+        defer { try? fm.removeItem(at: stage) }
+        let stagedLink = stage.appendingPathComponent("link")
+        try fm.createSymbolicLink(atPath: stagedLink.path, withDestinationPath: cleanTarget)
+        try commitExtractedItem(stagedLink, to: finalURL, under: rootURL, policy: overwritePolicy)
     }
 
     static func writeExtractedFile(
         _ data: Data,
         to initialURL: URL,
+        under root: URL,
         entry: ArchiveEntry,
-        policy: OverwritePolicy
+        policy: OverwritePolicy,
+        controller: ArchiveTaskController?
     ) throws {
+        guard let target = try prepareExtractTargetURL(initialURL: initialURL, under: root, policy: policy) else { return }
         let fm = FileManager.default
-        try fm.createDirectory(at: initialURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-
-        var targetURL = initialURL
-        if let attrs = try? fm.attributesOfItem(atPath: targetURL.path) {
-            let isExistingDirectory = (attrs[.type] as? FileAttributeType) == .typeDirectory
-            switch policy {
-            case .skip:
-                return
-            case .overwrite:
-                if isExistingDirectory {
-                    targetURL = uniqueNonCollidingURL(for: initialURL)
-                } else {
-                    try fm.removeItem(at: targetURL)
-                }
-            case .rename:
-                targetURL = uniqueNonCollidingURL(for: initialURL)
-            }
-        }
-
-        try data.write(to: targetURL, options: .atomic)
-        let attrs: [FileAttributeKey: Any] = [
+        let stage = try makeExtractionStage(near: target, under: root)
+        defer { try? fm.removeItem(at: stage) }
+        let stagedFile = stage.appendingPathComponent("payload")
+        try data.write(to: stagedFile)
+        try? fm.setAttributes([
             .modificationDate: entry.modifiedDate,
             .posixPermissions: NSNumber(value: entry.permissions)
-        ]
-        try? fm.setAttributes(attrs, ofItemAtPath: targetURL.path)
+        ], ofItemAtPath: stagedFile.path)
+        try commitExtractedItem(stagedFile, to: target, under: root, policy: policy, controller: controller)
     }
 
     static func remapTopLevelFolder(in entryPath: String, renameMap: [String: String]) -> String {

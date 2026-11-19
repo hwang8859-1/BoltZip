@@ -8,6 +8,7 @@ APP_VERSION="$(sed -n 's/.*current = "\(.*\)".*/\1/p' Sources/BoltZipCore/Models
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/BoltZip.app"
 CLI="$APP_DIR/Contents/Helpers/boltzip"
+DOCK_PLUGIN="$APP_DIR/Contents/PlugIns/BoltZipDockTile.plugin"
 DMG="$DIST_DIR/BoltZip-${APP_VERSION}-macOS-arm64.dmg"
 SUMS="$DIST_DIR/BoltZip-${APP_VERSION}-SHA256SUMS.txt"
 
@@ -16,7 +17,12 @@ codesign --verify --deep --strict "$APP_DIR"
 codesign -d --entitlements - "$APP_DIR/Contents/PlugIns/BoltZipFinderSync.appex" 2>&1 | grep -q "com.apple.security.app-sandbox"
 plutil -lint \
     "$APP_DIR/Contents/Info.plist" \
-    "$APP_DIR/Contents/PlugIns/BoltZipFinderSync.appex/Contents/Info.plist"
+    "$APP_DIR/Contents/PlugIns/BoltZipFinderSync.appex/Contents/Info.plist" \
+    "$DOCK_PLUGIN/Contents/Info.plist"
+test "$(plutil -extract NSDockTilePlugIn raw "$APP_DIR/Contents/Info.plist")" = "$(basename "$DOCK_PLUGIN")"
+test -x "$DOCK_PLUGIN/Contents/MacOS/BoltZipDockTile"
+test -s "$APP_DIR/Contents/Resources/BoltZipDockLight.png"
+test -s "$APP_DIR/Contents/Resources/BoltZipDockDark.png"
 
 echo "==> [2/6] Verifying zero third-party Homebrew dylib dependencies..."
 for BIN in "$APP_DIR/Contents/MacOS/BoltZipApp" "$CLI"; do

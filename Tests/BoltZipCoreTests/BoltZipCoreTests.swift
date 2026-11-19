@@ -803,9 +803,8 @@ final class BoltZipCoreTests: XCTestCase {
     }
 
     func testCentralizedVersionMetadata() {
-        XCTAssertFalse(BoltZipVersion.current.isEmpty)
-        XCTAssertEqual(BoltZipVersion.current, "1.0.2")
-        XCTAssertFalse(BoltZipVersion.build.isEmpty)
+        XCTAssertEqual(BoltZipVersion.current, "1.0.3")
+        XCTAssertEqual(BoltZipVersion.build, "14")
     }
 
     func testMultiCoreConcurrencyControlAutoAndFixedCoreCount() throws {
@@ -921,6 +920,80 @@ final class BoltZipCoreTests: XCTestCase {
         XCTAssertEqual(BoltDocumentIconKind.resolve(forFilename: "comic.cbr"), .rar)
         XCTAssertNil(BoltDocumentIconKind.resolve(forFilename: "notes.txt"))
         #endif
+    }
+
+    func testStreamingOverwritePreservesExistingFileUntilExtractionSucceeds() throws {
+        let oldThreshold = BoltConcurrency.streamingThresholdBytes
+        BoltConcurrency.streamingThresholdBytes = 64 * 1024
+        defer { BoltConcurrency.streamingThresholdBytes = oldThreshold }
+
+        let fm = FileManager.default
+        let input = tempDir.appendingPathComponent("payload.txt")
+        let payload = Data(repeating: 0x41, count: 128 * 1024)
+        try payload.write(to: input)
+        let archive = tempDir.appendingPathComponent("protected.zip")
+        let password = "BoltZip-test-password"
+        try BoltArchiveEngine.createArchive(
+            from: [input], to: archive,
+            options: CreateArchiveOptions(format: .zip, algorithm: .deflate, encryption: .aes256, password: password)
+        )
+
+        let folder = tempDir.appendingPathComponent("output", isDirectory: true)
+        try fm.createDirectory(at: folder, withIntermediateDirectories: false)
+        let destination = folder.appendingPathComponent(input.lastPathComponent)
+        let previous = Data("existing file".utf8)
+        try previous.write(to: destination)
+
+        var options = ExtractOptions(destinationURL: folder, mode: .here, overwritePolicy: .overwrite, password: "wrong")
+        XCTAssertThrowsError(try BoltArchiveEngine.extract(archiveURL: archive, options: options)) { error in
+            guard case BoltZipError.wrongPassword = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+        XCTAssertEqual(try Data(contentsOf: destination), previous)
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: folder.path), [destination.lastPathComponent])
+
+        options.password = password
+        let controller = ArchiveTaskController()
+        XCTAssertThrowsError(try BoltArchiveEngine.extract(archiveURL: archive, options: options, controller: controller) {
+            if $0.processedBytes > 0 { controller.cancel() }
+        }) { error in
+            guard case BoltZipError.cancelled = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+        XCTAssertEqual(try Data(contentsOf: destination), previous)
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: folder.path), [destination.lastPathComponent])
+
+        try BoltArchiveEngine.extract(archiveURL: archive, options: options)
+        XCTAssertEqual(try Data(contentsOf: destination), payload)
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: folder.path), [destination.lastPathComponent])
+    }
+
+    func testArchiveSizeAggregationRejectsUnsupportedTotals() throws {
+        let maxSize = UInt64(Int64.max)
+        XCTAssertEqual(try BoltArchiveEngine.checkedArchiveSize(maxSize - 1, adding: 1), maxSize)
+        XCTAssertThrowsError(try BoltArchiveEngine.checkedArchiveSize(maxSize, adding: 1))
+        XCTAssertThrowsError(try BoltArchiveEngine.checkedArchiveSize(1, adding: UInt64.max))
+    }
+
+    func testCodecEnforcesExactDecodedSizeForBufferFileAndVerification() throws {
+        let payload = Data(repeating: 0x41, count: 64 * 1024)
+        let compressed = try CompressionCodec.compress(data: payload, algorithm: .deflate)
+        let source = tempDir.appendingPathComponent("raw.deflate")
+        let destination = tempDir.appendingPathComponent("decoded")
+        try compressed.write(to: source)
+        let exactSize = UInt64(payload.count)
+
+        for wrongSize in [0, 1, exactSize + 1] {
+            XCTAssertThrowsError(try CompressionCodec.decompress(data: compressed, algorithm: .deflate, exactOutputSize: wrongSize))
+            XCTAssertThrowsError(try CompressionCodec.decompressFile(
+                sourceURL: source, destinationURL: destination, algorithm: .deflate, exactOutputSize: wrongSize
+            ))
+            XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+            XCTAssertThrowsError(try CompressionCodec.verifyFile(sourceURL: source, algorithm: .deflate, exactOutputSize: wrongSize))
+        }
+
+        XCTAssertEqual(try CompressionCodec.decompress(data: compressed, algorithm: .deflate, exactOutputSize: exactSize), payload)
+        try CompressionCodec.decompressFile(sourceURL: source, destinationURL: destination, algorithm: .deflate, exactOutputSize: exactSize)
+        XCTAssertEqual(try Data(contentsOf: destination), payload)
+        XCTAssertEqual(try CompressionCodec.verifyFile(sourceURL: source, algorithm: .deflate, exactOutputSize: exactSize).uncompressedSize, exactSize)
     }
 
     func testStreamingChunkedZipAE2AndTarZstRoundtrip() throws {
@@ -1311,6 +1384,68 @@ final class BoltZipCoreTests: XCTestCase {
         unzipProc.waitUntilExit()
         let unzipLog = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         XCTAssertEqual(unzipProc.terminationStatus, 0, "unzip -t failed on edited bit-3 ZipCrypto archive: \(unzipLog)")
+    }
+
+    func testAppIconGoldSweepMovesWithoutChangingItsSilhouette() throws {
+        #if canImport(AppKit)
+        let size = 128
+        func render(white: Bool, progress: CGFloat?) throws -> Data {
+            try XCTUnwrap(BoltIconArtwork.renderAppIconPNG(pixelSize: size, whiteBackground: white, goldSweepProgress: progress))
+        }
+        func measure(white: Bool, progress: CGFloat?) throws -> (meanX: Double, meanY: Double, silhouette: [Bool]) {
+            let png = try render(white: white, progress: progress)
+            let bitmap = try XCTUnwrap(NSBitmapImageRep(data: png))
+            var points = 0
+            var sumX = 0
+            var sumY = 0
+            var silhouette: [Bool] = []
+            for y in 0..<size {
+                for x in 0..<size {
+                    let pixel = try XCTUnwrap(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB))
+                    silhouette.append(pixel.alphaComponent > 0.5)
+                    if pixel.alphaComponent > 0.9 && pixel.redComponent > 0.82 &&
+                        pixel.greenComponent > 0.6 && pixel.blueComponent < 0.57 {
+                        points += 1
+                        sumX += x
+                        sumY += y
+                    }
+                }
+            }
+            XCTAssertGreaterThan(points, 10)
+            let count = Double(max(1, points))
+            return (Double(sumX) / count, Double(sumY) / count, silhouette)
+        }
+
+        func pixelDistance(_ lhs: Data, _ rhs: Data) throws -> Int {
+            let left = try XCTUnwrap(NSBitmapImageRep(data: lhs))
+            let right = try XCTUnwrap(NSBitmapImageRep(data: rhs))
+            let leftBytes = try XCTUnwrap(left.bitmapData)
+            let rightBytes = try XCTUnwrap(right.bitmapData)
+            XCTAssertEqual(left.bytesPerPlane, right.bytesPerPlane)
+            return (0..<min(left.bytesPerPlane, right.bytesPerPlane)).reduce(0) { sum, index in
+                sum + abs(Int(leftBytes[index]) - Int(rightBytes[index]))
+            }
+        }
+
+        for white in [true, false] {
+            let head = try measure(white: white, progress: 0.12)
+            let middle = try measure(white: white, progress: 0.52)
+            let tail = try measure(white: white, progress: 0.92)
+            let resting = try measure(white: white, progress: nil)
+            XCTAssertGreaterThan(abs(head.meanY - middle.meanY), 10)
+            XCTAssertGreaterThan(abs(middle.meanY - tail.meanY), 8)
+            XCTAssertLessThan(hypot(tail.meanX - resting.meanX, tail.meanY - resting.meanY), 12)
+            XCTAssertEqual(head.silhouette, resting.silhouette)
+            XCTAssertEqual(middle.silhouette, resting.silhouette)
+            XCTAssertEqual(tail.silhouette, resting.silhouette)
+
+            let restingPNG = try render(white: white, progress: nil)
+            let enteringTail = try render(white: white, progress: 0.76)
+            let lastSweepFrame = try render(white: white, progress: 0.96)
+            XCTAssertLessThan(try pixelDistance(lastSweepFrame, restingPNG) * 4, try pixelDistance(enteringTail, restingPNG))
+            XCTAssertEqual(try render(white: white, progress: 1), restingPNG)
+        }
+        #endif
     }
 
     func testAppIconForegroundPNGExport() throws {
