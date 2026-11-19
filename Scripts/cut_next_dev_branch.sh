@@ -4,10 +4,14 @@ set -euo pipefail
 usage() {
     cat <<'EOF'
 Usage:
-  ./Scripts/cut_next_dev_branch.sh <new-dev-branch> [--cleanup-old <old-dev-branch>]
+  ./Scripts/cut_next_dev_branch.sh <new-dev-branch>
 
-Example (after releasing dev-1.0.1 -> main & tagging v1.0.1):
-  ./Scripts/cut_next_dev_branch.sh dev-1.0.2 --cleanup-old dev-1.0.1
+Note:
+  Released dev-* branches are kept permanently as read-only archives.
+  --cleanup-old is deprecated and must not be used.
+
+Example (after releasing dev-1.0.3 -> main & tagging v1.0.3):
+  ./Scripts/cut_next_dev_branch.sh dev-1.0.4
 EOF
 }
 
