@@ -25,13 +25,15 @@ BoltZip/
 ├── Package.swift                        # SwiftPM manifest (CBoltCompression, BoltZipCore, boltzip, BoltZipApp, tests)
 ├── Scripts/
 │   ├── build_app.sh                     # Release Apple Silicon (arm64, minOS 26.0) build -> dist/BoltZip.app + .dmg + BoltZipFinderSync.appex + codesign
+│   ├── BundleResources/                 # App, Finder extension and Dock tile plist templates; Finder localizations
 │   ├── verify_release.sh                # Verify bundle, DMG, checksums, packaged CLI and showcase
 │   ├── e2e_finder_ui.sh                 # Exercise Finder URL actions against a packaged app
-│   ├── create_dmg.sh                    # Creates drag-to-Applications HFS+ UDZO .dmg installer with custom Retina background & volume icon
+│   ├── create_dmg.sh                    # Creates drag-to-Applications HFS+ ULMO .dmg with Retina background & volume icon
 │   ├── cut_next_dev_branch.sh           # Option-A release transition helper (cuts dev-X.Y.Z, switches default branch; --cleanup-old is forbidden)
 │   ├── generate_dmg_bg.swift            # CoreGraphics Retina 1x/2x DMG drag-to-Applications backdrop generator
 │   ├── build_universal_deps.sh          # Compile Apple Silicon (arm64, minOS 26.0) static zstd/xz/lz4 into Vendor/Compression/
-│   └── generate_icon.swift              # CoreGraphics procedural 1024x1024 macOS iconset generator
+│   ├── generate_icon.swift              # App and document icon generator
+│   └── IconResourceCompression.swift   # Lossless PNG recompression for document and Dock icons
 ├── Vendor/Compression/                  # Prebuilt Apple Silicon (arm64, minOS 26.0) headers & static libs (zstd, xz, lz4)
 ├── Sources/
 │   ├── BoltZipDockTile/                 # Keeps the selected icon for the pinned Dock tile after quitting
@@ -49,14 +51,17 @@ BoltZip/
 │   │   │   ├── FilenameEncoding.swift   # Auto-detection for UTF-8, GB18030/GBK, Big5, Shift-JIS, EUC-KR, CP437
 │   │   │   └── ZipCrypto.swift          # WinZip AE-2/AE-1 AES-256 (CommonCrypto/CryptoKit) + legacy ZipCrypto
 │   │   ├── Formats/
-│   │   │   ├── ZipBinary.swift          # Little-endian binary readers/writers, DOS dates, extra fields
-│   │   │   ├── ZipReader.swift          # ZIP/ZIP64/split-volume reader, decryption, integrity check
-│   │   │   ├── ZipWriter.swift          # ZIP/ZIP64 writer, split volumes (.z01/.zip), zero-recompress editing
+│   │   │   ├── ZIP/                     # ZIP/ZIP64 reader, writer, volume I/O, binary structures and entry storage policy
 │   │   │   ├── TarCodec.swift           # Pure Swift USTAR/PAX tar + .tar.{gz,zst,xz,bz2,lz4} + single-stream
-│   │   │   └── ExtendedArchiveDriver.swift # System libarchive reader for extended formats; /usr/bin/tar for 7z creation
+│   │   │   ├── SevenZipWriter.swift       # Streaming libarchive 7z writer with byte progress and cancellation
+│   │   │   ├── ArchiveFormatDetection.swift # Content-based read format detection, independent of filename
+│   │   │   └── ExtendedArchiveDriver.swift # System libarchive reader for extended formats
 │   │   ├── Engine/
 │   │   │   ├── ArchiveAssociationService.swift # Shared LaunchServices UTI & default app association logic
-│   │   │   ├── BoltArchiveSession.swift # High-level BoltArchiveEngine (inspect, extract, create, editZip, test)
+│   │   │   ├── BoltArchiveEngine.swift  # Public archive interface and format dispatch for inspection, creation and editing
+│   │   │   ├── ArchiveIntegrity.swift   # Integrity verification across formats
+│   │   │   ├── ArchiveInputCollector.swift # Shared filesystem traversal for ZIP, TAR and 7z writers
+│   │   │   ├── Extraction/              # Extraction orchestration, planning and output safety
 │   │   │   └── BenchmarkRunner.swift    # Multi-codec local throughput & ratio benchmark
 │   │   └── Icons/                       # Centralized AppIcon + 17 per-format Document Icon CG artwork & types
 │   │       ├── BoltIconTypes.swift
@@ -64,7 +69,10 @@ BoltZip/
 │   │       ├── BoltAppIconArtwork.swift
 │   │       └── BoltDocumentIconArtwork.swift
 │   ├── BoltZipCLI/
-│   │   └── main.swift                   # `boltzip` CLI (a, x, l, t, associate, bench, engines)
+│   │   ├── main.swift                   # `boltzip` entry point and command dispatch
+│   │   ├── CLIArguments.swift           # Option parsing, resolution and defaults
+│   │   ├── CLIOutput.swift              # Usage, JSON and terminal progress
+│   │   └── *Command*.swift              # Archive operations, reports and system associations
 │   ├── BoltZipFinderSync/
 │   │   ├── FinderSync.swift             # Top-level Finder right-click "Bolt >" menu extension (sandboxed .appex)
 │   │   └── FinderSync.entitlements
@@ -75,7 +83,8 @@ BoltZip/
 │       │   ├── BoltBrandIconViews.swift
 │       │   └── BoltFileIconCatalog.swift
 │       ├── Localization/L10n.swift      # Idiomatic multi-language engine (Follow System / zh-Hans / zh-Hant / en / ja)
-│       ├── Models/                    # Workspace state, archive operations, navigation and Finder HUD
+│       ├── Models/                    # Application preferences, appearance, updates and other shared state
+│       ├── Workspace/                 # View model and workflow files for loading, navigation, preview, archive operations and Finder HUD
 │       ├── Services/
 │       │   ├── DropHelper.swift
 │       │   ├── QuickActionInstaller.swift # pluginkit + lsregister manager for BoltZipFinderSync.appex
@@ -126,7 +135,9 @@ open dist/BoltZip.app
    - `ZipVolumeAccessor.readSpanning` handles payloads or headers spanning across `.z01`, `.z02`, ..., `.zip`.
 4. **In-Place ZIP Editing (`ZipWriter.editArchive`)**:
    - Untouched entries are copied as raw compressed/encrypted payloads without recompression. Keep it zero-recompress!
-5. **Path Traversal Guard (`BoltArchiveEngine.safeDestinationURL`)**:
+   - Replacements retain the original entry position, codec, Store state and supported encryption mode. Unknown levels use disclosed codec defaults; unsupported modes must not silently change the source format.
+   - ZIP containers including JAR/APK can be edited regardless of suffix. APK signing, SDK setup and installability validation are outside the basic editing workflow.
+5. **Path Traversal Guard (`ArchiveExtractionDestination.safeDestinationURL`)**:
    - Never allow archive entries containing `..` or absolute paths to write outside the extraction root.
 6. **FinderSync Extension Signing & IPC**:
    - `BoltZipFinderSync.appex` runs inside App Sandbox (`FinderSync.entitlements`).

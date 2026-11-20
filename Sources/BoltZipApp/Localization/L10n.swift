@@ -52,6 +52,92 @@ struct L10n: Sendable {
         self.lang = language.resolved
     }
 
+    static var current: L10n {
+        L10n(language: AppLanguage(rawValue: UserDefaults.standard.string(forKey: "BoltZip.AppLanguage") ?? "system") ?? .system)
+    }
+
+    func archiveFormatDisplayName(_ format: ArchiveFormat, fileURL: URL) -> String {
+        let title = format.displayName.components(separatedBy: " (.").first ?? format.displayName
+        let filename = fileURL.lastPathComponent
+        let compound = ArchiveFormat.allCases.map(\.fileExtension)
+            .filter { $0.contains(".") && filename.lowercased().hasSuffix("." + $0) }
+            .max { $0.count < $1.count }
+        let suffix = compound.map { String(filename.suffix($0.count)) } ?? fileURL.pathExtension
+        return suffix.isEmpty ? title : "\(title) (.\(suffix))"
+    }
+
+    func operationErrorMessage(_ error: any Error) -> String {
+        if let compatibility = error as? ArchiveEditCompatibilityError { return archiveEditCompatibilityMessage(compatibility) }
+        if let updateError = error as? UpdateError { return updateErrorMessage(updateError) }
+        if let error = error as? ArchiveOperationError {
+            switch error {
+            case .outputIsInput:
+                return t("压缩包不能同时作为输入文件", "壓縮檔不能同時作為輸入檔案", "The archive output cannot also be an input file.", "出力先の圧縮ファイルを入力ファイルとして指定することはできません。")
+            case .outputIsDirectory(let name):
+                return t("目标是文件夹，无法替换为压缩文件：\(name)", "目標是資料夾，無法替換為壓縮檔：\(name)", "Cannot replace a directory with an archive: \(name)", "フォルダを圧縮ファイルで置き換えることはできません: \(name)")
+            case .inputChanged(let path):
+                return t("压缩过程中输入文件发生变化：\(path)", "壓縮過程中輸入檔案發生變化：\(path)", "Input changed while archiving: \(path)", "圧縮中に入力ファイルが変更されました: \(path)")
+            case .encryptionRequiresZIP:
+                return t("该格式不支持加密，请使用 ZIP 或关闭加密", "此格式不支援加密，請使用 ZIP 或關閉加密", "This format does not support encryption. Use ZIP or disable encryption.", "この形式は暗号化に対応していません。ZIP を使用するか暗号化を解除してください。")
+            case .splitVolumesRequireZIP:
+                return t("该格式不支持分卷，请使用 ZIP", "此格式不支援分卷，請使用 ZIP", "This format does not support split volumes. Use ZIP.", "この形式は分割に対応していません。ZIP を使用してください。")
+            case .applicationNotFound:
+                return t("找不到 BoltZip.app，请先安装应用", "找不到 BoltZip.app，請先安裝應用程式", "BoltZip.app was not found. Install the app first.", "BoltZip.app が見つかりません。先にアプリをインストールしてください。")
+            }
+        }
+        return error.localizedDescription
+    }
+
+    var editEntryText: String { t("编辑文本…", "編輯文字…", "Edit Text…", "テキストを編集…") }
+    var replaceEntryFile: String { t("替换包内文件…", "替換封存檔內檔案…", "Replace Entry…", "書庫内のファイルを置換…") }
+    var archiveEditSaved: String { t("已保存，原条目压缩方式已保留", "已儲存，原項目壓縮方式已保留", "Saved with the original entry compression methods.", "元の項目の圧縮方式を保持して保存しました。") }
+    var archiveTextEditorLimit: String { t("内置编辑器支持不超过 2 MB 的文本。较大文件可先编辑，再使用“替换包内文件”。", "內建編輯器支援不超過 2 MB 的文字。較大檔案可先編輯，再使用「替換封存檔內檔案」。", "The editor supports text up to 2 MB. Edit larger files externally, then use Replace Entry.", "内蔵エディタは 2 MB までのテキストに対応します。大きなファイルは外部で編集し、「書庫内のファイルを置換」を使用してください。") }
+    var archiveTextEncodingUnsupported: String { t("此文件不是支持的 UTF-8／UTF-16 文本。请使用外部编辑器处理后替换包内文件。", "此檔案不是支援的 UTF-8／UTF-16 文字。請使用外部編輯器處理後替換封存檔內檔案。", "This is not supported UTF-8/UTF-16 text. Edit it externally, then replace the entry.", "対応する UTF-8／UTF-16 テキストではありません。外部で編集してから項目を置換してください。") }
+    var archiveChangedDuringEdit: String { t("编辑期间原压缩包已发生变化，请重新打开该条目后再保存。", "編輯期間原封存檔已變更，請重新開啟該項目後再儲存。", "The archive changed during editing. Reopen this entry before saving.", "編集中に元の書庫が変更されました。項目を開き直してから保存してください。") }
+    var originalArchiveSaveUnsupported: String { t("无法按原方式保存", "無法依原方式儲存", "Cannot Save in the Original Form", "元の方式では保存できません") }
+    var saveAsCompatibleZIP: String { t("另存为普通 ZIP…", "另存為一般 ZIP…", "Save as Standard ZIP…", "通常の ZIP として保存…") }
+    var compatibleZIPExplanation: String { t("可以取消保存，或生成新的普通 ZIP。新 ZIP 不会冒充原应用包，也不保证可直接安装或运行。原文件将保留。", "可以取消儲存，或產生新的一般 ZIP。新 ZIP 不會冒充原應用程式套件，也不保證可直接安裝或執行。原檔案將保留。", "Cancel, or create a new standard ZIP. It will not masquerade as the original application package or be treated as ready to install or run. The original is preserved.", "保存を取り消すか、新しい通常の ZIP を作成できます。元のアプリケーションパッケージとは区別され、インストールや実行は保証されません。元のファイルは保持されます。") }
+
+    func compressionPreservationNotice(_ profile: ArchiveEntryCompressionProfile) -> String {
+        guard let algorithm = profile.algorithm else {
+            return t("原压缩方式暂不支持写入，可取消或另存为普通 ZIP。", "原壓縮方式暫不支援寫入，可取消或另存為一般 ZIP。", "The original compression cannot be written. Cancel or save a standard ZIP.", "元の圧縮方式での書き込みに対応していません。取り消すか通常の ZIP として保存できます。")
+        }
+        if algorithm == .store {
+            return t("原条目为 Store，保存时继续不压缩；其他条目的原压缩数据保持不变。", "原項目為 Store，儲存時維持不壓縮；其他項目的原壓縮資料保持不變。", "This entry stays uncompressed (Store). Other entries keep their original compressed data.", "この項目は非圧縮（Store）のまま保存し、他の項目の圧縮データは保持します。")
+        }
+        let level = profile.recordedLevel ?? algorithm.defaultLevel
+        return profile.recordedLevel == nil
+            ? t("沿用 \(algorithm.shortName)；原级别未记录，修改条目使用默认级别 \(level)。其他条目不重压缩。", "沿用 \(algorithm.shortName)；原等級未記錄，修改項目使用預設等級 \(level)。其他項目不重新壓縮。", "Keeps \(algorithm.shortName). The original level is not recorded; edited entries use default level \(level). Other entries are not recompressed.", "\(algorithm.shortName) を保持します。元のレベルは記録されていないため、編集項目には既定レベル \(level) を使用し、他の項目は再圧縮しません。")
+            : t("沿用 \(algorithm.shortName)，保留已记录的级别 \(level)。其他条目不重压缩。", "沿用 \(algorithm.shortName)，保留已記錄的等級 \(level)。其他項目不重新壓縮。", "Keeps \(algorithm.shortName) and its recorded level \(level). Other entries are not recompressed.", "\(algorithm.shortName) と記録済みレベル \(level) を保持し、他の項目は再圧縮しません。")
+    }
+
+    func archiveEditCompatibilityMessage(_ error: ArchiveEditCompatibilityError) -> String {
+        switch error {
+        case .unsupportedCompression(let path, let method):
+            return t("无法按条目“\(path)”原有的压缩方式 \(method) 写入。", "無法依項目「\(path)」原有的壓縮方式 \(method) 寫入。", "Cannot write entry “\(path)” with its original method \(method).", "項目「\(path)」を元の圧縮方式 \(method) で書き込めません。")
+        case .unsupportedEncryption(let path):
+            return t("无法保留条目“\(path)”原有的加密模式。", "無法保留項目「\(path)」原有的加密模式。", "Cannot preserve the encryption mode of “\(path)”.", "項目「\(path)」の元の暗号化方式を保持できません。")
+        case .ambiguousEntry(let path):
+            return t("原包包含多个同名条目“\(path)”，无法安全确定替换目标。", "原套件包含多個同名項目「\(path)」，無法安全確認替換目標。", "Multiple entries are named “\(path)”; the replacement target is ambiguous.", "同名の項目「\(path)」が複数あるため、安全に置換対象を特定できません。")
+        }
+    }
+
+    func updateErrorMessage(_ error: UpdateError) -> String {
+        switch error {
+        case .networkFailed(let detail): return detail
+        case .noDMGAsset:
+            return t("该版本没有适用于 Apple Silicon 的 DMG 安装包", "此版本沒有適用於 Apple Silicon 的 DMG 安裝檔", "This release has no Apple Silicon DMG installer.", "このリリースには Apple Silicon 用の DMG インストーラがありません。")
+        case .missingChecksumManifest:
+            return t("该版本缺少有效的 SHA-256 校验清单", "此版本缺少有效的 SHA-256 校驗清單", "This release has no valid SHA-256 checksum manifest.", "このリリースには有効な SHA-256 チェックサム一覧がありません。")
+        case .checksumMismatch(let expected, let actual):
+            return t("安装包 SHA-256 校验失败（预期 \(expected.prefix(12))，实际 \(actual.prefix(12))）", "安裝檔 SHA-256 校驗失敗（預期 \(expected.prefix(12))，實際 \(actual.prefix(12))）", "Installer SHA-256 mismatch (expected \(expected.prefix(12)), got \(actual.prefix(12))).", "インストーラの SHA-256 が一致しません（期待値 \(expected.prefix(12))、実際 \(actual.prefix(12))）。")
+        case .invalidResponse:
+            return t("更新服务返回了无效数据", "更新服務傳回了無效資料", "The update service returned invalid data.", "更新サービスから無効なデータが返されました。")
+        case .downloadFailed:
+            return t("安装包下载失败，请稍后重试", "安裝檔下載失敗，請稍後重試", "The installer download failed. Try again later.", "インストーラをダウンロードできませんでした。後でもう一度お試しください。")
+        }
+    }
+
     private func t(_ sc: String, _ tc: String, _ en: String, _ ja: String) -> String {
         switch lang {
         case .zhHans: return sc

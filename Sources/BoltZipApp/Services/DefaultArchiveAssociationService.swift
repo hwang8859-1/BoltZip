@@ -16,10 +16,11 @@ enum DefaultArchiveAssociationService {
     }
 
     static func setDefault(for groups: [ArchiveAssociationGroup], toBoltZip: Bool) async -> String? {
-        await ArchiveAssociationService.setDefault(
+        let error = await ArchiveAssociationService.setDefault(
             for: groups,
             toBoltZip: toBoltZip,
             appURL: resolveBoltZipAppURL()
         )
+        return error.map { L10n.current.operationErrorMessage($0) }
     }
 }

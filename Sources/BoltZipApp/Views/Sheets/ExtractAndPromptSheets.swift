@@ -246,6 +246,9 @@ struct PasswordPromptSheet: View {
                             vm.testIntegrity(password: pw, archiveURL: archiveURL)
                         case .unlockForEdit(let urls, let targetFolder):
                             vm.unlockForEditAndAdd(urls: urls, targetFolder: targetFolder, password: pw)
+                        case .editText(let entry):
+                            vm.savedPassword = pw
+                            vm.editEntryText(entry)
                         }
                     }
                     .boltGlassProminentButton()

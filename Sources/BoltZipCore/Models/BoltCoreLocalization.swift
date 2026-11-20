@@ -53,4 +53,48 @@ public enum BoltCoreLocalization: Sendable {
         case .ja: return ja
         }
     }
+
+    static var archiveOutputIsInput: String {
+        t("压缩包不能同时作为输入文件", "壓縮檔不能同時作為輸入檔案",
+          "The archive output cannot also be an input file.", "出力先の圧縮ファイルを入力ファイルとして指定することはできません。")
+    }
+
+    static var applicationNotFoundForAssociation: String {
+        t("找不到 BoltZip.app，请先安装应用", "找不到 BoltZip.app，請先安裝應用程式",
+          "BoltZip.app was not found. Install the app first.", "BoltZip.app が見つかりません。先にアプリをインストールしてください。")
+    }
+
+    static var encryptionRequiresZIP: String {
+        t("该格式不支持加密，请使用 ZIP 或关闭加密", "此格式不支援加密，請使用 ZIP 或關閉加密",
+          "This format does not support encryption. Use ZIP or disable encryption.", "この形式は暗号化に対応していません。ZIP を使用するか暗号化を解除してください。")
+    }
+
+    static var splitVolumesRequireZIP: String {
+        t("该格式不支持分卷，请使用 ZIP", "此格式不支援分卷，請使用 ZIP",
+          "This format does not support split volumes. Use ZIP.", "この形式は分割に対応していません。ZIP を使用してください。")
+    }
+
+    static func cannotReplaceDirectoryWithArchive(_ name: String) -> String {
+        t("目标是文件夹，无法替换为压缩文件：\(name)", "目標是資料夾，無法替換為壓縮檔：\(name)",
+          "Cannot replace a directory with an archive: \(name)", "フォルダを圧縮ファイルで置き換えることはできません: \(name)")
+    }
+
+    static func inputChangedWhileArchiving(_ path: String) -> String {
+        t("压缩过程中输入文件发生变化：\(path)", "壓縮過程中輸入檔案發生變化：\(path)",
+          "Input changed while archiving: \(path)", "圧縮中に入力ファイルが変更されました: \(path)")
+    }
+
+    static func archiveEditCompatibilityMessage(_ error: ArchiveEditCompatibilityError) -> String {
+        switch error {
+        case .unsupportedCompression(let path, let method):
+            return t("无法按条目“\(path)”原有的压缩方式 \(method) 写入。", "無法依項目「\(path)」原有的壓縮方式 \(method) 寫入。",
+                     "Cannot write entry “\(path)” with its original method \(method).", "項目「\(path)」を元の圧縮方式 \(method) で書き込めません。")
+        case .unsupportedEncryption(let path):
+            return t("无法保留条目“\(path)”原有的加密模式。", "無法保留項目「\(path)」原有的加密模式。",
+                     "Cannot preserve the encryption mode of “\(path)”.", "項目「\(path)」の元の暗号化方式を保持できません。")
+        case .ambiguousEntry(let path):
+            return t("原包包含多个同名条目“\(path)”，无法安全确定替换目标。", "原套件包含多個同名項目「\(path)」，無法安全確認替換目標。",
+                     "Multiple entries are named “\(path)”; the replacement target is ambiguous.", "同名の項目「\(path)」が複数あるため、安全に置換対象を特定できません。")
+        }
+    }
 }

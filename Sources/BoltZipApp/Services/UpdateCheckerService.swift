@@ -15,8 +15,10 @@ struct SemanticVersion: Comparable, Hashable, Sendable {
         if let dashIdx = cleaned.firstIndex(of: "-") {
             cleaned = String(cleaned[..<dashIdx])
         }
-        let parts = cleaned.split(separator: ".").compactMap { Int($0) }
-        guard !parts.isEmpty else { return nil }
+        let components = cleaned.split(separator: ".", omittingEmptySubsequences: false)
+        guard (1...3).contains(components.count), components.allSatisfy({ !$0.isEmpty && $0.utf8.allSatisfy { (48...57).contains($0) } }) else { return nil }
+        let parts = components.compactMap { Int($0) }
+        guard parts.count == components.count else { return nil }
         self.major = parts[0]
         self.minor = parts.count > 1 ? parts[1] : 0
         self.patch = parts.count > 2 ? parts[2] : 0
@@ -55,16 +57,10 @@ enum UpdateError: LocalizedError, Sendable {
     case missingChecksumManifest
     case checksumMismatch(expected: String, actual: String)
     case invalidResponse
+    case downloadFailed
 
     var errorDescription: String? {
-        switch self {
-        case .networkFailed(let msg): return msg
-        case .noDMGAsset: return "Release does not contain a macOS arm64 DMG installer."
-        case .missingChecksumManifest: return "Release does not contain a SHA256SUMS.txt manifest."
-        case .checksumMismatch(let expected, let actual):
-            return "DMG SHA-256 verification failed (expected \(expected.prefix(12))..., got \(actual.prefix(12))...)."
-        case .invalidResponse: return "Invalid update feed response."
-        }
+        L10n.current.updateErrorMessage(self)
     }
 }
 
@@ -108,15 +104,15 @@ enum UpdateCheckerService {
         savedETag: String,
         skippedVersion: String,
         lastCheckTimestamp: TimeInterval
-    ) async throws -> (outcome: UpdateCheckOutcome, newETag: String?) {
+    ) async throws -> (outcome: UpdateCheckOutcome, newETag: String?, didPerformCheck: Bool) {
         let now = Date().timeIntervalSince1970
         let currentStr = currentAppVersionString()
         guard let currentSemVer = SemanticVersion(currentStr) else {
-            return (.upToDate(currentVersion: currentStr), savedETag.isEmpty ? nil : savedETag)
+            return (.upToDate(currentVersion: currentStr), savedETag.isEmpty ? nil : savedETag, false)
         }
 
         if !force, lastCheckTimestamp > 0, (now - lastCheckTimestamp) < autoCheckInterval {
-            return (.upToDate(currentVersion: currentStr), savedETag.isEmpty ? nil : savedETag)
+            return (.upToDate(currentVersion: currentStr), savedETag.isEmpty ? nil : savedETag, false)
         }
 
         var request = URLRequest(url: feedURL(), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
@@ -132,7 +128,7 @@ enum UpdateCheckerService {
         }
 
         if http.statusCode == 304 {
-            return (.upToDate(currentVersion: currentStr), savedETag)
+            return (.upToDate(currentVersion: currentStr), savedETag, true)
         }
         guard (200..<300).contains(http.statusCode) else {
             throw UpdateError.networkFailed("HTTP \(http.statusCode)")
@@ -154,11 +150,11 @@ enum UpdateCheckerService {
         .sorted { $0.0 > $1.0 }
 
         guard let (latestVer, latestRelease) = candidates.first else {
-            return (.upToDate(currentVersion: currentStr), nextETag)
+            return (.upToDate(currentVersion: currentStr), nextETag, true)
         }
 
         if !force && !skippedVersion.isEmpty && skippedVersion == latestVer.formatted {
-            return (.upToDate(currentVersion: currentStr), nextETag)
+            return (.upToDate(currentVersion: currentStr), nextETag, true)
         }
 
         let dmgAsset = latestRelease.assets.first {
@@ -184,13 +180,17 @@ enum UpdateCheckerService {
             dmgSizeBytes: dmgAsset?.size ?? 0,
             sha256SumsURL: shaAsset.flatMap { URL(string: $0.browser_download_url) }
         )
-        return (.updateAvailable(info), nextETag)
+        return (.updateAvailable(info), nextETag, true)
     }
 
     static func downloadAndVerifyDMG(release: UpdateReleaseInfo) async throws -> URL {
         guard let dmgRemoteURL = release.dmgURL,
               let dmgName = release.dmgFileName else {
             throw UpdateError.noDMGAsset
+        }
+        guard dmgName == URL(fileURLWithPath: dmgName).lastPathComponent,
+              dmgName.lowercased().hasSuffix(".dmg"), !dmgName.contains("\\") else {
+            throw UpdateError.invalidResponse
         }
         guard let sumsURL = release.sha256SumsURL else {
             throw UpdateError.missingChecksumManifest
@@ -209,7 +209,7 @@ enum UpdateCheckerService {
         let (tempDMGURL, dmgResp) = try await URLSession.shared.download(from: dmgRemoteURL)
         guard let dmgHTTP = dmgResp as? HTTPURLResponse, (200..<300).contains(dmgHTTP.statusCode) else {
             try? FileManager.default.removeItem(at: tempDMGURL)
-            throw UpdateError.networkFailed("Failed downloading installer image.")
+            throw UpdateError.downloadFailed
         }
 
         let actualHash = try computeFileSHA256Hex(at: tempDMGURL)
@@ -221,17 +221,24 @@ enum UpdateCheckerService {
         let fm = FileManager.default
         let downloadsDir = fm.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? fm.temporaryDirectory
         var destURL = downloadsDir.appendingPathComponent(dmgName)
-        if fm.fileExists(atPath: destURL.path) {
-            try? fm.removeItem(at: destURL)
-        }
+        destURL = availableDownloadURL(destURL)
         do {
             try fm.moveItem(at: tempDMGURL, to: destURL)
         } catch {
-            destURL = fm.temporaryDirectory.appendingPathComponent(dmgName)
-            try? fm.removeItem(at: destURL)
+            destURL = availableDownloadURL(fm.temporaryDirectory.appendingPathComponent(dmgName))
             try fm.moveItem(at: tempDMGURL, to: destURL)
         }
         return destURL
+    }
+
+    static func availableDownloadURL(_ proposed: URL) -> URL {
+        var candidate = proposed
+        var count = 1
+        while (try? FileManager.default.attributesOfItem(atPath: candidate.path)) != nil {
+            candidate = proposed.deletingLastPathComponent().appendingPathComponent("\(proposed.deletingPathExtension().lastPathComponent) (\(count)).\(proposed.pathExtension)")
+            count += 1
+        }
+        return candidate
     }
 
     static func parseSHA256(from manifest: String, filename: String) -> String? {

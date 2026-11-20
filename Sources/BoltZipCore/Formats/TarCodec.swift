@@ -31,7 +31,7 @@ public enum TarCodec {
         try fm.createDirectory(at: destinationFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 
         let root = destinationFileURL.deletingLastPathComponent()
-        let stage = try BoltArchiveEngine.makeExtractionStage(near: destinationFileURL, under: root)
+        let stage = try ArchiveExtractionDestination.makeExtractionStage(near: destinationFileURL, under: root)
         defer { try? fm.removeItem(at: stage) }
         let stagedItem = stage.appendingPathComponent("payload")
 
@@ -85,7 +85,7 @@ public enum TarCodec {
         default:
             throw BoltZipError.unsupportedFormat(format.displayName)
         }
-        try BoltArchiveEngine.commitExtractedItem(stagedItem, to: destinationFileURL, under: root,
+        try ArchiveExtractionDestination.commitExtractedItem(stagedItem, to: destinationFileURL, under: root,
                                                   policy: .overwrite, controller: controller)
     }
 
@@ -134,13 +134,13 @@ public enum TarCodec {
             guard let first = entries.first else { return }
             if stripMacJunk && MacJunkFilter.isJunk(path: first.path) { return }
             if let sel = selectedPaths, !sel.isEmpty,
-               !BoltArchiveEngine.pathMatchesSelection(first.path, selectedPaths: sel) {
+               !ArchiveExtractionDestination.pathMatchesSelection(first.path, selectedPaths: sel) {
                 return
             }
 
-            let outputPath = BoltArchiveEngine.remapTopLevelFolder(in: first.path, renameMap: topLevelDirRenameMap)
-            let initialDest = try BoltArchiveEngine.safeDestinationURL(for: outputPath, under: destinationURL)
-            guard let targetURL = try BoltArchiveEngine.prepareExtractTargetURL(
+            let outputPath = ArchiveExtractionDestination.remapTopLevelFolder(in: first.path, renameMap: topLevelDirRenameMap)
+            let initialDest = try ArchiveExtractionDestination.safeDestinationURL(for: outputPath, under: destinationURL)
+            guard let targetURL = try ArchiveExtractionDestination.prepareExtractTargetURL(
                 initialURL: initialDest,
                 under: destinationURL,
                 policy: overwritePolicy
@@ -148,7 +148,7 @@ public enum TarCodec {
                 return
             }
 
-            let stage = try BoltArchiveEngine.makeExtractionStage(near: targetURL, under: destinationURL)
+            let stage = try ArchiveExtractionDestination.makeExtractionStage(near: targetURL, under: destinationURL)
             defer { try? fm.removeItem(at: stage) }
             let stageURL = stage.appendingPathComponent("payload")
             try decompressStreamFile(from: url, to: stageURL, format: format, controller: controller) { readBytes, totalComp in
@@ -161,7 +161,7 @@ public enum TarCodec {
                 ))
             }
 
-            try BoltArchiveEngine.commitExtractedItem(stageURL, to: targetURL, under: destinationURL,
+            try ArchiveExtractionDestination.commitExtractedItem(stageURL, to: targetURL, under: destinationURL,
                                                       policy: overwritePolicy, controller: controller)
             let attrs: [FileAttributeKey: Any] = [
                 .modificationDate: first.modifiedDate,
@@ -210,18 +210,20 @@ public enum TarCodec {
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
         try controller?.checkpoint()
-        let items = try ZipWriter.collectInputItems(
+        let items = try ArchiveInputCollector.collect(
             from: inputURLs,
             excludeMacJunk: options.excludeMacJunk,
-            preserveSymlinks: options.preserveSymlinks
+            preserveSymlinks: options.preserveSymlinks,
+            excluding: [outputURL], controller: controller
         )
         let totalBytes = items.reduce(UInt64(0)) { $0 + $1.fileSize }
         var stagedBytes: UInt64 = 0
         let isRawTar = (options.format == .tar)
 
         let fm = FileManager.default
-        let tempTarURL = fm.temporaryDirectory.appendingPathComponent("boltzip-tar-\(UUID().uuidString).tar")
-        defer { try? fm.removeItem(at: tempTarURL) }
+        let outputStage = try ArchiveOutputTransaction.makeStage(for: outputURL)
+        defer { try? fm.removeItem(at: outputStage) }
+        let tempTarURL = outputStage.appendingPathComponent("payload.tar")
 
         fm.createFile(atPath: tempTarURL.path, contents: nil)
         let tarHandle = try FileHandle(forWritingTo: tempTarURL)
@@ -257,13 +259,7 @@ public enum TarCodec {
         try controller?.checkpoint()
 
         if options.format == .tar {
-            let stageOut = fm.temporaryDirectory.appendingPathComponent("boltzip-tarout-\(UUID().uuidString).tar")
-            defer { try? fm.removeItem(at: stageOut) }
-            try fm.moveItem(at: tempTarURL, to: stageOut)
-            if fm.fileExists(atPath: outputURL.path) {
-                try fm.removeItem(at: outputURL)
-            }
-            try fm.moveItem(at: stageOut, to: outputURL)
+            try ArchiveOutputTransaction.publish([tempTarURL], to: [outputURL])
             progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outputURL.lastPathComponent, processedBytes: totalBytes, totalBytes: totalBytes))
             return
         }
@@ -281,8 +277,7 @@ public enum TarCodec {
         }
 
         let workers = BoltConcurrency.resolvedWorkerCount(override: options.workerCount)
-        let stageCompURL = fm.temporaryDirectory.appendingPathComponent("boltzip-tarcmp-\(UUID().uuidString).tmp")
-        defer { try? fm.removeItem(at: stageCompURL) }
+        let stageCompURL = outputStage.appendingPathComponent("archive")
 
         switch options.format {
         case .tarGz:
@@ -300,10 +295,7 @@ public enum TarCodec {
         }
 
         try controller?.checkpoint()
-        if fm.fileExists(atPath: outputURL.path) {
-            try fm.removeItem(at: outputURL)
-        }
-        try fm.moveItem(at: stageCompURL, to: outputURL)
+        try ArchiveOutputTransaction.publish([stageCompURL], to: [outputURL])
         progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outputURL.lastPathComponent, processedBytes: totalBytes, totalBytes: totalBytes))
     }
 
@@ -650,22 +642,22 @@ public enum TarCodec {
                 return true
             }
             if let sel = selectedPaths, !sel.isEmpty,
-               !BoltArchiveEngine.pathMatchesSelection(entry.path, selectedPaths: sel) {
+               !ArchiveExtractionDestination.pathMatchesSelection(entry.path, selectedPaths: sel) {
                 return true
             }
 
-            let outputPath = BoltArchiveEngine.remapTopLevelFolder(in: entry.path, renameMap: topLevelDirRenameMap)
-            let initialDest = try BoltArchiveEngine.safeDestinationURL(for: outputPath, under: destinationURL)
+            let outputPath = ArchiveExtractionDestination.remapTopLevelFolder(in: entry.path, renameMap: topLevelDirRenameMap)
+            let initialDest = try ArchiveExtractionDestination.safeDestinationURL(for: outputPath, under: destinationURL)
 
             if entry.isDirectory {
-                try BoltArchiveEngine.assertNoSymlinkTraversal(at: initialDest, under: destinationURL)
+                try ArchiveExtractionDestination.assertNoSymlinkTraversal(at: initialDest, under: destinationURL)
                 try fm.createDirectory(at: initialDest, withIntermediateDirectories: true)
                 return true
             }
 
             if entry.isSymbolicLink {
                 if restoreSymlinks {
-                    try BoltArchiveEngine.createSafeSymlink(
+                    try ArchiveExtractionDestination.createSafeSymlink(
                         at: initialDest,
                         target: info.symlinkTarget,
                         under: destinationURL,
@@ -675,7 +667,7 @@ public enum TarCodec {
                 return true
             }
 
-            guard let targetURL = try BoltArchiveEngine.prepareExtractTargetURL(
+            guard let targetURL = try ArchiveExtractionDestination.prepareExtractTargetURL(
                 initialURL: initialDest,
                 under: destinationURL,
                 policy: overwritePolicy
@@ -684,7 +676,7 @@ public enum TarCodec {
                 return true
             }
 
-            let stage = try BoltArchiveEngine.makeExtractionStage(near: targetURL, under: destinationURL)
+            let stage = try ArchiveExtractionDestination.makeExtractionStage(near: targetURL, under: destinationURL)
             defer { try? fm.removeItem(at: stage) }
             let stagedFile = stage.appendingPathComponent("payload")
             try fh.seek(toOffset: info.payloadOffset)
@@ -721,7 +713,7 @@ public enum TarCodec {
                 .posixPermissions: NSNumber(value: entry.permissions)
             ]
             try? fm.setAttributes(attrs, ofItemAtPath: stagedFile.path)
-            try BoltArchiveEngine.commitExtractedItem(stagedFile, to: targetURL, under: destinationURL,
+            try ArchiveExtractionDestination.commitExtractedItem(stagedFile, to: targetURL, under: destinationURL,
                                                       policy: overwritePolicy, controller: controller)
             return true
         }
@@ -729,7 +721,7 @@ public enum TarCodec {
 
     private static func streamAppendTarEntry(
         to handle: FileHandle,
-        item: ZipWriter.InputItem,
+        item: ArchiveInputItem,
         controller: ArchiveTaskController?,
         onChunkProgress: (UInt64) -> Void
     ) throws {

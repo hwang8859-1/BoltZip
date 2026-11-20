@@ -48,6 +48,10 @@ extension ArchiveExplorerView {
 
         if listing.canEditInPlace {
             Divider()
+            if let single = picked.first, picked.count == 1, !single.isDirectory, !single.isSymbolicLink {
+                Button(l.editEntryText) { vm.editEntryText(single) }
+                Button(l.replaceEntryFile) { vm.replaceEntryFile(single) }
+            }
             Button(l.ctxAddHere) {
                 vm.addItemsToCurrentZipPanel()
             }

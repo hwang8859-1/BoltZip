@@ -76,6 +76,11 @@ let package = Package(
             name: "BoltZipCoreTests",
             dependencies: ["BoltZipCore"],
             path: "Tests/BoltZipCoreTests"
+        ),
+        .testTarget(
+            name: "BoltZipAppTests",
+            dependencies: ["BoltZipApp"],
+            path: "Tests/BoltZipAppTests"
         )
     ]
 )

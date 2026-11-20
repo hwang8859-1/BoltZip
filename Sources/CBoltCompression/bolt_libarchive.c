@@ -28,6 +28,7 @@ extern int archive_read_support_format_iso9660(struct archive *a);
 extern int archive_read_support_format_cab(struct archive *a);
 extern int archive_read_support_format_xar(struct archive *a);
 extern int archive_read_support_format_all(struct archive *a);
+extern int archive_read_support_format_raw(struct archive *a);
 extern int archive_read_support_filter_all(struct archive *a);
 extern int archive_read_add_passphrase(struct archive *a, const char *passphrase);
 extern int archive_read_open_filename(struct archive *a, const char *filename, size_t block_size);
@@ -41,6 +42,25 @@ extern const char *archive_error_string(struct archive *a);
 extern const char *archive_format_name(struct archive *a);
 extern const char *archive_version_string(void);
 extern const char *archive_version_details(void);
+extern int archive_format(struct archive *a);
+extern int archive_filter_code(struct archive *a, int filter);
+extern struct archive *archive_write_new(void);
+extern int archive_write_set_format_7zip(struct archive *a);
+extern int archive_write_set_options(struct archive *a, const char *options);
+extern int archive_write_open_filename(struct archive *a, const char *path);
+extern int archive_write_header(struct archive *a, struct archive_entry *entry);
+extern ssize_t archive_write_data(struct archive *a, const void *data, size_t size);
+extern int archive_write_close(struct archive *a);
+extern int archive_write_fail(struct archive *a);
+extern int archive_write_free(struct archive *a);
+extern struct archive_entry *archive_entry_new(void);
+extern void archive_entry_free(struct archive_entry *entry);
+extern void archive_entry_set_pathname_utf8(struct archive_entry *entry, const char *path);
+extern void archive_entry_set_symlink_utf8(struct archive_entry *entry, const char *target);
+extern void archive_entry_set_filetype(struct archive_entry *entry, unsigned int type);
+extern void archive_entry_set_perm(struct archive_entry *entry, mode_t mode);
+extern void archive_entry_set_size(struct archive_entry *entry, int64_t size);
+extern void archive_entry_set_mtime(struct archive_entry *entry, time_t time, long ns);
 
 extern const char *archive_entry_pathname_utf8(struct archive_entry *entry);
 extern const char *archive_entry_pathname(struct archive_entry *entry);
@@ -67,6 +87,27 @@ const char *bolt_libarchive_version(void) {
     return ver;
 }
 
+int32_t bolt_la_probe(const char *path, int32_t *format, int32_t *filter) {
+    struct archive *a = archive_read_new();
+    if (!a) return -1;
+    archive_read_support_format_all(a);
+    archive_read_support_format_raw(a);
+    archive_read_support_filter_all(a);
+    int result = archive_read_open_filename(a, path, 65536);
+    if (result == BOLT_ARCHIVE_OK || result == BOLT_ARCHIVE_WARN) {
+        struct archive_entry *entry = NULL;
+        result = archive_read_next_header(a, &entry);
+        if (result == BOLT_ARCHIVE_OK || result == BOLT_ARCHIVE_WARN || result == BOLT_ARCHIVE_EOF) {
+            *format = archive_format(a) & 0xff0000;
+            *filter = archive_filter_code(a, 0);
+            archive_read_free(a);
+            return 0;
+        }
+    }
+    archive_read_free(a);
+    return -1;
+}
+
 static void write_err(char *err_buf, size_t err_cap, const char *msg) {
     if (!err_buf || err_cap == 0) return;
     if (!msg || msg[0] == '\0') {
@@ -74,6 +115,64 @@ static void write_err(char *err_buf, size_t err_cap, const char *msg) {
         return;
     }
     snprintf(err_buf, err_cap, "%s", msg);
+}
+
+void *bolt_la_7z_open(const char *path, const char *options, char *err, size_t err_cap) {
+    struct archive *a = archive_write_new();
+    if (!a) { write_err(err, err_cap, strerror(ENOMEM)); return NULL; }
+    if (archive_write_set_format_7zip(a) != BOLT_ARCHIVE_OK ||
+        (options && archive_write_set_options(a, options) != BOLT_ARCHIVE_OK) ||
+        archive_write_open_filename(a, path) != BOLT_ARCHIVE_OK) {
+        write_err(err, err_cap, archive_error_string(a));
+        archive_write_fail(a);
+        archive_write_free(a);
+        return NULL;
+    }
+    return a;
+}
+
+int32_t bolt_la_7z_header(void *writer, const char *path, uint8_t kind,
+    const char *link_target, uint64_t size, uint16_t permissions, int64_t mtime,
+    char *err, size_t err_cap) {
+    struct archive *a = writer;
+    struct archive_entry *entry = archive_entry_new();
+    if (!entry) { write_err(err, err_cap, strerror(ENOMEM)); return -1; }
+    archive_entry_set_pathname_utf8(entry, path);
+    archive_entry_set_filetype(entry, kind == 1 ? S_IFDIR : (kind == 2 ? S_IFLNK : S_IFREG));
+    archive_entry_set_perm(entry, permissions);
+    archive_entry_set_mtime(entry, (time_t)mtime, 0);
+    archive_entry_set_size(entry, kind == 0 ? (int64_t)size : 0);
+    if (kind == 2) archive_entry_set_symlink_utf8(entry, link_target);
+    int result = archive_write_header(a, entry);
+    archive_entry_free(entry);
+    if (result != BOLT_ARCHIVE_OK) write_err(err, err_cap, archive_error_string(a));
+    return result;
+}
+
+int32_t bolt_la_7z_write(void *writer, const uint8_t *data, size_t size, char *err, size_t err_cap) {
+    struct archive *a = writer;
+    size_t offset = 0;
+    while (offset < size) {
+        ssize_t count = archive_write_data(a, data + offset, size - offset);
+        if (count <= 0) { write_err(err, err_cap, archive_error_string(a)); return -1; }
+        offset += (size_t)count;
+    }
+    return 0;
+}
+
+int32_t bolt_la_7z_close(void *writer, char *err, size_t err_cap) {
+    struct archive *a = writer;
+    int result = archive_write_close(a);
+    if (result != BOLT_ARCHIVE_OK) write_err(err, err_cap, archive_error_string(a));
+    return result;
+}
+
+void bolt_la_7z_free(void *writer) {
+    if (writer) {
+        /* Do not finish/recompress an abandoned archive after cancellation. */
+        archive_write_fail(writer);
+        archive_write_free(writer);
+    }
 }
 
 static int32_t classify_la_error(const char *msg, int has_password, int entry_encrypted, int fallback_code) {

@@ -62,6 +62,7 @@ final class WorkspaceViewModel {
     var activeSheet: ActiveSheet?
     var savedPassword: String?
     var preferredZipEditAlgorithm: CompressionAlgorithm = .deflate
+    var archiveEditErrorMessage: String?
 
     var archiveBackStack: [ArchiveNavigationFrame] = []
     var nestedTempDirs: [URL] = []
@@ -462,7 +463,9 @@ final class WorkspaceViewModel {
                     skippedVersion: skipped,
                     lastCheckTimestamp: lastTS
                 )
-                self.lastUpdateCheckTimestamp = Date().timeIntervalSince1970
+                if res.didPerformCheck {
+                    self.lastUpdateCheckTimestamp = Date().timeIntervalSince1970
+                }
                 if let newETag = res.newETag {
                     self.lastUpdateETag = newETag
                 }
@@ -476,7 +479,7 @@ final class WorkspaceViewModel {
                 }
             } catch {
                 if userInitiated {
-                    self.alertMessage = error.localizedDescription
+                    self.alertMessage = self.l10n.operationErrorMessage(error)
                 }
             }
         }

@@ -95,7 +95,7 @@ extension WorkspaceViewModel {
                 let fromHomeOrigin = (self.listing == nil) ? true : self.openedArchiveFromHome
                 Task.detached(priority: .userInitiated) {
                     if let refreshed = try? BoltArchiveEngine.inspect(archiveURL: resultURL, encoding: encoding) {
-                        let navIndex = ArchiveNavigationIndex.build(from: refreshed, rootTitle: refreshed.archiveURL.lastPathComponent)
+                        let navIndex = ArchiveNavigationIndex.build(from: refreshed)
                         await MainActor.run {
                             self.applyLoadedListing(
                                 refreshed,
@@ -267,22 +267,9 @@ extension WorkspaceViewModel {
             configureHUD()
             isPreparingHUDExtract = true
         }
-        let enc = encodingOption
-        let strip = defaultStripMacJunk
-        let restoreLinks = restoreSymlinksOnExtract
-
         let initialPlans: [(archiveURL: URL, options: ExtractOptions)] = archiveURLs.map { archiveURL in
             let dest = destinationOverride ?? archiveURL.deletingLastPathComponent()
-            let options = ExtractOptions(
-                destinationURL: dest,
-                mode: mode,
-                overwritePolicy: .overwrite,
-                password: nil,
-                encoding: enc,
-                stripMacJunk: strip,
-                restoreSymlinks: restoreLinks
-            )
-            return (archiveURL, options)
+            return (archiveURL, makeQuickExtractOptions(destination: dest, mode: mode, password: nil))
         }
 
         Task.detached(priority: .userInitiated) {
@@ -360,19 +347,7 @@ extension WorkspaceViewModel {
     }
 
     func executeBatchArchiveDropAction(urls: [URL], mode: ExtractMode) {
-        guard let first = urls.first else { return }
-        let dest: URL
-        if let resolved = resolveDefaultExtractDirectory(for: first) {
-            dest = resolved
-        } else {
-            let panel = NSOpenPanel()
-            panel.title = l10n.selectExtractDestTitle
-            panel.canChooseDirectories = true
-            panel.canChooseFiles = false
-            panel.allowsMultipleSelection = false
-            guard panel.runModal() == .OK, let chosen = panel.url else { return }
-            dest = chosen
-        }
+        guard let first = urls.first, let dest = selectExtractDestination(for: first) else { return }
         quickExtractBatchInHUD(mode: mode, archiveURLs: urls, destinationOverride: dest, useInAppHUD: true)
     }
 

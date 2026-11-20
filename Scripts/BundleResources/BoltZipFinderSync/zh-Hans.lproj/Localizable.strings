@@ -1,0 +1,14 @@
+"finder.compressFolderZip" = "将当前文件夹压缩为 ZIP";
+"finder.compressFolderTarZst" = "将当前文件夹压缩为 TAR.ZST";
+"finder.openWorkspace" = "打开 BoltZip 工作台";
+"finder.smartExtract" = "智能解压到当前位置";
+"finder.extractSubfolder" = "解压到同名文件夹";
+"finder.extractTo" = "解压到指定文件夹...";
+"finder.openInBoltZip" = "在 BoltZip 中打开浏览";
+"finder.verifyIntegrity" = "校验压缩包完整性";
+"finder.compressZip" = "压缩为 ZIP";
+"finder.compressEachZip" = "分别压缩为独立 ZIP";
+"finder.compressTarZst" = "压缩为 TAR.ZST (Zstd)";
+"finder.compress7z" = "压缩为 7z";
+"finder.encryptSplitCompress" = "加密 / 分卷高级压缩...";
+"finder.repackEncryptCompress" = "重新打包 / 加密压缩...";

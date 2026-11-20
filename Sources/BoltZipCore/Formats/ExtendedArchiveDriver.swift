@@ -355,22 +355,22 @@ public enum ExtendedArchiveDriver {
                                     return 0
                                 }
                                 if let sel = st.selectedPaths, !sel.isEmpty,
-                                   !BoltArchiveEngine.pathMatchesSelection(normalized, selectedPaths: sel) {
+                                   !ArchiveExtractionDestination.pathMatchesSelection(normalized, selectedPaths: sel) {
                                     return 0
                                 }
 
-                                let outputPath = BoltArchiveEngine.remapTopLevelFolder(in: normalized, renameMap: st.renameMap)
-                                let initialDest = try BoltArchiveEngine.safeDestinationURL(for: outputPath, under: st.destinationURL)
+                                let outputPath = ArchiveExtractionDestination.remapTopLevelFolder(in: normalized, renameMap: st.renameMap)
+                                let initialDest = try ArchiveExtractionDestination.safeDestinationURL(for: outputPath, under: st.destinationURL)
 
                                 if isDir {
-                                    try BoltArchiveEngine.assertNoSymlinkTraversal(at: initialDest, under: st.destinationURL)
+                                    try ArchiveExtractionDestination.assertNoSymlinkTraversal(at: initialDest, under: st.destinationURL)
                                     try FileManager.default.createDirectory(at: initialDest, withIntermediateDirectories: true)
                                     return 0
                                 }
                                 if info.is_symlink != 0 {
                                     if st.restoreSymlinks, let symPtr = info.symlink_target {
                                         let target = String(cString: symPtr)
-                                        try BoltArchiveEngine.createSafeSymlink(
+                                        try ArchiveExtractionDestination.createSafeSymlink(
                                             at: initialDest,
                                             target: target,
                                             under: st.destinationURL,
@@ -380,7 +380,7 @@ public enum ExtendedArchiveDriver {
                                     return 0
                                 }
 
-                                guard let finalDest = try BoltArchiveEngine.prepareExtractTargetURL(
+                                guard let finalDest = try ArchiveExtractionDestination.prepareExtractTargetURL(
                                     initialURL: initialDest,
                                     under: st.destinationURL,
                                     policy: st.overwritePolicy
@@ -388,7 +388,7 @@ public enum ExtendedArchiveDriver {
                                     return 0
                                 }
                                 st.activeTargetURL = finalDest
-                                let stage = try BoltArchiveEngine.makeExtractionStage(near: finalDest, under: st.destinationURL)
+                                let stage = try ArchiveExtractionDestination.makeExtractionStage(near: finalDest, under: st.destinationURL)
                                 st.activeStage = stage
                                 let stagedFile = stage.appendingPathComponent("payload")
                                 guard FileManager.default.createFile(atPath: stagedFile.path, contents: nil) else {
@@ -462,7 +462,7 @@ public enum ExtendedArchiveDriver {
                                         .posixPermissions: NSNumber(value: st.activePermissions)
                                     ]
                                     try? FileManager.default.setAttributes(attrs, ofItemAtPath: stagedFile.path)
-                                    try BoltArchiveEngine.commitExtractedItem(stagedFile, to: targetURL, under: st.destinationURL,
+                                    try ArchiveExtractionDestination.commitExtractedItem(stagedFile, to: targetURL, under: st.destinationURL,
                                                                               policy: st.overwritePolicy, controller: st.controller)
                                     st.cleanupActivePartialFile()
                                     return 0
@@ -633,112 +633,11 @@ public enum ExtendedArchiveDriver {
         controller: ArchiveTaskController? = nil,
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
-        try controller?.checkpoint()
-        let fm = FileManager.default
-        let staging = fm.temporaryDirectory.appendingPathComponent("BoltZipStage-\(UUID().uuidString)")
-        try fm.createDirectory(at: staging, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: staging) }
-
-        let items = try ZipWriter.collectInputItems(
-            from: inputURLs,
-            excludeMacJunk: excludeMacJunk,
-            preserveSymlinks: preserveSymlinks
-        )
-        let totalBytes = items.reduce(UInt64(0)) { $0 + $1.fileSize }
-        var stagedBytes: UInt64 = 0
-        var topLevelNames: [String] = []
-        var seenTop: Set<String> = []
-
-        for item in items {
-            try controller?.checkpoint()
-            let stageFrac = totalBytes > 0 ? Double(stagedBytes) / Double(totalBytes) : 0
-            progress?(OperationProgress(
-                fractionCompleted: stageFrac * 0.08,
-                currentItem: item.archivePath,
-                processedBytes: UInt64(Double(totalBytes) * stageFrac * 0.08),
-                totalBytes: totalBytes
-            ))
-
-            let clean = item.archivePath.hasSuffix("/") ? String(item.archivePath.dropLast()) : item.archivePath
-            let dest = staging.appendingPathComponent(clean)
-            if item.isDirectory {
-                try fm.createDirectory(at: dest, withIntermediateDirectories: true)
-            } else if item.isSymbolicLink, let target = item.symlinkTarget {
-                try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try fm.createSymbolicLink(atPath: dest.path, withDestinationPath: target)
-            } else if let src = item.fileURL {
-                try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-                // Prefer APFS/HFS+ hardlink to eliminate duplicate disk I/O; fallback to copy only across volumes.
-                do {
-                    try fm.linkItem(at: src, to: dest)
-                } catch {
-                    try fm.copyItem(at: src, to: dest)
-                }
-            }
-            stagedBytes += item.fileSize
-            if let first = clean.split(separator: "/").first.map(String.init), !seenTop.contains(first) {
-                seenTop.insert(first)
-                topLevelNames.append(first)
-            }
-        }
-
-        try controller?.checkpoint()
-        if fm.fileExists(atPath: outputURL.path) {
-            try fm.removeItem(at: outputURL)
-        }
-
-        let tarOptions = sevenZipTarOptions(algorithm: algorithm, level: level)
-        var args = ["--format=7zip"]
-        if let tarOptions {
-            args.append(contentsOf: ["--options", tarOptions])
-        }
-        args.append(contentsOf: ["-cf", outputURL.path, "-C", staging.path])
-        args.append(contentsOf: topLevelNames.isEmpty ? ["."] : topLevelNames)
-        let outName = outputURL.lastPathComponent
-        let compressStart = CFAbsoluteTimeGetCurrent()
-        let estCompressedTarget = algorithm == .store ? max(1, totalBytes) : max(1, totalBytes / 3)
-        do {
-            _ = try runTar(arguments: args, controller: controller) {
-                let writtenBytes = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? NSNumber)?.uint64Value ?? 0
-                let elapsed = CFAbsoluteTimeGetCurrent() - compressStart
-                let sizeFrac = totalBytes > 0
-                    ? min(0.96, 0.08 + 0.88 * min(1.0, Double(writtenBytes) / Double(estCompressedTarget)))
-                    : 0.5
-                let timeFrac = 0.08 + 0.86 * (1.0 - exp(-elapsed * 0.45))
-                let frac = min(0.96, max(sizeFrac, timeFrac))
-                let estProcessed = totalBytes > 0 ? UInt64(Double(totalBytes) * frac) : writtenBytes
-                progress?(OperationProgress(
-                    fractionCompleted: frac,
-                    currentItem: outName,
-                    processedBytes: estProcessed,
-                    totalBytes: totalBytes
-                ))
-            }
-        } catch {
-            try? fm.removeItem(at: outputURL)
-            throw error
-        }
-        progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outName, processedBytes: totalBytes, totalBytes: totalBytes))
+        try SevenZipWriter.create(from: inputURLs, to: outputURL, algorithm: algorithm, level: level,
+                                  excludeMacJunk: excludeMacJunk, preserveSymlinks: preserveSymlinks,
+                                  controller: controller, progress: progress)
     }
 
-    private static func sevenZipTarOptions(algorithm: CompressionAlgorithm, level: Int?) -> String? {
-        switch algorithm {
-        case .store:
-            return "7zip:compression=store"
-        case .xz:
-            let lvl = min(max(level ?? algorithm.defaultLevel, 0), 9)
-            return "7zip:compression=lzma2,7zip:compression-level=\(lvl)"
-        case .bzip2:
-            let lvl = min(max(level ?? algorithm.defaultLevel, 1), 9)
-            return "7zip:compression=bzip2,7zip:compression-level=\(lvl)"
-        case .deflate:
-            let lvl = min(max(level ?? algorithm.defaultLevel, 1), 9)
-            return "7zip:compression=deflate,7zip:compression-level=\(lvl)"
-        case .zstd, .lz4:
-            let lvl = min(max(level ?? CompressionAlgorithm.xz.defaultLevel, 0), 9)
-            return "7zip:compression=lzma2,7zip:compression-level=\(lvl)"
-        }
-    }
 
     /// Decodes `bsdtar` `safe_fprintf` octal escapes (`\350\213\217`) back into UTF-8/CJK paths.
     static func unescapeBsdtarPath(_ raw: String, encoding: FilenameEncodingOption = .auto) -> String {

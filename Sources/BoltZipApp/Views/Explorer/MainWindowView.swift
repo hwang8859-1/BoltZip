@@ -440,6 +440,8 @@ struct MainWindowView: View {
             ArchiveCommentSheet(vm: vm, initialComment: current, canEdit: vm.listing?.canEditInPlace == true)
         case .updateAvailable(let info):
             UpdateAvailableSheet(vm: vm, release: info)
+        case .editEntryText(let document):
+            ArchiveTextEditorSheet(vm: vm, document: document)
         }
     }
 }
