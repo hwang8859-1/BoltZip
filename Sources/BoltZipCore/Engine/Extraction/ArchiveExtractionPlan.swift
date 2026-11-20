@@ -97,17 +97,32 @@ struct ArchiveExtractionPlan {
         var topLevelDirRenameMap: [String: String] = [:]
         if options.overwritePolicy == .rename,
            targetRoot.standardizedFileURL == options.destinationURL.standardizedFileURL {
-            var checkedTops: Set<String> = []
+            var topLevelNames: Set<String> = []
+            var directoryNames: Set<String> = []
+            var directories: [String] = []
             for entry in entriesToExtract {
-                let parts = entry.path.split(separator: "/").map(String.init)
-                guard let top = parts.first else { continue }
-                let isFolderTop = parts.count > 1 || entry.isDirectory
-                guard isFolderTop, checkedTops.insert(top).inserted else { continue }
-                let existing = targetRoot.appendingPathComponent(top)
-                var isDirObjC: ObjCBool = false
-                if fm.fileExists(atPath: existing.path, isDirectory: &isDirObjC) {
-                    let renamed = ArchiveExtractionDestination.uniqueNonCollidingURL(for: existing, isDirectoryHint: true)
-                    topLevelDirRenameMap[top] = renamed.lastPathComponent
+                let parts = entry.path.split(separator: "/")
+                guard let component = parts.first else { continue }
+                let name = String(component)
+                topLevelNames.insert(name)
+                if (entry.isDirectory || parts.count > 1) && directoryNames.insert(name).inserted {
+                    directories.append(name)
+                }
+            }
+            // Reserve original archive names before allocating any numbered directory names.
+            var reserved = Set(topLevelNames.map { ArchiveExtractionDestination.pathKey(targetRoot.appendingPathComponent($0)) })
+            var assigned: Set<String> = []
+            for name in directories {
+                let original = targetRoot.appendingPathComponent(name)
+                let key = ArchiveExtractionDestination.pathKey(original)
+                if (try? fm.attributesOfItem(atPath: original.path)) != nil || assigned.contains(key) {
+                    let renamed = ArchiveExtractionDestination.uniqueNonCollidingURL(for: original, isDirectoryHint: true, reservedPaths: reserved)
+                    topLevelDirRenameMap[name] = renamed.lastPathComponent
+                    let newKey = ArchiveExtractionDestination.pathKey(renamed)
+                    reserved.insert(newKey)
+                    assigned.insert(newKey)
+                } else {
+                    assigned.insert(key)
                 }
             }
         }

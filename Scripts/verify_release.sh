@@ -98,6 +98,12 @@ touch "$TMP_CLI/src/.DS_Store"
 "$CLI" bench --threads 2 --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d["results"]) >= 5'
 
 "$CLI" a "$TMP_CLI/test.zip" "$TMP_CLI/src" --comment "Verified ${APP_VERSION}" --threads 2
+if "$CLI" a "$TMP_CLI/rejected.zip" "$TMP_CLI/extra.txt" --split 18446744073709551615 > "$TMP_CLI/split-error.txt" 2>&1; then
+    echo "FAIL: An out-of-range split size was accepted" >&2
+    exit 1
+fi
+grep -q 'Invalid --split size' "$TMP_CLI/split-error.txt"
+test ! -e "$TMP_CLI/rejected.zip"
 "$CLI" a "$TMP_CLI/test.tar.zst" "$TMP_CLI/src" --algo zstd
 "$CLI" a "$TMP_CLI/test.7z" "$TMP_CLI/src" --algo xz
 "$CLI" a "$TMP_CLI/enc.zip" "$TMP_CLI/src" --password "secret!${APP_VERSION}" --aes256

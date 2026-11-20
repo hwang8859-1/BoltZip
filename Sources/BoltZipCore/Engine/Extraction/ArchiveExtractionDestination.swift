@@ -10,8 +10,11 @@ enum ArchiveExtractionDestination {
         try protectSourcePaths(Set(sources.map(pathKey)), from: target)
     }
 
-    static func protectSourcePaths(_ paths: Set<String>, from target: URL) throws {
-        if !paths.isEmpty && paths.contains(pathKey(target)) {
+    static func protectSourcePaths(_ paths: Set<String>, from target: URL, replacingDirectory: Bool = false) throws {
+        guard !paths.isEmpty else { return }
+        let targetPath = pathKey(target)
+        let childPrefix = targetPath.hasSuffix("/") ? targetPath : targetPath + "/"
+        if paths.contains(targetPath) || (replacingDirectory && paths.contains { $0.hasPrefix(childPrefix) }) {
             throw ArchiveOperationError.extractionWouldReplaceSource(target.lastPathComponent)
         }
     }
@@ -179,7 +182,7 @@ enum ArchiveExtractionDestination {
         return replacement + entryPath[suffixStart...]
     }
 
-    static func uniqueNonCollidingURL(for url: URL, isDirectoryHint: Bool = false) -> URL {
+    static func uniqueNonCollidingURL(for url: URL, isDirectoryHint: Bool = false, reservedPaths: Set<String> = []) -> URL {
         let fm = FileManager.default
         let dir = url.deletingLastPathComponent()
         let ext = isDirectoryHint ? "" : url.pathExtension
@@ -188,7 +191,8 @@ enum ArchiveExtractionDestination {
         while true {
             let candidateName = ext.isEmpty ? "\(stem) (\(n))" : "\(stem) (\(n)).\(ext)"
             let candidate = dir.appendingPathComponent(candidateName)
-            if !fm.fileExists(atPath: candidate.path) {
+            if (try? fm.attributesOfItem(atPath: candidate.path)) == nil &&
+                (reservedPaths.isEmpty || !reservedPaths.contains(pathKey(candidate))) {
                 return candidate
             }
             n += 1
@@ -205,9 +209,10 @@ enum ArchiveExtractionDestination {
 extension BoltArchiveEngine {
     /// Publish a promised file or directory after staging it on the destination volume.
     public static func publishPromisedItem(from source: URL, to destination: URL, protectedSources: [URL]) throws {
-        try ArchiveExtractionDestination.protectSources(protectedSources, from: destination)
         let fm = FileManager.default
         let sourceKind = try fm.attributesOfItem(atPath: source.path)[.type] as? FileAttributeType
+        let protected = Set(protectedSources.map(ArchiveExtractionDestination.pathKey))
+        try ArchiveExtractionDestination.protectSourcePaths(protected, from: destination, replacingDirectory: sourceKind == .typeDirectory)
         func existingKind() throws -> FileAttributeType? {
             let kind = (try? fm.attributesOfItem(atPath: destination.path))?[.type] as? FileAttributeType
             if let kind, (kind == .typeDirectory) != (sourceKind == .typeDirectory) {
@@ -225,7 +230,7 @@ extension BoltArchiveEngine {
         // A failed cross-volume copy leaves the destination untouched. Swapping two existing
         // items is atomic and also preserves a nonempty directory until replacement succeeds.
         let oldKind = try existingKind()
-        try ArchiveExtractionDestination.protectSources(protectedSources, from: destination)
+        try ArchiveExtractionDestination.protectSourcePaths(protected, from: destination, replacingDirectory: oldKind == .typeDirectory)
         let status = local.withUnsafeFileSystemRepresentation { stagedPath in
             destination.withUnsafeFileSystemRepresentation { target in
                 guard let stagedPath, let target else { return EINVAL }

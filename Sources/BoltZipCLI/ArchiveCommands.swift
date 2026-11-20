@@ -11,7 +11,7 @@ enum ArchiveCommands {
         let inputs = arguments.positional.dropFirst().map { URL(fileURLWithPath: $0) }
         let fmt = ArchiveFormat.detect(from: outURL) ?? .zip
         let (algorithm, level) = arguments.compression(default: fmt.defaultAlgorithm)
-        let splitBytes = arguments.options["split"].flatMap(UInt64.init).map { $0 * 1024 * 1024 }
+        let splitBytes = try arguments.splitVolumeSizeBytes()
         let workers = try arguments.workerCount()
         let opts = CreateArchiveOptions(
             format: fmt,

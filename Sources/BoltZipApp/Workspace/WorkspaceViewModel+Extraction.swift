@@ -128,40 +128,39 @@ extension WorkspaceViewModel {
         savePanel.nameFieldStringValue = "Selected_Export.zip"
         guard savePanel.runModal() == .OK, let destZip = savePanel.url else { return }
 
-        let pw = savedPassword
-        let enc = encodingOption
-        let strip = defaultStripMacJunk
+        let request = SelectedZipExport(source: sourceArchive, destination: destZip, entryPaths: entryIDs,
+                                        encoding: encodingOption, stripMacJunk: defaultStripMacJunk)
+        runSelectedZipExport(request, password: savedPassword)
+    }
+
+    func runSelectedZipExport(_ request: SelectedZipExport, password: String?) {
         isBusy = true
-        progress = OperationProgress(fractionCompleted: 0.1, currentItem: destZip.lastPathComponent)
+        progress = OperationProgress(fractionCompleted: 0.1, currentItem: request.destination.lastPathComponent)
 
         Task.detached(priority: .userInitiated) {
-            let tempStage = FileManager.default.temporaryDirectory
-                .appendingPathComponent("BoltZipExport-\(UUID().uuidString)", isDirectory: true)
-            defer { try? FileManager.default.removeItem(at: tempStage) }
             do {
-                let extOpts = ExtractOptions(
-                    destinationURL: tempStage,
-                    mode: .selected(entryIDs),
-                    overwritePolicy: .overwrite,
-                    password: pw,
-                    encoding: enc,
-                    stripMacJunk: strip
+                try BoltArchiveEngine.exportSelectedEntriesAsZip(
+                    at: request.source, to: request.destination, entryPaths: request.entryPaths,
+                    password: password, encoding: request.encoding, stripMacJunk: request.stripMacJunk
                 )
-                _ = try BoltArchiveEngine.extract(archiveURL: sourceArchive, options: extOpts)
-                let children = try FileManager.default.contentsOfDirectory(at: tempStage, includingPropertiesForKeys: nil)
-                let createOpts = CreateArchiveOptions(format: .zip, algorithm: .deflate, excludeMacJunk: strip)
-                _ = try BoltArchiveEngine.createArchive(from: children, to: destZip, options: createOpts)
                 await MainActor.run {
                     self.isBusy = false
                     self.progress = nil
-                    self.statusMessage = destZip.lastPathComponent
-                    NSWorkspace.shared.activateFileViewerSelecting([destZip])
+                    if let password, !password.isEmpty, self.listing?.archiveURL == request.source {
+                        self.savedPassword = password
+                    }
+                    self.statusMessage = request.destination.lastPathComponent
+                    NSWorkspace.shared.activateFileViewerSelecting([request.destination])
                 }
             } catch {
                 await MainActor.run {
                     self.isBusy = false
                     self.progress = nil
-                    self.alertMessage = self.l10n.operationErrorMessage(error)
+                    if let prompt = PasswordPurpose.exportSelectedZip(request).prompt(for: error) {
+                        self.activeSheet = prompt
+                    } else {
+                        self.alertMessage = self.l10n.operationErrorMessage(error)
+                    }
                 }
             }
         }

@@ -254,6 +254,8 @@ struct PasswordPromptSheet: View {
                         case .extract(let archiveURL, var opts, let trashArchiveOnCompletion):
                             opts.password = pw
                             vm.runExtract(options: opts, archiveURL: archiveURL, trashArchiveOnCompletion: trashArchiveOnCompletion)
+                        case .exportSelectedZip(let request):
+                            vm.runSelectedZipExport(request, password: pw)
                         case .testIntegrity(let archiveURL):
                             vm.testIntegrity(password: pw, archiveURL: archiveURL)
                         case .unlockForEdit(let urls, let targetFolder):

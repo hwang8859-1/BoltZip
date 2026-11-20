@@ -63,6 +63,7 @@ enum PasswordPurpose: Sendable {
     case openNestedContents(ArchiveEntry, parentPassword: String?)
     case preview(ArchiveEntry)
     case extract(archiveURL: URL, options: ExtractOptions, trashArchiveOnCompletion: Bool)
+    case exportSelectedZip(SelectedZipExport)
     case testIntegrity(archiveURL: URL)
     case unlockForEdit(urls: [URL], targetFolder: String)
     case editText(ArchiveEntry)
@@ -74,6 +75,14 @@ enum PasswordPurpose: Sendable {
         default: return nil
         }
     }
+}
+
+struct SelectedZipExport: Sendable {
+    let source: URL
+    let destination: URL
+    let entryPaths: Set<String>
+    let encoding: FilenameEncodingOption
+    let stripMacJunk: Bool
 }
 
 struct ArchiveNavigationFrame: Identifiable, Sendable {

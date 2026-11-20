@@ -73,6 +73,15 @@ struct CLIArguments {
         return parsed
     }
 
+    func splitVolumeSizeBytes() throws -> UInt64? {
+        guard let raw = options["split"] else { return nil }
+        let bytesPerMiB: UInt64 = 1024 * 1024
+        guard let size = UInt64(raw), size <= UInt64.max / bytesPerMiB else {
+            throw BoltZipError.ioError("Invalid --split size. Enter a whole number from 0 to \(UInt64.max / bytesPerMiB) MiB.")
+        }
+        return size * bytesPerMiB
+    }
+
     func overwritePolicy() throws -> OverwritePolicy {
         let raw = options["overwrite"]
         guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !raw.isEmpty else {

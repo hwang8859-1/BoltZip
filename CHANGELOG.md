@@ -16,6 +16,9 @@ All notable changes to **BoltZip** will be documented in this file.
 - Return a nonzero status when encrypted ZIP entries could not be verified.
 - Use the configured workers for LZMA2 and Bzip2 in ordinary 7z creation, report intermediate progress for encrypted 7z, and reject ambiguous paths before publication.
 - Verify the application version and run packaged CLI regressions from the mounted delivery DMG.
+- Preserve source archives inside Finder replacement folders and reserve original directory names when keeping both extraction outputs.
+- Protect input archives and volumes when exporting selected entries to a new ZIP, and let users enter or retry the password during export.
+- Report out-of-range CLI split sizes as argument errors.
 
 ## [1.0.4] - 2026-11-20
 

@@ -46,6 +46,23 @@ final class AppReliabilityTests: XCTestCase {
         }
     }
 
+    func testSelectedZipExportPasswordPromptKeepsTheOriginalRequest() {
+        let request = SelectedZipExport(source: URL(fileURLWithPath: "source.zip"),
+                                        destination: URL(fileURLWithPath: "selected.zip"),
+                                        entryPaths: ["folder/data.txt"], encoding: .auto, stripMacJunk: true)
+        let purpose = PasswordPurpose.exportSelectedZip(request)
+        let errors = [BoltZipError.passwordRequired("source.zip"), .wrongPassword("source.zip")]
+        for (index, error) in errors.enumerated() {
+            guard case .passwordPrompt(.exportSelectedZip(let retry), let wrongAttempt)? = purpose.prompt(for: error) else {
+                return XCTFail("Expected an export password prompt")
+            }
+            XCTAssertEqual(wrongAttempt, index == 1)
+            XCTAssertEqual(retry.source, request.source)
+            XCTAssertEqual(retry.destination, request.destination)
+            XCTAssertEqual(retry.entryPaths, request.entryPaths)
+        }
+    }
+
     func testThrottledUpdateCheckDoesNotCountAsNetworkCheck() async throws {
         let result = try await UpdateCheckerService.checkForUpdates(force: false, savedETag: "unchanged", skippedVersion: "", lastCheckTimestamp: Date().timeIntervalSince1970 - 60)
         XCTAssertFalse(result.didPerformCheck)
