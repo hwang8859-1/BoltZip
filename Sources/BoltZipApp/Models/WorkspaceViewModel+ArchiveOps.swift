@@ -686,51 +686,9 @@ extension WorkspaceViewModel {
         copyToPasteboard(names)
     }
 
-    private func editCurrentZip(_ ops: [ZipEditOperation]) {
+    func editCurrentZip(_ ops: [ZipEditOperation]) {
         guard let listing, listing.canEditInPlace else { return }
-        let url = listing.archiveURL
-        let enc = encodingOption
-        let pw = savedPassword
-        let opts = CreateArchiveOptions(
-            format: .zip,
-            algorithm: preferredZipEditAlgorithm,
-            encryption: (pw ?? "").isEmpty ? .none : .aes256,
-            password: pw,
-            excludeMacJunk: defaultStripMacJunk,
-            preserveSymlinks: preserveSymlinksOnCreate
-        )
-        isBusy = true
-        progress = OperationProgress(fractionCompleted: 0, currentItem: url.lastPathComponent)
-
-        Task.detached(priority: .userInitiated) {
-            do {
-                try BoltArchiveEngine.editZip(at: url, operations: ops, options: opts, encoding: enc) { prog in
-                    Task { @MainActor in
-                        self.progress = prog
-                    }
-                }
-                let updated = try BoltArchiveEngine.inspect(archiveURL: url, encoding: enc, password: pw)
-                let updatedIndex = ArchiveNavigationIndex.build(from: updated, rootTitle: updated.archiveURL.lastPathComponent)
-                await MainActor.run {
-                    self.isBusy = false
-                    self.progress = nil
-                    let targetFolder = updatedIndex.defaultSortedByFolder[self.currentFolder] != nil ? self.currentFolder : ""
-                    self.applyLoadedListing(
-                        updated,
-                        prebuiltIndex: updatedIndex,
-                        initialFolder: targetFolder,
-                        clearForwardStack: false,
-                        clearSearch: false
-                    )
-                    self.statusMessage = "\(updated.archiveURL.lastPathComponent) · \(self.l10n.itemCount(updated.entries.count))"
-                }
-            } catch {
-                await MainActor.run {
-                    self.isBusy = false
-                    self.progress = nil
-                    self.alertMessage = self.l10n.operationErrorMessage(error)
-                }
-            }
-        }
+        runArchiveEdit(ArchiveEditRequest(archiveURL: listing.archiveURL, operations: ops,
+            options: archiveEditOptions, encoding: encodingOption))
     }
 }

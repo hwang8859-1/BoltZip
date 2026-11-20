@@ -154,6 +154,7 @@ enum ActiveSheet: Identifiable {
     case entryProperties(ArchiveEntry)
     case editArchiveComment(current: String)
     case updateAvailable(UpdateReleaseInfo)
+    case editEntryText(ArchiveTextDocument)
 
     var id: String {
         switch self {
@@ -167,6 +168,7 @@ enum ActiveSheet: Identifiable {
         case .entryProperties(let entry): return "props-\(entry.id)"
         case .editArchiveComment: return "editArchiveComment"
         case .updateAvailable(let info): return "update-\(info.version)"
+        case .editEntryText(let document): return "edit-entry-\(document.entryPath)"
         }
     }
 }
@@ -178,6 +180,7 @@ enum PasswordPurpose {
     case extract(archiveURL: URL, options: ExtractOptions)
     case testIntegrity(archiveURL: URL)
     case unlockForEdit(urls: [URL], targetFolder: String)
+    case editText(ArchiveEntry)
 }
 
 enum DefaultExtractDestination: String, CaseIterable, Identifiable, Sendable {

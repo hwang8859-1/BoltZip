@@ -62,6 +62,7 @@ final class WorkspaceViewModel {
     var activeSheet: ActiveSheet?
     var savedPassword: String?
     var preferredZipEditAlgorithm: CompressionAlgorithm = .deflate
+    var archiveEditErrorMessage: String?
 
     var archiveBackStack: [ArchiveNavigationFrame] = []
     var nestedTempDirs: [URL] = []
