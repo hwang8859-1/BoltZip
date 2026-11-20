@@ -52,6 +52,32 @@ struct L10n: Sendable {
         self.lang = language.resolved
     }
 
+    static var current: L10n {
+        L10n(language: AppLanguage(rawValue: UserDefaults.standard.string(forKey: "BoltZip.AppLanguage") ?? "system") ?? .system)
+    }
+
+    func operationErrorMessage(_ error: any Error) -> String {
+        if let error = error as? ArchiveOperationError {
+            switch error {
+            case .outputIsInput:
+                return t("压缩包不能同时作为输入文件", "壓縮檔不能同時作為輸入檔案", "The archive output cannot also be an input file.", "出力先の圧縮ファイルを入力ファイルとして指定することはできません。")
+            case .outputIsDirectory(let name):
+                return t("目标是文件夹，无法替换为压缩文件：\(name)", "目標是資料夾，無法替換為壓縮檔：\(name)", "Cannot replace a directory with an archive: \(name)", "フォルダを圧縮ファイルで置き換えることはできません: \(name)")
+            case .inputChanged(let path):
+                return t("压缩过程中输入文件发生变化：\(path)", "壓縮過程中輸入檔案發生變化：\(path)", "Input changed while archiving: \(path)", "圧縮中に入力ファイルが変更されました: \(path)")
+            case .encryptionRequiresZIP:
+                return t("该格式不支持加密，请使用 ZIP 或关闭加密", "此格式不支援加密，請使用 ZIP 或關閉加密", "This format does not support encryption. Use ZIP or disable encryption.", "この形式は暗号化に対応していません。ZIP を使用するか暗号化を解除してください。")
+            case .splitVolumesRequireZIP:
+                return t("该格式不支持分卷，请使用 ZIP", "此格式不支援分卷，請使用 ZIP", "This format does not support split volumes. Use ZIP.", "この形式は分割に対応していません。ZIP を使用してください。")
+            case .applicationNotFound:
+                return t("找不到 BoltZip.app，请先安装应用", "找不到 BoltZip.app，請先安裝應用程式", "BoltZip.app was not found. Install the app first.", "BoltZip.app が見つかりません。先にアプリをインストールしてください。")
+            }
+        }
+        return error.localizedDescription
+    }
+
+
+
     private func t(_ sc: String, _ tc: String, _ en: String, _ ja: String) -> String {
         switch lang {
         case .zhHans: return sc

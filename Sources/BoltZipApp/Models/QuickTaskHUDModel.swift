@@ -511,7 +511,7 @@ final class QuickTaskHUDModel {
         if !pendingQueue.isEmpty {
             pendingQueue.removeAll()
         }
-        phase = .failed(error.localizedDescription)
+        phase = .failed(L10n.current.operationErrorMessage(error))
     }
 
     // MARK: - Clocks & Timers

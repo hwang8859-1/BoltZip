@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Foundation
 
 // Compiled alongside `Sources/BoltZipCore/Icons/*.swift` by `Scripts/build_app.sh`:
@@ -54,6 +55,34 @@ struct BoltIconGeneratorCLI {
         guard let first = args.first else {
             fputs("Usage:\n  generate_icon <output.iconset>\n  generate_icon --resources <Contents/Resources>\n", stderr)
             exit(1)
+        }
+
+        if first == "--version-document-icons", args.count == 3 {
+            let resources = URL(fileURLWithPath: args[1], isDirectory: true)
+            let plistURL = URL(fileURLWithPath: args[2])
+            var plist = try PropertyListSerialization.propertyList(from: Data(contentsOf: plistURL), format: nil) as! [String: Any]
+            var names: [String: String] = [:]
+            for kind in BoltDocumentIconKind.allCases {
+                let original = resources.appendingPathComponent(kind.icnsBaseName + ".icns")
+                let digest = SHA256.hash(data: try Data(contentsOf: original)).prefix(8).map { String(format: "%02x", $0) }.joined()
+                let versioned = kind.icnsBaseName + "-" + digest
+                try FileManager.default.moveItem(at: original, to: resources.appendingPathComponent(versioned + ".icns"))
+                names[kind.icnsBaseName] = versioned
+            }
+            for (key, iconKey) in [("CFBundleDocumentTypes", "CFBundleTypeIconFile"),
+                                   ("UTImportedTypeDeclarations", "UTTypeIconFile"),
+                                   ("UTExportedTypeDeclarations", "UTTypeIconFile")] {
+                guard var declarations = plist[key] as? [[String: Any]] else { continue }
+                for index in declarations.indices {
+                    if let old = declarations[index][iconKey] as? String, let replacement = names[old] {
+                        declarations[index][iconKey] = replacement
+                    }
+                }
+                plist[key] = declarations
+            }
+            let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+            try data.write(to: plistURL, options: .atomic)
+            return
         }
 
         if first == "--resources" {

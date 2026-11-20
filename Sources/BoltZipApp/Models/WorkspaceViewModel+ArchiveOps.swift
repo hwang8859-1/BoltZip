@@ -86,7 +86,7 @@ extension WorkspaceViewModel {
             } catch {
                 await MainActor.run {
                     self.isBusy = false
-                    self.alertMessage = error.localizedDescription
+                    self.alertMessage = self.l10n.operationErrorMessage(error)
                 }
             }
         }
@@ -314,7 +314,7 @@ extension WorkspaceViewModel {
                 await MainActor.run {
                     self.isBusy = false
                     self.progress = nil
-                    self.alertMessage = error.localizedDescription
+                    self.alertMessage = self.l10n.operationErrorMessage(error)
                 }
             }
         }
@@ -349,7 +349,7 @@ extension WorkspaceViewModel {
                 await MainActor.run {
                     self.isBusy = false
                     self.progress = nil
-                    self.alertMessage = error.localizedDescription
+                    self.alertMessage = self.l10n.operationErrorMessage(error)
                 }
             }
         }
@@ -448,7 +448,7 @@ extension WorkspaceViewModel {
                 try? FileManager.default.removeItem(at: subDir)
                 await MainActor.run {
                     self.isBusy = false
-                    self.alertMessage = error.localizedDescription
+                    self.alertMessage = self.l10n.operationErrorMessage(error)
                 }
             }
         }
@@ -509,7 +509,7 @@ extension WorkspaceViewModel {
                 try? FileManager.default.removeItem(at: nestedDir)
                 await MainActor.run {
                     self.isBusy = false
-                    self.alertMessage = error.localizedDescription
+                    self.alertMessage = self.l10n.operationErrorMessage(error)
                 }
             }
         }
@@ -626,7 +626,7 @@ extension WorkspaceViewModel {
             } catch {
                 await MainActor.run {
                     self.isBusy = false
-                    self.alertMessage = error.localizedDescription
+                    self.alertMessage = self.l10n.operationErrorMessage(error)
                 }
             }
         }
@@ -728,7 +728,7 @@ extension WorkspaceViewModel {
                 await MainActor.run {
                     self.isBusy = false
                     self.progress = nil
-                    self.alertMessage = error.localizedDescription
+                    self.alertMessage = self.l10n.operationErrorMessage(error)
                 }
             }
         }

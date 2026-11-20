@@ -1,5 +1,7 @@
 #if canImport(AppKit) && canImport(UniformTypeIdentifiers)
 import AppKit
+import CoreServices
+import Darwin
 import Foundation
 import UniformTypeIdentifiers
 
@@ -196,41 +198,49 @@ public enum ArchiveAssociationService {
         for groups: [ArchiveAssociationGroup],
         toBoltZip: Bool,
         appURL: URL? = nil
-    ) async -> String? {
+    ) async -> (any Error)? {
         let workspace = NSWorkspace.shared
+        var changed = false
+        var refreshedApps: Set<URL> = []
         if toBoltZip {
             guard let resolvedAppURL = appURL ?? resolveBoltZipAppURL() else {
-                return "BoltZip.app not found. Install BoltZip.app to /Applications or run ./Scripts/build_app.sh first."
+                return ArchiveOperationError.applicationNotFound
             }
             registerBundleWithLaunchServices(resolvedAppURL)
 
-            var firstError: String?
+            var firstError: (any Error)?
             for group in groups {
                 for ut in group.utTypes {
                     do {
                         try await workspace.setDefaultApplication(at: resolvedAppURL, toOpen: ut)
+                        changed = true
+                        refreshedApps.insert(resolvedAppURL)
                     } catch {
                         if firstError == nil {
-                            firstError = error.localizedDescription
+                            firstError = error
                         }
                     }
                 }
             }
+            if changed { await refreshDocumentIcons(for: refreshedApps) }
             return firstError
         } else {
-            var firstError: String?
+            var firstError: (any Error)?
             for group in groups {
                 guard let sysURL = group.systemDefaultAppURL else { continue }
                 for ut in group.utTypes {
                     do {
                         try await workspace.setDefaultApplication(at: sysURL, toOpen: ut)
+                        changed = true
+                        refreshedApps.insert(sysURL)
                     } catch {
                         if firstError == nil {
-                            firstError = error.localizedDescription
+                            firstError = error
                         }
                     }
                 }
             }
+            if changed { await refreshDocumentIcons(for: refreshedApps) }
             return firstError
         }
     }
@@ -254,15 +264,28 @@ public enum ArchiveAssociationService {
     }
 
     private static func registerBundleWithLaunchServices(_ appURL: URL) {
-        let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-        guard FileManager.default.isExecutableFile(atPath: lsregister) else { return }
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: lsregister)
-        proc.arguments = ["-f", appURL.path]
-        proc.standardOutput = FileHandle.nullDevice
-        proc.standardError = FileHandle.nullDevice
-        try? proc.run()
-        proc.waitUntilExit()
+        LSRegisterURL(appURL as CFURL, true)
+    }
+
+    private static func refreshDocumentIcons(for appURLs: Set<URL>) async {
+        await Task.detached(priority: .utility) {
+            for appURL in appURLs { registerBundleWithLaunchServices(appURL) }
+            // IconServices persists images across default-handler changes. Restart only the
+            // current user's disposable agent, once per batch; never touch its system store.
+            guard getuid() != 0 else { return }
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+            process.arguments = ["-KILL", "-u", NSUserName(), "iconservicesagent"]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            do {
+                try process.run()
+                process.waitUntilExit()
+            } catch {
+                // Association already succeeded; a denied refresh must not report a false failure.
+                return
+            }
+        }.value
     }
 }
 

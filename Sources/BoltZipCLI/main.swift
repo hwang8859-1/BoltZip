@@ -105,7 +105,7 @@ func runAssociateCommand(flags: Set<String>) async -> Int32 {
         : ArchiveAssociationGroup.commonArchiveGroups
 
     if let err = await ArchiveAssociationService.setDefault(for: targets, toBoltZip: !restore) {
-        fputs("Error updating system file associations: \(err)\n", stderr)
+        fputs("Error updating system file associations: \(err.localizedDescription)\n", stderr)
         return 1
     }
 

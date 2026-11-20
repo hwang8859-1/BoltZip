@@ -239,7 +239,6 @@ swiftc -O -parse-as-library \
     -framework AppKit -framework CoreGraphics \
     -o "$ICON_GEN_BIN"
 "$ICON_GEN_BIN" --resources "$CONTENTS/Resources"
-rm -f "$ICON_GEN_BIN"
 
 cat <<PLIST > "$CONTENTS/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -854,6 +853,10 @@ cat <<PLIST > "$CONTENTS/Info.plist"
 </dict>
 </plist>
 PLIST
+
+echo "==> Versioning document icon resources by content..."
+"$ICON_GEN_BIN" --version-document-icons "$CONTENTS/Resources" "$CONTENTS/Info.plist"
+rm -f "$ICON_GEN_BIN"
 
 SIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
 NOTARY_PROFILE="${BOLTZIP_NOTARY_PROFILE:-}"
