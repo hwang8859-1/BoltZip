@@ -6,6 +6,10 @@ All notable changes to **BoltZip** will be documented in this file.
 
 ### Added
 - Create AES-256 encrypted 7z archives with an option to require the password before showing file and folder names. Open, preview, extract and test encrypted 7z archives in BoltZip.
+- Open, preview, extract and test encrypted RAR4/5 and legacy solid RAR archives using the bundled 7-Zip reader.
+
+### Fixed
+- Report missing RAR volumes by name and preserve existing files when a split archive is incomplete.
 
 ## [1.0.4] - 2026-11-20
 

@@ -22,11 +22,12 @@ public enum BoltArchiveEngine {
             hasZIPOuterData = res.parsed.hasOuterData
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
             entries = try TarCodec.listEntries(at: archiveURL, format: format)
-        case .rar, .sevenZip, .iso, .cab, .xar:
+        case .rar:
+            let rar = try ExtendedArchiveDriver.openRAR(at: archiveURL, encoding: encoding, password: password)
+            entries = rar.entries
+            isSplitVolume = rar.isSplitVolume
+        case .sevenZip, .iso, .cab, .xar:
             entries = try ExtendedArchiveDriver.listEntries(at: archiveURL, format: format, encoding: encoding, password: password)
-            if format == .rar {
-                isSplitVolume = ExtendedArchiveDriver.resolveVolumePaths(for: archiveURL, format: .rar).count > 1
-            }
         }
 
         return try makeListing(archiveURL: archiveURL, format: format, entries: entries,

@@ -69,6 +69,9 @@ struct L10n: Sendable {
     func operationErrorMessage(_ error: any Error) -> String {
         if let compatibility = error as? ArchiveEditCompatibilityError { return archiveEditCompatibilityMessage(compatibility) }
         if let updateError = error as? UpdateError { return updateErrorMessage(updateError) }
+        if case BoltZipError.missingSplitVolume(let name) = error {
+            return t("缺少分卷文件：\(name)", "缺少分卷檔案：\(name)", "Missing archive volume: \(name)", "分割ボリュームが見つかりません: \(name)")
+        }
         if let error = error as? ArchiveOperationError {
             switch error {
             case .outputIsInput:
@@ -84,9 +87,9 @@ struct L10n: Sendable {
             case .sevenZipEncryptionRequiresAES256:
                 return t("7z 加密仅支持 AES-256", "7z 加密僅支援 AES-256", "7z encryption requires AES-256.", "7z の暗号化には AES-256 を使用してください。")
             case .invalidSevenZipPassword:
-                return t("请输入 7z 密码。密码不能包含换行符或空字符。", "請輸入 7z 密碼。密碼不能包含換行字元或空字元。", "Enter a 7z password without line breaks or null characters.", "改行やヌル文字を含まない 7z パスワードを入力してください。")
+                return t("请输入压缩包密码。密码不能包含换行符或空字符。", "請輸入封存檔密碼。密碼不能包含換行字元或空字元。", "Enter an archive password without line breaks or null characters.", "改行やヌル文字を含まない書庫のパスワードを入力してください。")
             case .sevenZipEngineUnavailable:
-                return t("7z 加密组件不可用，请重新安装 BoltZip", "7z 加密元件無法使用，請重新安裝 BoltZip", "The 7z encryption component is unavailable. Reinstall BoltZip.", "7z の暗号化コンポーネントを使用できません。BoltZip を再インストールしてください。")
+                return t("归档处理组件不可用，请重新安装 BoltZip", "封存檔處理元件無法使用，請重新安裝 BoltZip", "The archive processing component is unavailable. Reinstall BoltZip.", "書庫処理用のコンポーネントを使用できません。BoltZip を再インストールしてください。")
             case .splitVolumesRequireZIP:
                 return t("该格式不支持分卷，请使用 ZIP", "此格式不支援分卷，請使用 ZIP", "This format does not support split volumes. Use ZIP.", "この形式は分割に対応していません。ZIP を使用してください。")
             case .applicationNotFound:

@@ -80,13 +80,13 @@ public enum BoltCoreLocalization: Sendable {
     }
 
     static var invalidSevenZipPassword: String {
-        t("请输入 7z 密码。密码不能包含换行符或空字符。", "請輸入 7z 密碼。密碼不能包含換行字元或空字元。",
-          "Enter a 7z password without line breaks or null characters.", "改行やヌル文字を含まない 7z パスワードを入力してください。")
+        t("请输入压缩包密码。密码不能包含换行符或空字符。", "請輸入封存檔密碼。密碼不能包含換行字元或空字元。",
+          "Enter an archive password without line breaks or null characters.", "改行やヌル文字を含まない書庫のパスワードを入力してください。")
     }
 
     static var sevenZipEngineUnavailable: String {
-        t("找不到处理加密 7z 所需的组件。", "找不到處理加密 7z 所需的元件。",
-          "The component for handling encrypted 7z archives is unavailable.", "暗号化された 7z を処理するコンポーネントが見つかりません。")
+        t("归档处理组件不可用，请重新安装 BoltZip", "封存檔處理元件無法使用，請重新安裝 BoltZip",
+          "The archive processing component is unavailable. Reinstall BoltZip.", "書庫処理用のコンポーネントを使用できません。BoltZip を再インストールしてください。")
     }
 
     static var splitVolumesRequireZIP: String {

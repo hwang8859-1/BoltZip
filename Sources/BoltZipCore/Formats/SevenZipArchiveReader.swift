@@ -1,15 +1,15 @@
 import Foundation
 
-enum SevenZipEncryptedReader {
+enum SevenZipArchiveReader {
     static func readEntry(at url: URL, path: String, entries: [ArchiveEntry],
-                          password: String?, exactOutputSize: UInt64?) throws -> Data {
+                          password: String?, exactOutputSize: UInt64?, format: ArchiveFormat = .sevenZip) throws -> Data {
         let normalized = ArchiveEntry.normalizePath(path, isDirectory: false)
         guard let entry = entries.first(where: { $0.path == normalized && !$0.isDirectory }) else {
             throw BoltZipError.entryNotFound(path)
         }
         try verifyDeclaredSize(entry, exactSize: exactOutputSize)
         var data = Data()
-        try streamEntries(at: url, entries: [entry], password: password, controller: nil) { _, chunk in
+        try streamEntries(at: url, entries: [entry], password: password, format: format, controller: nil) { _, chunk in
             data.append(chunk)
         }
         return data
@@ -19,7 +19,8 @@ enum SevenZipEncryptedReader {
         at url: URL, entries: [ArchiveEntry], to root: URL, selectedPaths: Set<String>?,
         overwritePolicy: OverwritePolicy, password: String?, stripMacJunk: Bool, restoreSymlinks: Bool, exactEntrySize: UInt64?,
         topLevelDirRenameMap: [String: String], controller: ArchiveTaskController?,
-        progress: (@Sendable (OperationProgress) -> Void)?
+        progress: (@Sendable (OperationProgress) -> Void)?, format: ArchiveFormat = .sevenZip,
+        linkTargets: [String: String] = [:]
     ) throws {
         let selected = entries.filter { entry in
             (!entry.isSymbolicLink || restoreSymlinks) &&
@@ -36,7 +37,7 @@ enum SevenZipEncryptedReader {
             return try ArchiveExtractionDestination.safeDestinationURL(for: outputPath, under: root)
         }
 
-        let items = zip(selected, destinations).filter { !$0.0.isDirectory }
+        let items = zip(selected, destinations).filter { !$0.0.isDirectory && linkTargets[$0.0.path] == nil }
         let total = try items.reduce(UInt64(0)) { try ArchiveByteCount.checkedSum($0, $1.0.uncompressedSize) }
         let fm = FileManager.default
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
@@ -88,11 +89,17 @@ enum SevenZipEncryptedReader {
                                                                       policy: overwritePolicy, controller: controller)
             }
         }
+        for (entry, destination) in zip(selected, destinations) {
+            guard let target = linkTargets[entry.path] else { continue }
+            try controller?.checkpoint()
+            try ArchiveExtractionDestination.createSafeSymlink(at: destination, target: target, under: root,
+                                                               overwritePolicy: overwritePolicy)
+        }
 
         func writeBatch() throws {
             guard !batch.isEmpty else { return }
             let offset = nextIndex
-            try streamEntries(at: url, entries: batch, password: password, controller: controller) { index, chunk in
+            try streamEntries(at: url, entries: batch, password: password, format: format, controller: controller) { index, chunk in
                 if handle == nil || nextIndex != offset + index {
                     try handle?.close()
                     nextIndex = offset + index
@@ -111,20 +118,22 @@ enum SevenZipEncryptedReader {
         }
     }
 
-    static func testIntegrity(at url: URL, entries: [ArchiveEntry], password: String?) throws -> IntegrityReport {
+    static func testIntegrity(at url: URL, entries: [ArchiveEntry], password: String?,
+                              format: ArchiveFormat = .sevenZip, archiveName: String? = nil) throws -> IntegrityReport {
         let start = Date()
         if password?.isEmpty != false && entries.contains(where: \.isEncrypted) {
             throw BoltZipError.passwordRequired(url.lastPathComponent)
         }
         let result = try SevenZipCommand.run(
-            ["t", "-t7z", "-bso0", "-bse2", "-bsp0", "-spd", "-ssc", "--", url.standardizedFileURL.path],
+            ["t"] + SevenZipArchiveListing.typeArguments(for: format)
+                + ["-bso0", "-bse2", "-bsp0", "-spd", "-ssc", "--", url.standardizedFileURL.path],
             password: password
         )
-        try SevenZipEncryption.check(result, archive: url, password: password)
+        try SevenZipArchiveListing.check(result, archive: url, password: password, format: format)
         let passed = entries.filter { !$0.isDirectory }.map {
             IntegrityEntryResult(path: $0.path, status: .passed, detail: "")
         }
-        return IntegrityReport(archiveName: url.lastPathComponent, totalEntries: passed.count, passedCount: passed.count,
+        return IntegrityReport(archiveName: archiveName ?? url.lastPathComponent, totalEntries: passed.count, passedCount: passed.count,
                                failedCount: 0, skippedEncryptedCount: 0, elapsedSeconds: -start.timeIntervalSinceNow, results: passed)
     }
 
@@ -141,7 +150,7 @@ enum SevenZipEncryptedReader {
     }
 
     private static func streamEntries(
-        at url: URL, entries: [ArchiveEntry], password: String?, controller: ArchiveTaskController?,
+        at url: URL, entries: [ArchiveEntry], password: String?, format: ArchiveFormat, controller: ArchiveTaskController?,
         write: @escaping (Int, Data) throws -> Void
     ) throws {
         if password?.isEmpty != false && entries.contains(where: \.isEncrypted) {
@@ -151,8 +160,8 @@ enum SevenZipEncryptedReader {
         // cannot be distinguished from that result by size or CRC.
         let emptyEntries = entries.filter { $0.uncompressedSize == 0 }
         if !emptyEntries.isEmpty {
-            let matched = try SevenZipEncryption.list(archiveURL: url, password: password,
-                                                       matching: emptyEntries.map(selector(for:)), controller: controller)
+            let matched = try SevenZipArchiveListing.list(archiveURL: url, password: password, format: format,
+                                                         matching: emptyEntries.map(selector(for:)), controller: controller)
             let matchedPaths = Set(matched.map(\.rawPathBytes))
             if let missing = emptyEntries.first(where: { !matchedPaths.contains($0.rawPathBytes) }) {
                 throw BoltZipError.entryNotFound(missing.path)
@@ -160,7 +169,8 @@ enum SevenZipEncryptedReader {
         }
         var mismatch: String?
         let result = try SevenZipCommand.run(
-            ["x", "-t7z", "-so", "-bso0", "-bse2", "-bsp0", "-spd", "-ssc", "--", url.standardizedFileURL.path]
+            ["x"] + SevenZipArchiveListing.typeArguments(for: format)
+                + ["-so", "-bso0", "-bse2", "-bsp0", "-spd", "-ssc", "--", url.standardizedFileURL.path]
                 + entries.map(selector(for:)),
             password: password, controller: controller
         ) { reader in
@@ -178,15 +188,18 @@ enum SevenZipEncryptedReader {
                     crc = CompressionCodec.crc32(chunk, initial: crc)
                     try write(index, chunk)
                 }
-                if entry.crc32 != 0 && entry.crc32 != crc { mismatch = mismatch ?? entry.path }
+                // Encrypted RAR5 may store a password-dependent checksum. The helper verifies it internally.
+                if (format != .rar || !entry.isEncrypted) && entry.crc32 != 0 && entry.crc32 != crc {
+                    mismatch = mismatch ?? entry.path
+                }
             }
             if let excess = try reader.read(upToCount: 1), !excess.isEmpty {
                 mismatch = mismatch ?? url.lastPathComponent
             }
         }
-        try SevenZipEncryption.check(result, archive: url, password: password)
+        try SevenZipArchiveListing.check(result, archive: url, password: password, format: format)
         if let mismatch {
-            throw BoltZipError.corruptedEntry(entry: mismatch, detail: "7z CRC / size")
+            throw BoltZipError.corruptedEntry(entry: mismatch, detail: "CRC / size")
         }
     }
 }

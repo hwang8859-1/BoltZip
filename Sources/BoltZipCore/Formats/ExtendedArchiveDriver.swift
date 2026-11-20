@@ -3,57 +3,8 @@ import Foundation
 
 public enum ExtendedArchiveDriver {
     public static func resolveVolumePaths(for url: URL, format: ArchiveFormat) -> [String] {
-        guard format == .rar else { return [url.path] }
-        let fm = FileManager.default
-        let dir = url.deletingLastPathComponent()
-        let fileName = url.lastPathComponent
-        let lower = fileName.lowercased()
-
-        // Modern multi-volume RAR: archive.part1.rar, archive.part2.rar, ...
-        if lower.hasSuffix(".rar"),
-           let range = fileName.range(of: #"\.part\d+\.rar$"#, options: [.regularExpression, .caseInsensitive]) {
-            let stemPrefix = String(fileName[..<range.lowerBound])
-            if let contents = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
-                let matched: [(Int, String)] = contents.compactMap { candidate in
-                    let cname = candidate.lastPathComponent
-                    guard let cr = cname.range(of: #"\.part(\d+)\.rar$"#, options: [.regularExpression, .caseInsensitive]) else {
-                        return nil
-                    }
-                    guard String(cname[..<cr.lowerBound]).caseInsensitiveCompare(stemPrefix) == .orderedSame else {
-                        return nil
-                    }
-                    let tail = cname[cr]
-                    let digits = tail.dropFirst(5).dropLast(4)
-                    guard let num = Int(digits) else { return nil }
-                    return (num, candidate.path)
-                }.sorted { $0.0 < $1.0 }
-                if !matched.isEmpty {
-                    return matched.map(\.1)
-                }
-            }
-        }
-
-        // Legacy multi-volume RAR: archive.rar, archive.r00, archive.r01, ...
-        let ext = url.pathExtension.lowercased()
-        let isLegacySplitPart = (ext.count == 3 && ext.hasPrefix("r") && Int(ext.dropFirst()) != nil)
-        if ext == "rar" || isLegacySplitPart {
-            let stemURL = url.deletingPathExtension()
-            let primaryURL = stemURL.appendingPathExtension("rar")
-            if fm.fileExists(atPath: primaryURL.path) {
-                var volumes = [primaryURL.path]
-                for idx in 0...99 {
-                    let partExt = String(format: "r%02d", idx)
-                    let partURL = stemURL.appendingPathExtension(partExt)
-                    guard fm.fileExists(atPath: partURL.path) else { break }
-                    volumes.append(partURL.path)
-                }
-                if volumes.count > 1 {
-                    return volumes
-                }
-            }
-        }
-
-        return [url.path]
+        guard format == .rar, let volumes = try? RARVolumeDiscovery.resolve(url) else { return [url.path] }
+        return volumes.paths
     }
 
     public static func listEntries(
@@ -62,10 +13,52 @@ public enum ExtendedArchiveDriver {
         encoding: FilenameEncodingOption = .auto,
         password: String? = nil
     ) throws -> [ArchiveEntry] {
-        guard format == .sevenZip else {
+        switch format {
+        case .rar: return try openRAR(at: url, encoding: encoding, password: password).entries
+        case .sevenZip: return try sevenZipEntries(at: url, encoding: encoding, password: password).entries
+        default:
             return try listNativeEntries(at: url, format: format, encoding: encoding, password: password)
         }
-        return try sevenZipEntries(at: url, encoding: encoding, password: password).entries
+    }
+
+    struct RARContents {
+        let entries: [ArchiveEntry]
+        let sourceURL: URL
+        let isSplitVolume: Bool
+        let needsSevenZip: Bool
+        let linkTargets: [String: String]
+    }
+
+    static func openRAR(at url: URL, encoding: FilenameEncodingOption, password: String?,
+                        controller: ArchiveTaskController? = nil) throws -> RARContents {
+        try controller?.checkpoint()
+        var volumes = try RARVolumeDiscovery.resolve(url)
+        if volumes.needsVolumeProbe,
+           try SevenZipArchiveListing.rarHasVolumes(archiveURL: volumes.first, password: password,
+                                                    allowPartialVolumeInfo: true, controller: controller) {
+            volumes = try RARVolumeDiscovery.resolve(url, confirmedMultiVolume: true)
+        }
+
+        var catalog: SevenZipArchiveListing.Catalog?
+        if !volumes.isSplitVolume && !volumes.isLegacySolid && !volumes.needsVolumeProbe {
+            if volumes.isRAR5 {
+                // Some versions of libarchive miss encryption in RAR5 file headers.
+                catalog = try SevenZipArchiveListing.catalog(archiveURL: volumes.first, password: nil, format: .rar,
+                                                             controller: controller)
+            }
+            // Keep the native filename encoding and metadata for ordinary single-volume RAR.
+            if catalog?.entries.contains(where: \.isEncrypted) != true,
+               let nativeEntries = try? listNativeEntries(at: volumes.first, format: .rar, encoding: encoding, password: nil),
+               !nativeEntries.contains(where: \.isEncrypted) {
+                return RARContents(entries: nativeEntries, sourceURL: volumes.first, isSplitVolume: false,
+                                   needsSevenZip: false, linkTargets: [:])
+            }
+        }
+
+        let compatible = try catalog ?? SevenZipArchiveListing.catalog(archiveURL: volumes.first, password: password, format: .rar,
+                                                                         controller: controller)
+        return RARContents(entries: compatible.entries, sourceURL: volumes.first,
+                           isSplitVolume: volumes.isSplitVolume, needsSevenZip: true, linkTargets: compatible.linkTargets)
     }
 
     private static func sevenZipEntries(at url: URL, encoding: FilenameEncodingOption, password: String?) throws
@@ -74,10 +67,10 @@ public enum ExtendedArchiveDriver {
         do {
             entries = try listNativeEntries(at: url, format: .sevenZip, encoding: encoding, password: nil)
         } catch BoltZipError.passwordRequired {
-            return (try SevenZipEncryption.list(archiveURL: url, password: password), true)
+            return (try SevenZipArchiveListing.list(archiveURL: url, password: password), true)
         }
         if entries.contains(where: \.isEncrypted) {
-            return (try SevenZipEncryption.list(archiveURL: url, password: nil), true)
+            return (try SevenZipArchiveListing.list(archiveURL: url, password: nil), true)
         }
         return (entries, false)
     }
@@ -100,7 +93,7 @@ public enum ExtendedArchiveDriver {
         }
 
         let state = ListState(format: format, encoding: encoding)
-        let volumePaths = resolveVolumePaths(for: url, format: format)
+        let volumePaths = [url.path]
         var errBuf = [CChar](repeating: 0, count: 512)
 
         let rc: Int32 = withCStringArray(volumePaths) { cPaths, count in
@@ -181,10 +174,17 @@ public enum ExtendedArchiveDriver {
         exactOutputSize: UInt64? = nil
     ) throws -> Data {
         let resolvedFormat = try format ?? ArchiveFormat.detectForReading(from: url) ?? ArchiveFormat.detect(from: url) ?? .sevenZip
+        if resolvedFormat == .rar {
+            let rar = try openRAR(at: url, encoding: encoding, password: password)
+            if rar.needsSevenZip {
+                return try SevenZipArchiveReader.readEntry(at: rar.sourceURL, path: path, entries: rar.entries,
+                                                             password: password, exactOutputSize: exactOutputSize, format: .rar)
+            }
+        }
         if resolvedFormat == .sevenZip {
             let listing = try sevenZipEntries(at: url, encoding: encoding, password: password)
             if listing.needsDecryption {
-                return try SevenZipEncryptedReader.readEntry(at: url, path: path, entries: listing.entries,
+                return try SevenZipArchiveReader.readEntry(at: url, path: path, entries: listing.entries,
                                                              password: password, exactOutputSize: exactOutputSize)
             }
         }
@@ -205,7 +205,7 @@ public enum ExtendedArchiveDriver {
         }
 
         let state = ReadState(targetPath: path, encoding: encoding, exactOutputSize: exactOutputSize)
-        let volumePaths = resolveVolumePaths(for: url, format: resolvedFormat)
+        let volumePaths = [url.path]
         var errBuf = [CChar](repeating: 0, count: 512)
 
         let rc: Int32 = withCStringArray(volumePaths) { cPaths, count in
@@ -282,10 +282,21 @@ public enum ExtendedArchiveDriver {
     ) throws {
         try controller?.checkpoint()
         let resolvedFormat = try format ?? ArchiveFormat.detectForReading(from: url) ?? ArchiveFormat.detect(from: url) ?? .sevenZip
-        if resolvedFormat == .sevenZip {
+        if resolvedFormat == .rar {
+            let rar = try openRAR(at: url, encoding: encoding, password: password, controller: controller)
+            if rar.needsSevenZip {
+                try SevenZipArchiveReader.extract(
+                    at: rar.sourceURL, entries: rar.entries, to: destinationURL, selectedPaths: selectedPaths,
+                    overwritePolicy: overwritePolicy, password: password, stripMacJunk: stripMacJunk,
+                    restoreSymlinks: restoreSymlinks, exactEntrySize: exactEntrySize, topLevelDirRenameMap: topLevelDirRenameMap,
+                    controller: controller, progress: progress, format: .rar, linkTargets: rar.linkTargets
+                )
+                return
+            }
+        } else if resolvedFormat == .sevenZip {
             let listing = try sevenZipEntries(at: url, encoding: encoding, password: password)
             if listing.needsDecryption {
-                try SevenZipEncryptedReader.extract(
+                try SevenZipArchiveReader.extract(
                     at: url, entries: listing.entries, to: destinationURL, selectedPaths: selectedPaths,
                     overwritePolicy: overwritePolicy, password: password, stripMacJunk: stripMacJunk,
                     restoreSymlinks: restoreSymlinks, exactEntrySize: exactEntrySize, topLevelDirRenameMap: topLevelDirRenameMap,
@@ -306,6 +317,7 @@ public enum ExtendedArchiveDriver {
             let restoreSymlinks: Bool
             let expectedTotalBytes: UInt64
             let exactEntrySize: UInt64?
+            let verifyRARSize: Bool
             let renameMap: [String: String]
             let controller: ArchiveTaskController?
             let progress: (@Sendable (OperationProgress) -> Void)?
@@ -316,6 +328,7 @@ public enum ExtendedArchiveDriver {
             var activePermissions: UInt16 = 0o644
             var activeStage: URL?
             var activeEntryBytes: UInt64 = 0
+            var activeExpectedSize: UInt64?
             var activePathName: String = ""
             var processedBytes: UInt64 = 0
             var lastProgressEmitTime: CFAbsoluteTime = 0
@@ -330,6 +343,7 @@ public enum ExtendedArchiveDriver {
                 restoreSymlinks: Bool,
                 expectedTotalBytes: UInt64,
                 exactEntrySize: UInt64?,
+                verifyRARSize: Bool,
                 renameMap: [String: String],
                 controller: ArchiveTaskController?,
                 progress: (@Sendable (OperationProgress) -> Void)?
@@ -342,6 +356,7 @@ public enum ExtendedArchiveDriver {
                 self.restoreSymlinks = restoreSymlinks
                 self.expectedTotalBytes = expectedTotalBytes
                 self.exactEntrySize = exactEntrySize
+                self.verifyRARSize = verifyRARSize
                 self.renameMap = renameMap
                 self.controller = controller
                 self.progress = progress
@@ -365,11 +380,12 @@ public enum ExtendedArchiveDriver {
             restoreSymlinks: restoreSymlinks,
             expectedTotalBytes: expectedTotalBytes,
             exactEntrySize: exactEntrySize,
+            verifyRARSize: resolvedFormat == .rar,
             renameMap: topLevelDirRenameMap,
             controller: controller,
             progress: progress
         )
-        let volumePaths = resolveVolumePaths(for: url, format: resolvedFormat)
+        let volumePaths = [url.path]
         var errBuf = [CChar](repeating: 0, count: 512)
 
         defer {
@@ -441,6 +457,7 @@ public enum ExtendedArchiveDriver {
                                 }
                                 st.activeFileHandle = try FileHandle(forWritingTo: stagedFile)
                                 st.activeEntryBytes = 0
+                                st.activeExpectedSize = st.exactEntrySize ?? (st.verifyRARSize ? info.size : nil)
                                 st.activeModDate = info.mtime > 0 ? Date(timeIntervalSince1970: TimeInterval(info.mtime)) : Date()
                                 st.activePermissions = info.permissions
                                 st.activePathName = normalized
@@ -473,7 +490,7 @@ public enum ExtendedArchiveDriver {
                                       let handle = st.activeFileHandle else { return -1 }
                                 let stagedFile = stage.appendingPathComponent("payload")
                                 if let chunkPtr, chunkLen > 0 {
-                                    if let expected = st.exactEntrySize,
+                                    if let expected = st.activeExpectedSize,
                                        UInt64(chunkLen) > expected - st.activeEntryBytes {
                                         throw BoltZipError.corruptedEntry(entry: st.activePathName, detail: "Decoded size exceeds the declared entry size")
                                     }
@@ -497,7 +514,7 @@ public enum ExtendedArchiveDriver {
                                     }
                                     return 0
                                 } else {
-                                    if let expected = st.exactEntrySize, expected != st.activeEntryBytes {
+                                    if let expected = st.activeExpectedSize, expected != st.activeEntryBytes {
                                         throw BoltZipError.corruptedEntry(entry: st.activePathName, detail: "Decoded size does not match the declared entry size")
                                     }
                                     try handle.close()
@@ -544,10 +561,27 @@ public enum ExtendedArchiveDriver {
         format: ArchiveFormat,
         password: String? = nil
     ) throws -> IntegrityReport {
-        if format == .sevenZip {
+        if format == .rar {
+            let start = Date()
+            do {
+                let rar = try openRAR(at: url, encoding: .auto, password: password)
+                if rar.needsSevenZip {
+                    return try SevenZipArchiveReader.testIntegrity(at: rar.sourceURL, entries: rar.entries, password: password,
+                                                                   format: .rar, archiveName: url.lastPathComponent)
+                }
+            } catch let error as BoltZipError {
+                switch error {
+                case .invalidArchive, .externalToolFailed, .unsupportedFormat:
+                    let failure = IntegrityEntryResult(path: url.lastPathComponent, status: .failed, detail: error.localizedDescription)
+                    return IntegrityReport(archiveName: url.lastPathComponent, totalEntries: 1, passedCount: 0, failedCount: 1,
+                                           skippedEncryptedCount: 0, elapsedSeconds: -start.timeIntervalSinceNow, results: [failure])
+                default: throw error
+                }
+            }
+        } else if format == .sevenZip {
             let listing = try sevenZipEntries(at: url, encoding: .auto, password: password)
             if listing.needsDecryption {
-                return try SevenZipEncryptedReader.testIntegrity(at: url, entries: listing.entries, password: password)
+                return try SevenZipArchiveReader.testIntegrity(at: url, entries: listing.entries, password: password)
             }
         }
         final class TestState {
@@ -559,7 +593,7 @@ public enum ExtendedArchiveDriver {
 
         let start = CFAbsoluteTimeGetCurrent()
         let state = TestState()
-        let volumePaths = resolveVolumePaths(for: url, format: format)
+        let volumePaths = [url.path]
         var errBuf = [CChar](repeating: 0, count: 512)
 
         let rc: Int32 = withCStringArray(volumePaths) { cPaths, count in

@@ -82,7 +82,7 @@ enum SevenZipEncryption {
             command + [followStagedLinks ? "-snl-" : "-snl", "--", archive.path],
             password: password, directory: inputStage, controller: controller
         )
-        try check(result, archive: output, password: password)
+        try SevenZipArchiveListing.check(result, archive: output, password: password)
         for (file, item, followsSymbolicLink) in files {
             try controller?.checkpoint()
             try validateSize(of: file, for: item, followsSymbolicLink: followsSymbolicLink)
@@ -105,144 +105,13 @@ enum SevenZipEncryption {
                 command + ["-snl", "-spf", archive.path, "@" + listFile.path],
                 password: password, passwordPromptCount: 2, directory: linkStage, controller: controller
             )
-            try check(result, archive: output, password: password)
+            try SevenZipArchiveListing.check(result, archive: output, password: password)
         }
 
         try controller?.checkpoint()
         try ArchiveOutputTransaction.publish([archive], to: [output])
         progress?(OperationProgress(fractionCompleted: 1, currentItem: output.lastPathComponent,
                                     processedBytes: total, totalBytes: total))
-    }
-
-    static func list(archiveURL: URL, password: String?, matching selectors: [String] = [],
-                     controller: ArchiveTaskController? = nil) throws -> [ArchiveEntry] {
-        let result = try SevenZipCommand.run(
-            ["l", "-t7z", "-slt", "-ba", "-sccUTF-8", "-bsp0", "-spd", "-ssc", "--", archiveURL.standardizedFileURL.path] + selectors,
-            password: password, controller: controller
-        )
-        try check(result, archive: archiveURL, password: password)
-        return try parseEntries(result.stdout, archive: archiveURL)
-    }
-
-    static func check(_ result: SevenZipCommand.Result, archive: URL, password: String?) throws {
-        guard result.status != 0 else { return }
-        let name = archive.lastPathComponent
-        let errors = String(decoding: result.stderr, as: UTF8.self).components(separatedBy: "\n")
-        let wrongPassword = errors.contains {
-            ($0.hasPrefix("ERROR: ") && $0.hasSuffix(" : Cannot open encrypted archive. Wrong password?"))
-                || $0.hasPrefix("ERROR: Data Error in encrypted file. Wrong password? : ")
-                || $0.hasPrefix("ERROR: CRC Failed in encrypted file. Wrong password? : ")
-        }
-        if password?.isEmpty != false && (wrongPassword ||
-            String(decoding: result.stdout, as: UTF8.self).components(separatedBy: "\n").contains("Enter password:")) {
-            throw BoltZipError.passwordRequired(name)
-        }
-        if wrongPassword {
-            throw BoltZipError.wrongPassword(name)
-        }
-        if errors.contains(where: { $0.hasPrefix("ERROR: Unsupported Method : ") }) {
-            throw BoltZipError.unsupportedFormat(ArchiveFormat.sevenZip.displayName)
-        }
-        // Child output can include archive-controlled file names. Do not surface it as a diagnostic.
-        throw BoltZipError.externalToolFailed("7-Zip (\(result.status)) · \(name)")
-    }
-
-    private static func parseEntries(_ data: Data, archive: URL) throws -> [ArchiveEntry] {
-        let name = archive.lastPathComponent
-        guard let content = String(data: data, encoding: .utf8) else {
-            throw BoltZipError.invalidArchive(name)
-        }
-        let dateFormatter = DateFormatter()
-        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        var entries: [ArchiveEntry] = []
-        var seen: Set<String> = []
-        var fields: [String: String] = [:]
-        var allowsPrompt = true
-
-        func endRecord() throws {
-            guard !fields.isEmpty else { return }
-            let entry = try parseEntry(fields, archive: name, dateFormatter: dateFormatter)
-            let entryKey = entry.isDirectory ? String(entry.path.dropLast()) : entry.path
-            guard seen.insert(entryKey).inserted else {
-                throw BoltZipError.entryAlreadyExists(entry.path)
-            }
-            entries.append(entry)
-            fields.removeAll(keepingCapacity: true)
-        }
-
-        for line in content.components(separatedBy: "\n") {
-            if line.isEmpty {
-                try endRecord()
-                continue
-            }
-            if allowsPrompt && line == "Enter password:" {
-                allowsPrompt = false
-                continue
-            }
-            allowsPrompt = false
-            guard let delimiter = line.range(of: " = ") else { throw BoltZipError.invalidArchive(name) }
-            let field = String(line[..<delimiter.lowerBound])
-            guard fields.isEmpty == (field == "Path"), fields[field] == nil else {
-                throw BoltZipError.invalidArchive(name)
-            }
-            fields[field] = String(line[delimiter.upperBound...])
-        }
-        try endRecord()
-        return entries
-    }
-
-    private static func parseEntry(_ fields: [String: String], archive: String, dateFormatter: DateFormatter) throws -> ArchiveEntry {
-        guard let path = fields["Path"], !path.isEmpty, !hasUnsupportedPathCharacter(path),
-              let size = fields["Size"].flatMap(UInt64.init), let packed = fields["Packed Size"],
-              let encrypted = fields["Encrypted"], encrypted == "+" || encrypted == "-",
-              let method = fields["Method"] else {
-            throw BoltZipError.invalidArchive(archive)
-        }
-        let attributes = fields["Attributes", default: ""].split(separator: " ")
-        let mode = attributes.last.flatMap(posixMode)
-        let isDirectory = fields["Folder"] == "+" || mode?.kind == "d"
-            || attributes.first.map { !$0.hasPrefix("-") && $0.contains("D") } == true
-        let isSymlink = mode?.kind == "l"
-        let packedSize = packed.isEmpty ? 0 : UInt64(packed)
-        let crc = fields["CRC", default: ""]
-        let crc32 = crc.isEmpty ? 0 : UInt32(crc, radix: 16)
-        guard let packedSize, let crc32, !isDirectory || !isSymlink else {
-            throw BoltZipError.invalidArchive(archive)
-        }
-        let normalizedPath = ArchiveEntry.normalizePath(path, isDirectory: isDirectory)
-        guard !normalizedPath.isEmpty else { throw BoltZipError.invalidArchive(archive) }
-        let modified = fields["Modified"].flatMap { dateFormatter.date(from: String($0.prefix(19))) }
-        let codecs = method.split(separator: " ").filter { !$0.hasPrefix("7zAES") }.joined(separator: " ")
-        return ArchiveEntry(
-            path: normalizedPath,
-            isDirectory: isDirectory,
-            isSymbolicLink: isSymlink,
-            uncompressedSize: isDirectory ? 0 : size,
-            compressedSize: packedSize,
-            compressionMethodName: isDirectory ? "" : (codecs.isEmpty || codecs == "Copy" ? CompressionAlgorithm.store.shortName : codecs),
-            crc32: crc32,
-            modifiedDate: modified ?? Date(timeIntervalSince1970: 0),
-            permissions: mode?.permissions ?? (isDirectory ? 0o755 : 0o644),
-            isEncrypted: encrypted == "+",
-            encryptionLabel: encrypted == "+" ? "AES-256" : "",
-            rawPathBytes: Data(path.utf8)
-        )
-    }
-
-    private static func posixMode(_ mode: Substring) -> (kind: Character, permissions: UInt16)? {
-        guard mode.count == 10, let kind = mode.first, "-dl".contains(kind) else { return nil }
-        var permissions: UInt16 = 0
-        for (index, character) in mode.dropFirst().enumerated() {
-            if "rwxst".contains(character) {
-                permissions |= 1 << (8 - index)
-            }
-        }
-        return (kind, permissions)
-    }
-
-    private static func hasUnsupportedPathCharacter(_ path: String) -> Bool {
-        path.utf8.contains { $0 == 0 || $0 == 10 || $0 == 13 }
     }
 
     private static func createArguments(_ options: CreateArchiveOptions) throws -> [String] {
@@ -264,7 +133,7 @@ enum SevenZipEncryption {
 
     private static func stagedItemURL(_ item: ArchiveInputItem, in stage: URL) throws -> URL {
         let path = item.isDirectory ? String(item.archivePath.dropLast()) : item.archivePath
-        guard !path.isEmpty, !hasUnsupportedPathCharacter(path), path.split(separator: "/", omittingEmptySubsequences: false)
+        guard !path.isEmpty, !SevenZipArchiveListing.hasUnsupportedPathCharacter(path), path.split(separator: "/", omittingEmptySubsequences: false)
             .allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {
             throw BoltZipError.pathTraversalDetected(item.archivePath)
         }

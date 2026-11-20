@@ -1,5 +1,5 @@
 BoltZip uses the unmodified 7-Zip 26.06 ARM64 macOS command-line program
-(7zz) as a separate process for encrypted 7z archives.
+(7zz) as a separate process for encrypted 7z and compatible RAR reading.
 
 7-Zip Copyright (C) 1999-2026 Igor Pavlov.
 7-Zip is licensed under GNU LGPL 2.1 or later. Some components also use the
