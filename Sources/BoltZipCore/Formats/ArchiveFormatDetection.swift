@@ -30,6 +30,10 @@ extension ArchiveFormat {
         var filter: Int32 = 0
         let result = url.path.withCString { bolt_la_probe($0, &format, &filter) }
         if result == 0 {
+            // Only TAR wrappers are expanded as containers by our readers. A gzip-wrapped
+            // ZIP, for example, remains a gzip stream whose payload is a ZIP file.
+            let filtered: ArchiveFormat? = [1: .gz, 2: .bz2, 5: .xz, 6: .xz, 13: .lz4, 14: .zst][filter]
+            if format != 0x30000, let filtered { return filtered }
             switch format {
             case 0x30000:
                 switch filter {
@@ -42,15 +46,6 @@ extension ArchiveFormat {
                 }
             case 0x50000: return .zip
             case 0x40000: return .iso
-            case 0x90000:
-                switch filter {
-                case 1: return .gz
-                case 2: return .bz2
-                case 5, 6: return .xz
-                case 13: return .lz4
-                case 14: return .zst
-                default: break
-                }
             case 0xa0000: return .xar
             case 0xc0000: return .cab
             case 0xd0000, 0x100000: return .rar

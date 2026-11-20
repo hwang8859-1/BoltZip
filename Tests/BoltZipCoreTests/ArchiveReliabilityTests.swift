@@ -52,6 +52,17 @@ final class ArchiveReliabilityTests: XCTestCase {
         }
     }
 
+    func testCompressedZIPIsReadAsAnOuterStreamRatherThanAnUnwrappedZIP() throws {
+        let file = try source()
+        let zip = root.appendingPathComponent("inner.zip")
+        try BoltArchiveEngine.createArchive(from: [file], to: zip, options: CreateArchiveOptions())
+        let zipData = try Data(contentsOf: zip)
+        let outer = try source("outer.unknown", data: CompressionCodec.compress(data: zipData, algorithm: .deflate, gzipContainer: true))
+        let listing = try BoltArchiveEngine.inspect(archiveURL: outer)
+        XCTAssertEqual(listing.format, .gz)
+        XCTAssertEqual(try BoltArchiveEngine.readEntryData(archiveURL: outer, entryPath: XCTUnwrap(listing.entries.first).path), zipData)
+    }
+
     func testCreatingArchivesNeverDeletesExistingDirectories() throws {
         let file = try source()
         for format in ArchiveFormat.creatableFormats {
