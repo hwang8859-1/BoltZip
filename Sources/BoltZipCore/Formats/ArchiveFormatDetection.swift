@@ -11,6 +11,10 @@ extension ArchiveFormat {
 
     /// Reading uses content; `detect(from:)` remains the filename policy for output names and split volumes.
     public static func detectForReading(from url: URL) throws -> ArchiveFormat? {
+        // A directory or special file is not an archive input. Opening a named pipe could block waiting for a writer.
+        guard try url.resolvingSymlinksInPath().resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
+            return nil
+        }
         let named = detect(from: url)
         let ext = url.pathExtension.lowercased()
         if ext.hasPrefix("z"), Int(ext.dropFirst()) != nil { return .zip }

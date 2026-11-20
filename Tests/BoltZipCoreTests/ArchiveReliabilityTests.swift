@@ -40,6 +40,14 @@ final class ArchiveReliabilityTests: XCTestCase {
         let text = try source("plain.unknown", data: Data("not an archive".utf8))
         XCTAssertNil(try ArchiveFormat.detectForReading(from: text))
         XCTAssertThrowsError(try BoltArchiveEngine.inspect(archiveURL: text))
+
+        let directory = root.appendingPathComponent("directory.zip", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        XCTAssertNil(try ArchiveFormat.detectForReading(from: directory))
+
+        let symlink = root.appendingPathComponent("archive-link.unknown")
+        try FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: root.appendingPathComponent("original.zip"))
+        XCTAssertEqual(try ArchiveFormat.detectForReading(from: symlink), .zip)
     }
 
     func testSingleCompressedStreamsAreRecognizedWithoutExtensions() throws {
