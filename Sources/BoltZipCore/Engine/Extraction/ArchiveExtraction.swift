@@ -109,7 +109,8 @@ extension BoltArchiveEngine {
             format: .zip,
             entries: parsedInfo.entries,
             comment: parsedInfo.comment,
-            isSplitVolume: parsedInfo.isSplitVolume
+            isSplitVolume: parsedInfo.isSplitVolume,
+            hasZIPOuterData: parsedInfo.parsed.hasOuterData
         )
         try controller?.checkpoint()
         let plan = try ArchiveExtractionPlan.prepare(listing: listing, options: options)

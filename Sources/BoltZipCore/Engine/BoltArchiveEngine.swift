@@ -11,13 +11,15 @@ public enum BoltArchiveEngine {
         let entries: [ArchiveEntry]
         var comment = ""
         var isSplitVolume = false
+        var hasZIPOuterData = false
 
         switch format {
         case .zip:
-            let res = try ZipReader(url: archiveURL).inspectArchive(encoding: encoding)
+            let res = try ZipReader(url: archiveURL).inspectParsedArchive(encoding: encoding)
             entries = res.entries
             comment = res.comment
             isSplitVolume = res.isSplitVolume
+            hasZIPOuterData = res.parsed.hasOuterData
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
             entries = try TarCodec.listEntries(at: archiveURL, format: format)
         case .rar, .sevenZip, .iso, .cab, .xar:
@@ -28,7 +30,7 @@ public enum BoltArchiveEngine {
         }
 
         return try makeListing(archiveURL: archiveURL, format: format, entries: entries,
-                               comment: comment, isSplitVolume: isSplitVolume)
+                               comment: comment, isSplitVolume: isSplitVolume, hasZIPOuterData: hasZIPOuterData)
     }
 
     public static func readEntryData(
@@ -120,7 +122,8 @@ public enum BoltArchiveEngine {
         format: ArchiveFormat,
         entries: [ArchiveEntry],
         comment: String = "",
-        isSplitVolume: Bool = false
+        isSplitVolume: Bool = false,
+        hasZIPOuterData: Bool = false
     ) throws -> ArchiveListing {
         let attrs = try FileManager.default.attributesOfItem(atPath: archiveURL.path)
         let archiveFileSize = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
@@ -140,7 +143,8 @@ public enum BoltArchiveEngine {
             totalCompressedBytes: totalComp > 0 ? totalComp : archiveFileSize,
             archiveFileSize: archiveFileSize,
             hasEncryptedEntries: hasEnc,
-            isSplitVolume: isSplitVolume
+            isSplitVolume: isSplitVolume,
+            hasZIPOuterData: hasZIPOuterData
         )
     }
 }

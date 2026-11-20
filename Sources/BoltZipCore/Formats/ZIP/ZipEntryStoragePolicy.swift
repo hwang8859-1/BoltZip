@@ -49,7 +49,7 @@ enum ZipEntryStoragePolicy {
             options.encryption = .none
             options.password = nil
         } else {
-            guard !(base.password ?? "").isEmpty else { throw BoltZipError.passwordRequired(path) }
+            guard let password = base.password, !password.isEmpty else { throw BoltZipError.passwordRequired(path) }
             if let aes = record.aesExtra {
                 guard aes.strength == .aes256 else { throw ArchiveEditCompatibilityError.unsupportedEncryption(path: path) }
                 options.encryption = .aes256
@@ -57,6 +57,8 @@ enum ZipEntryStoragePolicy {
                 guard record.flags & 0x40 == 0 else { throw ArchiveEditCompatibilityError.unsupportedEncryption(path: path) }
                 options.encryption = .zipCrypto
             }
+            // Verify the password against the original entry before a replacement can overwrite it.
+            try reader.verifyPayloadIntegrity(record: record, entryPath: path, accessor: accessor, password: password)
         }
         return options
     }

@@ -142,6 +142,42 @@ final class ApplicationPackageEditingTests: XCTestCase {
         }
     }
 
+    func testEncryptedReplacementVerifiesOriginalPasswordBeforePublishing() throws {
+        let original = Data("original encrypted payload".utf8)
+        let updated = Data("new encrypted payload".utf8)
+        let entryName = "payload.txt"
+        let input = try write("before/\(entryName)", original)
+        let replacement = try write("after/\(entryName)", updated)
+        let operations: [ZipEditOperation] = [
+            .replaceEntry(path: entryName, fileURL: replacement),
+            .addItems(urls: [replacement], targetFolder: "")
+        ]
+
+        for encryption in [EncryptionMethod.aes256, .zipCrypto] {
+            for (index, operation) in operations.enumerated() {
+                let archive = root.appendingPathComponent("encrypted-\(encryption)-\(index).zip")
+                let correctPassword = "original-password"
+                try BoltArchiveEngine.createArchive(from: [input], to: archive, options: CreateArchiveOptions(
+                    algorithm: .store, encryption: encryption, password: correctPassword
+                ))
+                let originalArchive = try Data(contentsOf: archive)
+
+                XCTAssertThrowsError(try BoltArchiveEngine.editZip(at: archive, operations: [operation], options: CreateArchiveOptions(
+                    password: "mistyped-password"
+                )))
+                XCTAssertEqual(try Data(contentsOf: archive), originalArchive)
+
+                try BoltArchiveEngine.editZip(at: archive, operations: [operation], options: CreateArchiveOptions(password: correctPassword))
+                XCTAssertEqual(try BoltArchiveEngine.readEntryData(
+                    archiveURL: archive, entryPath: entryName, password: correctPassword
+                ), updated)
+                let record = try XCTUnwrap(ZipReader(url: archive).parseArchive().records.first)
+                XCTAssertNotEqual(record.flags & 1, 0)
+                XCTAssertEqual(record.compressionMethod, encryption == .aes256 ? 99 : 0)
+            }
+        }
+    }
+
     func testAPKOpensAndSavesWithoutSigningConfiguration() throws {
         let manifest = try write("AndroidManifest.xml", Data([0x03, 0x00, 0x08, 0x00]))
         let library = try write("libfixture.so", Data(repeating: 0x42, count: 2048))

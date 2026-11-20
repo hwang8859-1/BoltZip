@@ -111,12 +111,20 @@ public enum ZipWriter {
     ) throws {
         let reader = ZipReader(url: archiveURL)
         let parsed = try reader.parseArchive()
-        if parsed.totalDisks > 1 {
+        if parsed.totalDisks > 1 || ZipVolumeAccessor.isNumberedVolume(archiveURL) {
             throw BoltZipError.unsupportedFormat(BoltCoreLocalization.t(
                 "分卷 ZIP 归档不支持包内原地编辑，请先解压或另存为单文件 ZIP",
                 "分卷 ZIP 封存檔不支援封存檔內原地編輯，請先解壓或另存為單一 ZIP",
                 "In-place editing is not supported for split-volume ZIP archives",
                 "分割 ZIP 書庫の直接編集には対応していません"
+            ))
+        }
+        if parsed.hasOuterData {
+            throw BoltZipError.unsupportedFormat(BoltCoreLocalization.t(
+                "带额外前缀或尾部数据的 ZIP 归档不支持原地编辑",
+                "帶有額外前綴或結尾資料的 ZIP 封存檔不支援原地編輯",
+                "In-place editing is not supported for ZIP archives with data before or after the archive",
+                "書庫の前後に追加データがある ZIP 書庫の直接編集には対応していません"
             ))
         }
         let accessor = try ZipVolumeAccessor(archiveURL: archiveURL)

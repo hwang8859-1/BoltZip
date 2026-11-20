@@ -6,6 +6,7 @@ public final class ZipReader: @unchecked Sendable {
         let records: [ZipRecord]
         let comment: String
         let totalDisks: Int
+        let hasOuterData: Bool
     }
 
     private let url: URL
@@ -183,7 +184,10 @@ public final class ZipReader: @unchecked Sendable {
             )
         }
 
-        return ParsedArchive(records: records, comment: comment, totalDisks: totalDisks)
+        // The writer only recreates the ZIP records. Keep prefixed or suffixed containers read-only.
+        let firstLocalHeader = records.lazy.map(\.localHeaderOffset).min() ?? cdOffset
+        let hasOuterData = totalDisks == 1 && (firstLocalHeader > 0 || eocdPos + 22 + commentLen < tail.count)
+        return ParsedArchive(records: records, comment: comment, totalDisks: totalDisks, hasOuterData: hasOuterData)
     }
 
     public func listEntries(encoding: FilenameEncodingOption = .auto) throws -> (entries: [ArchiveEntry], comment: String) {
@@ -201,9 +205,7 @@ public final class ZipReader: @unchecked Sendable {
         let entries = parsed.records.map { record in
             Self.makeEntry(from: record, encoding: encoding)
         }
-        let ext = url.pathExtension.lowercased()
-        let isSplitExt = ext != "zip" && ext.hasPrefix("z") && Int(ext.dropFirst()) != nil
-        return (entries, parsed.comment, parsed.totalDisks > 1 || isSplitExt, parsed)
+        return (entries, parsed.comment, parsed.totalDisks > 1 || ZipVolumeAccessor.isNumberedVolume(url), parsed)
     }
 
     static func makeEntry(from record: ZipRecord, encoding: FilenameEncodingOption) -> ArchiveEntry {
@@ -658,7 +660,7 @@ public final class ZipReader: @unchecked Sendable {
         try? fm.setAttributes(attrs, ofItemAtPath: targetURL.path)
     }
 
-    private func verifyPayloadIntegrity(
+    func verifyPayloadIntegrity(
         record: ZipRecord,
         entryPath: String,
         accessor: ZipVolumeAccessor,

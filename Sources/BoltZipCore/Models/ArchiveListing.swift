@@ -10,9 +10,10 @@ public struct ArchiveListing: Sendable {
     public let archiveFileSize: UInt64
     public let hasEncryptedEntries: Bool
     public let isSplitVolume: Bool
+    let hasZIPOuterData: Bool
 
     public var canEditInPlace: Bool {
-        format.supportsInPlaceEditing && !isSplitVolume
+        format.supportsInPlaceEditing && !isSplitVolume && !hasZIPOuterData
     }
 
     public var overallCompressionRatioPercent: Double {

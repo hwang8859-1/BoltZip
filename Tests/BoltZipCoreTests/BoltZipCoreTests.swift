@@ -1231,6 +1231,9 @@ final class BoltZipCoreTests: XCTestCase {
         try zipData.write(to: zipWithTrailing)
         let trailingListing = try BoltArchiveEngine.inspect(archiveURL: zipWithTrailing)
         XCTAssertEqual(trailingListing.entries.map(\.path), ["payload.txt"])
+        XCTAssertFalse(trailingListing.canEditInPlace)
+        XCTAssertThrowsError(try BoltArchiveEngine.editZip(at: zipWithTrailing, operations: [.setComment("edited")]))
+        XCTAssertEqual(try Data(contentsOf: zipWithTrailing), zipData)
         let extractedSingleURL = tempDir.appendingPathComponent("single-extracted.txt")
         try BoltArchiveEngine.extractSingleEntryToFile(
             archiveURL: zipWithTrailing,
@@ -1238,6 +1241,35 @@ final class BoltZipCoreTests: XCTestCase {
             destinationFileURL: extractedSingleURL
         )
         XCTAssertEqual(try Data(contentsOf: extractedSingleURL), payloadBytes)
+
+        // External prefix bytes are not represented by the ZIP records the writer copies.
+        let zipWithPrefix = tempDir.appendingPathComponent("WithPrefix.zip")
+        let prefix = Data("outside the ZIP container\n".utf8)
+        var zipBody = try Data(contentsOf: conflictZip)
+        let endOffset = zipBody.count - 22
+        XCTAssertEqual(ZipBinary.readUInt32LE(zipBody, at: endOffset), ZipSignature.endOfCentralDirectory)
+        let centralOffset = Int(ZipBinary.readUInt32LE(zipBody, at: endOffset + 16))
+        var offsetBytes = Data()
+        ZipBinary.appendUInt32LE(&offsetBytes, UInt32(centralOffset + prefix.count))
+        zipBody.replaceSubrange((endOffset + 16)..<(endOffset + 20), with: offsetBytes)
+        offsetBytes.removeAll()
+        ZipBinary.appendUInt32LE(&offsetBytes, UInt32(prefix.count))
+        zipBody.replaceSubrange((centralOffset + 42)..<(centralOffset + 46), with: offsetBytes)
+        var prefixedBytes = prefix
+        prefixedBytes.append(zipBody)
+        try prefixedBytes.write(to: zipWithPrefix)
+        XCTAssertFalse(try BoltArchiveEngine.inspect(archiveURL: zipWithPrefix).canEditInPlace)
+        XCTAssertEqual(try BoltArchiveEngine.readEntryData(archiveURL: zipWithPrefix, entryPath: "payload.txt"), payloadBytes)
+        XCTAssertThrowsError(try BoltArchiveEngine.editZip(at: zipWithPrefix, operations: [.setComment("edited")]))
+        XCTAssertEqual(try Data(contentsOf: zipWithPrefix), prefixedBytes)
+
+        // Numbered split-volume names cannot be overwritten with an archive read from a different URL.
+        let numberedPart = conflictZip.deletingPathExtension().appendingPathExtension("z01")
+        let numberedContents = Data("unrelated numbered file".utf8)
+        try numberedContents.write(to: numberedPart)
+        XCTAssertFalse(try BoltArchiveEngine.inspect(archiveURL: numberedPart).canEditInPlace)
+        XCTAssertThrowsError(try BoltArchiveEngine.editZip(at: numberedPart, operations: [.setComment("edited")]))
+        XCTAssertEqual(try Data(contentsOf: numberedPart), numberedContents)
 
         // BZ-DEF-06: Corrupted oversized centralDirSize in EOCD must be rejected cleanly
         let badCDZip = tempDir.appendingPathComponent("OversizedCD.zip")

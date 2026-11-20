@@ -11,11 +11,15 @@ final class ZipVolumeAccessor: @unchecked Sendable {
     private var sizes: [Int: UInt64] = [:]
     private let ioLock = NSLock()
 
+    static func isNumberedVolume(_ archiveURL: URL) -> Bool {
+        let ext = archiveURL.pathExtension.lowercased()
+        return ext.hasPrefix("z") && Int(ext.dropFirst()) != nil
+    }
+
     init(archiveURL: URL) throws {
         // If opened via .z01/.z02, locate matching .zip central file
-        let ext = archiveURL.pathExtension.lowercased()
         let resolvedMain: URL
-        if ext != "zip", ext.hasPrefix("z"), Int(ext.dropFirst()) != nil {
+        if Self.isNumberedVolume(archiveURL) {
             resolvedMain = archiveURL.deletingPathExtension().appendingPathExtension("zip")
         } else {
             resolvedMain = archiveURL
