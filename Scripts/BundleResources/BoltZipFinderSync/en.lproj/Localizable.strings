@@ -1,0 +1,14 @@
+"finder.compressFolderZip" = "Compress Folder as ZIP";
+"finder.compressFolderTarZst" = "Compress Folder as TAR.ZST";
+"finder.openWorkspace" = "Open BoltZip Workspace";
+"finder.smartExtract" = "Smart Extract Here";
+"finder.extractSubfolder" = "Extract to Subfolder";
+"finder.extractTo" = "Extract To...";
+"finder.openInBoltZip" = "Open in BoltZip";
+"finder.verifyIntegrity" = "Verify Archive Integrity";
+"finder.compressZip" = "Compress to ZIP";
+"finder.compressEachZip" = "Compress Each to ZIP";
+"finder.compressTarZst" = "Compress to TAR.ZST (Zstd)";
+"finder.compress7z" = "Compress to 7z";
+"finder.encryptSplitCompress" = "Encrypt & Split Archive...";
+"finder.repackEncryptCompress" = "Repack / Encrypt Archive...";

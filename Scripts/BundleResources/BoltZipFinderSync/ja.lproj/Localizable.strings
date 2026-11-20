@@ -1,0 +1,14 @@
+"finder.compressFolderZip" = "現在のフォルダを ZIP に圧縮";
+"finder.compressFolderTarZst" = "現在のフォルダを TAR.ZST に圧縮";
+"finder.openWorkspace" = "BoltZip ワークスペースを開く";
+"finder.smartExtract" = "ここにスマート展開";
+"finder.extractSubfolder" = "同名フォルダへ展開";
+"finder.extractTo" = "場所を指定して展開...";
+"finder.openInBoltZip" = "BoltZip で開く";
+"finder.verifyIntegrity" = "書庫の整合性を検証";
+"finder.compressZip" = "ZIP に圧縮";
+"finder.compressEachZip" = "個別に ZIP へ圧縮";
+"finder.compressTarZst" = "TAR.ZST (Zstd) に圧縮";
+"finder.compress7z" = "7z に圧縮";
+"finder.encryptSplitCompress" = "暗号化・分割して圧縮...";
+"finder.repackEncryptCompress" = "再圧縮・暗号化...";
