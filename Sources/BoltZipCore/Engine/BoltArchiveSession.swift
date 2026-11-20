@@ -180,7 +180,6 @@ public enum BoltArchiveEngine {
             try TarCodec.create(from: inputURLs, to: outputURL, options: options, controller: controller, progress: progress)
             return [outputURL]
         case .sevenZip:
-            progress?(OperationProgress(fractionCompleted: 0.05, currentItem: outputURL.lastPathComponent))
             try ExtendedArchiveDriver.create7z(
                 from: inputURLs,
                 to: outputURL,

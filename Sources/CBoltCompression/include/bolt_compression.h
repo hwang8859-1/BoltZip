@@ -179,6 +179,14 @@ const char *bolt_libarchive_version(void);
 #define BOLT_LA_ERR_WRONG_PASSWORD    (-1002)
 #define BOLT_LA_ERR_CANCELLED         (-499)
 
+void *bolt_la_7z_open(const char *path, const char *options, char *err, size_t err_cap);
+int32_t bolt_la_7z_header(void *writer, const char *path, uint8_t kind,
+    const char *link_target, uint64_t size, uint16_t permissions, int64_t mtime,
+    char *err, size_t err_cap);
+int32_t bolt_la_7z_write(void *writer, const uint8_t *data, size_t size, char *err, size_t err_cap);
+int32_t bolt_la_7z_close(void *writer, char *err, size_t err_cap);
+void bolt_la_7z_free(void *writer);
+
 typedef struct {
     const char *path;
     const uint8_t *raw_path_bytes;

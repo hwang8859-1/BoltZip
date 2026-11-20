@@ -75,6 +75,41 @@ final class ArchiveReliabilityTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: output.appendingPathComponent("a (1).txt")), Data("LAST!".utf8))
     }
 
+    func testSevenZipProgressCancellationPreservesExistingOutputAndStopsTraversal() throws {
+        let file = try source("data.bin", data: Data(repeating: 0x42, count: 4 * 1024 * 1024))
+        let output = try source("preserved.7z", data: Data("original archive".utf8))
+        let controller = ArchiveTaskController()
+        let observed = OSAllocatedUnfairLock(initialState: UInt64(0))
+        XCTAssertThrowsError(try BoltArchiveEngine.createArchive(from: [file], to: output,
+            options: CreateArchiveOptions(format: .sevenZip, algorithm: .store), controller: controller) { progress in
+                observed.withLock { $0 = max($0, progress.processedBytes) }
+                if progress.processedBytes >= 1024 * 1024 { controller.cancel() }
+            }) { error in
+                guard case BoltZipError.cancelled = error else { return XCTFail("Unexpected error: \(error)") }
+            }
+        XCTAssertGreaterThan(observed.withLock { $0 }, 0)
+        XCTAssertLessThan(observed.withLock { $0 }, 4 * 1024 * 1024)
+        XCTAssertEqual(try Data(contentsOf: output), Data("original archive".utf8))
+        XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: root.path).contains { $0.hasPrefix(".boltzip-output-") })
+    }
+
+    func testOutputInsideInputIsExcludedAndSymbolicLinksDoNotRecurse() throws {
+        let folder = root.appendingPathComponent("input")
+        _ = try source("input/nested/file.txt")
+        try FileManager.default.createSymbolicLink(atPath: folder.appendingPathComponent("self").path, withDestinationPath: ".")
+        for format in [ArchiveFormat.zip, .tarZst, .sevenZip] {
+            let archive = folder.appendingPathComponent("result.\(format.fileExtension)")
+            try Data("old output".utf8).write(to: archive)
+            try BoltArchiveEngine.createArchive(from: [folder], to: archive, options: CreateArchiveOptions(format: format, algorithm: format.defaultAlgorithm))
+            let entries = try BoltArchiveEngine.inspect(archiveURL: archive).entries
+            XCTAssertTrue(entries.contains { $0.path == "input/nested/file.txt" })
+            XCTAssertTrue(entries.contains { $0.path == "input/self" && $0.isSymbolicLink })
+            XCTAssertFalse(entries.contains { $0.path == "input/" + archive.lastPathComponent })
+            XCTAssertLessThan(entries.count, 10)
+            try FileManager.default.removeItem(at: archive)
+        }
+    }
+
     func testFlatPublicationPreservesDirectoriesAndRollsBackSplitFailures() throws {
         let incoming = try source("incoming.txt")
         let directory = root.appendingPathComponent("out/incoming.txt")
