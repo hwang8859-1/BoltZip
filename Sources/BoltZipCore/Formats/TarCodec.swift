@@ -213,15 +213,17 @@ public enum TarCodec {
         let items = try ZipWriter.collectInputItems(
             from: inputURLs,
             excludeMacJunk: options.excludeMacJunk,
-            preserveSymlinks: options.preserveSymlinks
+            preserveSymlinks: options.preserveSymlinks,
+            excluding: [outputURL], controller: controller
         )
         let totalBytes = items.reduce(UInt64(0)) { $0 + $1.fileSize }
         var stagedBytes: UInt64 = 0
         let isRawTar = (options.format == .tar)
 
         let fm = FileManager.default
-        let tempTarURL = fm.temporaryDirectory.appendingPathComponent("boltzip-tar-\(UUID().uuidString).tar")
-        defer { try? fm.removeItem(at: tempTarURL) }
+        let outputStage = try ArchiveOutputTransaction.makeStage(for: outputURL)
+        defer { try? fm.removeItem(at: outputStage) }
+        let tempTarURL = outputStage.appendingPathComponent("payload.tar")
 
         fm.createFile(atPath: tempTarURL.path, contents: nil)
         let tarHandle = try FileHandle(forWritingTo: tempTarURL)
@@ -257,13 +259,7 @@ public enum TarCodec {
         try controller?.checkpoint()
 
         if options.format == .tar {
-            let stageOut = fm.temporaryDirectory.appendingPathComponent("boltzip-tarout-\(UUID().uuidString).tar")
-            defer { try? fm.removeItem(at: stageOut) }
-            try fm.moveItem(at: tempTarURL, to: stageOut)
-            if fm.fileExists(atPath: outputURL.path) {
-                try fm.removeItem(at: outputURL)
-            }
-            try fm.moveItem(at: stageOut, to: outputURL)
+            try ArchiveOutputTransaction.publish([tempTarURL], to: [outputURL])
             progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outputURL.lastPathComponent, processedBytes: totalBytes, totalBytes: totalBytes))
             return
         }
@@ -281,8 +277,7 @@ public enum TarCodec {
         }
 
         let workers = BoltConcurrency.resolvedWorkerCount(override: options.workerCount)
-        let stageCompURL = fm.temporaryDirectory.appendingPathComponent("boltzip-tarcmp-\(UUID().uuidString).tmp")
-        defer { try? fm.removeItem(at: stageCompURL) }
+        let stageCompURL = outputStage.appendingPathComponent("archive")
 
         switch options.format {
         case .tarGz:
@@ -300,10 +295,7 @@ public enum TarCodec {
         }
 
         try controller?.checkpoint()
-        if fm.fileExists(atPath: outputURL.path) {
-            try fm.removeItem(at: outputURL)
-        }
-        try fm.moveItem(at: stageCompURL, to: outputURL)
+        try ArchiveOutputTransaction.publish([stageCompURL], to: [outputURL])
         progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outputURL.lastPathComponent, processedBytes: totalBytes, totalBytes: totalBytes))
     }
 

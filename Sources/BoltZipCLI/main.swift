@@ -126,26 +126,9 @@ func runAssociateCommand(flags: Set<String>) async -> Int32 {
 }
 
 func moveFlatExtractedFile(from srcURL: URL, toFlatDir destDir: URL, policy: OverwritePolicy) throws {
-    let fm = FileManager.default
-    var targetURL = destDir.appendingPathComponent(srcURL.lastPathComponent)
-    if fm.fileExists(atPath: targetURL.path) {
-        switch policy {
-        case .skip:
-            return
-        case .overwrite:
-            try fm.removeItem(at: targetURL)
-        case .rename:
-            let stem = targetURL.deletingPathExtension().lastPathComponent
-            let ext = targetURL.pathExtension
-            var n = 1
-            while fm.fileExists(atPath: targetURL.path) {
-                let candidate = ext.isEmpty ? "\(stem) (\(n))" : "\(stem) (\(n)).\(ext)"
-                targetURL = destDir.appendingPathComponent(candidate)
-                n += 1
-            }
-        }
-    }
-    try fm.moveItem(at: srcURL, to: targetURL)
+    try BoltArchiveEngine.publishExtractedFile(from: srcURL,
+                                              to: destDir.appendingPathComponent(srcURL.lastPathComponent),
+                                              under: destDir, policy: policy)
 }
 
 func collectAndFlattenExtractedFiles(from staging: URL, to destURL: URL, policy: OverwritePolicy) throws -> Int {

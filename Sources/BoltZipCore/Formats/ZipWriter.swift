@@ -105,16 +105,8 @@ private final class SplitVolumeSink {
         currentHandle = nil
 
         let totalDisks = createdFiles.count
-        var finalURLs: [URL] = []
-        let fm = FileManager.default
-        for (idx, tmp) in createdFiles.enumerated() {
-            let dest = finalURL(forDisk: idx, totalDisks: totalDisks)
-            if fm.fileExists(atPath: dest.path) {
-                try fm.removeItem(at: dest)
-            }
-            try fm.moveItem(at: tmp, to: dest)
-            finalURLs.append(dest)
-        }
+        let finalURLs = createdFiles.indices.map { finalURL(forDisk: $0, totalDisks: totalDisks) }
+        try ArchiveOutputTransaction.publish(createdFiles, to: finalURLs)
         createdFiles.removeAll()
         return finalURLs
     }
@@ -201,7 +193,8 @@ public enum ZipWriter {
         let items = try collectInputItems(
             from: inputURLs,
             excludeMacJunk: options.excludeMacJunk,
-            preserveSymlinks: options.preserveSymlinks
+            preserveSymlinks: options.preserveSymlinks,
+            excluding: [outputURL], controller: controller
         )
         let sink = try SplitVolumeSink(outputURL: outputURL, splitLimit: options.splitVolumeSizeBytes)
         do {
@@ -445,12 +438,22 @@ public enum ZipWriter {
     static func collectInputItems(
         from inputURLs: [URL],
         excludeMacJunk: Bool,
-        preserveSymlinks: Bool = true
+        preserveSymlinks: Bool = true,
+        excluding excludedURLs: [URL] = [],
+        controller: ArchiveTaskController? = nil
     ) throws -> [InputItem] {
         let fm = FileManager.default
         var items: [InputItem] = []
+        let excluded = Set(excludedURLs.map { $0.standardizedFileURL.path })
+        var seenInputs: Set<String> = []
+        var rootNames: Set<String> = []
 
         for rootURL in inputURLs {
+            try controller?.checkpoint()
+            guard seenInputs.insert(rootURL.standardizedFileURL.path).inserted else { continue }
+            guard !excluded.contains(rootURL.standardizedFileURL.path) else {
+                throw ArchiveOperationError.outputIsInput
+            }
             let rootAttrs: [FileAttributeKey: Any]
             do {
                 rootAttrs = try fm.attributesOfItem(atPath: rootURL.path)
@@ -463,8 +466,18 @@ public enum ZipWriter {
                 ))
             }
 
-            let rootName = rootURL.lastPathComponent
-            if excludeMacJunk && MacJunkFilter.isJunk(path: rootName) {
+            let originalName = rootURL.lastPathComponent
+            var rootName = originalName
+            var suffix = 1
+            while !rootNames.insert(rootName.precomposedStringWithCanonicalMapping.lowercased()).inserted {
+                let isDirectory = rootAttrs[.type] as? FileAttributeType == .typeDirectory
+                let nameURL = URL(fileURLWithPath: originalName)
+                let ext = isDirectory ? "" : nameURL.pathExtension
+                let stem = ext.isEmpty ? originalName : nameURL.deletingPathExtension().lastPathComponent
+                rootName = ext.isEmpty ? "\(stem) (\(suffix))" : "\(stem) (\(suffix)).\(ext)"
+                suffix += 1
+            }
+            if excludeMacJunk && MacJunkFilter.isJunk(path: originalName) {
                 continue
             }
 
@@ -527,6 +540,11 @@ public enum ZipWriter {
 
             let basePrefix = canonicalRoot.path.hasSuffix("/") ? canonicalRoot.path : (canonicalRoot.path + "/")
             for case let childURL as URL in enumerator {
+                try controller?.checkpoint()
+                if excluded.contains(childURL.standardizedFileURL.path) {
+                    if (try? childURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true { enumerator.skipDescendants() }
+                    continue
+                }
                 let childParent = childURL.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL.path
                 let childParentPrefix = childParent.hasSuffix("/") ? childParent : (childParent + "/")
                 let canonicalChildPath = childParentPrefix + childURL.lastPathComponent

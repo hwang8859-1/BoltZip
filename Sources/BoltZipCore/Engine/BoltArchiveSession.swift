@@ -166,6 +166,13 @@ public enum BoltArchiveEngine {
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws -> [URL] {
         try controller?.checkpoint()
+        try ArchiveOutputTransaction.validate(outputURL)
+        if !options.format.supportsEncryption && (options.encryption != .none || !(options.password ?? "").isEmpty) {
+            throw ArchiveOperationError.encryptionRequiresZIP
+        }
+        if !options.format.supportsSplitVolumes && (options.splitVolumeSizeBytes ?? 0) > 0 {
+            throw ArchiveOperationError.splitVolumesRequireZIP
+        }
         switch options.format {
         case .zip:
             return try ZipWriter.create(from: inputURLs, to: outputURL, options: options, controller: controller, progress: progress)
@@ -395,17 +402,15 @@ public enum BoltArchiveEngine {
             try accessor.configureVolumes(totalDisks: parsed.totalDisks)
             defer { accessor.closeAll() }
 
-            var recordByPath: [String: ZipRecord] = [:]
-            for rec in parsed.records {
-                let e = ZipReader.makeEntry(from: rec, encoding: options.encoding)
-                recordByPath[e.path] = rec
-            }
+            let selectedPaths = Set(entriesToExtract.map(\.path))
 
             var parentDirs: Set<URL> = []
             var fileJobs: [(entry: ArchiveEntry, record: ZipRecord, destURL: URL)] = []
             fileJobs.reserveCapacity(entriesToExtract.count)
 
-            for entry in entriesToExtract {
+            for rec in parsed.records {
+                let entry = ZipReader.makeEntry(from: rec, encoding: options.encoding)
+                guard selectedPaths.contains(entry.path) else { continue }
                 try controller?.checkpoint()
                 let outputPath = remapTopLevelFolder(in: entry.path, renameMap: topLevelDirRenameMap)
                 let destURL = try safeDestinationURL(for: outputPath, under: targetRoot)
@@ -414,7 +419,6 @@ public enum BoltArchiveEngine {
                     try fm.createDirectory(at: destURL, withIntermediateDirectories: true)
                     continue
                 }
-                guard let rec = recordByPath[entry.path] else { continue }
                 if entry.isSymbolicLink {
                     if options.restoreSymlinks {
                         let targetData = try reader.decodePayload(
@@ -479,7 +483,8 @@ public enum BoltArchiveEngine {
                 let policy = options.overwritePolicy
                 let pw = options.password
                 let rootDest = targetRoot
-                let workers = BoltConcurrency.resolvedWorkerCount(override: options.workerCount)
+                let destinationsAreUnique = Set(fileJobs.map { $0.destURL.path.precomposedStringWithCanonicalMapping.lowercased() }).count == fileJobs.count
+                let workers = destinationsAreUnique ? BoltConcurrency.resolvedWorkerCount(override: options.workerCount) : 1
 
                 try ParallelExecutor.forEachBounded(fileJobs, maxWorkers: workers, controller: controller) { _, job in
                     if policy == .rename {
@@ -829,6 +834,19 @@ public enum BoltArchiveEngine {
             }
         }
         return targetURL
+    }
+
+    /// Publishes a regular file extracted by a caller, using the same collision and atomic replacement rules.
+    @discardableResult
+    public static func publishExtractedFile(from source: URL, to destination: URL,
+                                            under root: URL, policy: OverwritePolicy) throws -> URL? {
+        guard let target = try prepareExtractTargetURL(initialURL: destination, under: root, policy: policy) else { return nil }
+        let stage = try makeExtractionStage(near: target, under: root)
+        defer { try? FileManager.default.removeItem(at: stage) }
+        let staged = stage.appendingPathComponent("payload")
+        try FileManager.default.moveItem(at: source, to: staged)
+        try commitExtractedItem(staged, to: target, under: root, policy: policy)
+        return target
     }
 
     static func makeExtractionStage(near target: URL, under root: URL) throws -> URL {
