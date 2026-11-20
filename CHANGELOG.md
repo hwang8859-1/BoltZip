@@ -20,6 +20,9 @@ All notable changes to **BoltZip** will be documented in this file.
 - Keep skipped automatic update checks from resetting their timer, validate release versions, and preserve existing downloads.
 - Centralize interface error messages in L10n.swift across all four supported languages.
 
+### Packaging
+- Reduce download size by limiting document icons to 256 pixels, losslessly recompressing document and Dock icons, stripping local symbols from packaged executables, and using LZMA for the installer DMG and its Retina background.
+
 ## [1.0.3] - 2026-11-19
 
 ### Improved

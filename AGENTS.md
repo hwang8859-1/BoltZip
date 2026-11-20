@@ -28,11 +28,12 @@ BoltZip/
 │   ├── BundleResources/                 # App, Finder extension and Dock tile plist templates; Finder localizations
 │   ├── verify_release.sh                # Verify bundle, DMG, checksums, packaged CLI and showcase
 │   ├── e2e_finder_ui.sh                 # Exercise Finder URL actions against a packaged app
-│   ├── create_dmg.sh                    # Creates drag-to-Applications HFS+ UDZO .dmg installer with custom Retina background & volume icon
+│   ├── create_dmg.sh                    # Creates drag-to-Applications HFS+ ULMO .dmg with Retina background & volume icon
 │   ├── cut_next_dev_branch.sh           # Option-A release transition helper (cuts dev-X.Y.Z, switches default branch; --cleanup-old is forbidden)
 │   ├── generate_dmg_bg.swift            # CoreGraphics Retina 1x/2x DMG drag-to-Applications backdrop generator
 │   ├── build_universal_deps.sh          # Compile Apple Silicon (arm64, minOS 26.0) static zstd/xz/lz4 into Vendor/Compression/
-│   └── generate_icon.swift              # CoreGraphics procedural 1024x1024 macOS iconset generator
+│   ├── generate_icon.swift              # App and document icon generator
+│   └── IconResourceCompression.swift   # Lossless PNG recompression for document and Dock icons
 ├── Vendor/Compression/                  # Prebuilt Apple Silicon (arm64, minOS 26.0) headers & static libs (zstd, xz, lz4)
 ├── Sources/
 │   ├── BoltZipDockTile/                 # Keeps the selected icon for the pinned Dock tile after quitting

@@ -40,7 +40,10 @@ mkdir -p "$STAGE/.background"
 ditto "$APP_PATH" "$STAGE/BoltZip.app"
 ln -s /Applications "$STAGE/Applications"
 
-swift "$SCRIPT_DIR/generate_dmg_bg.swift" "$STAGE/.background/background.tiff" "$VERSION_LABEL"
+GENERATED_BACKGROUND="$DMG_WORK/background.tiff"
+swift "$SCRIPT_DIR/generate_dmg_bg.swift" "$GENERATED_BACKGROUND" "$VERSION_LABEL"
+# Keep both Retina representations and let the enclosing LZMA image compress their pixels once.
+tiffutil -none "$GENERATED_BACKGROUND" -out "$STAGE/.background/background.tiff" >/dev/null
 
 if [ -f "$APP_PATH/Contents/Resources/AppIcon.icns" ]; then
     cp "$APP_PATH/Contents/Resources/AppIcon.icns" "$STAGE/.VolumeIcon.icns"
@@ -122,6 +125,7 @@ MOUNT_DIR=""
 
 rm -f "$OUTPUT_DMG"
 mkdir -p "$(dirname "$OUTPUT_DMG")"
-hdiutil convert "$RW_DMG" -format UDZO -imagekey zlib-level=9 -o "$OUTPUT_DMG" >/dev/null
+# ULMO uses LZMA and is supported by all macOS versions targeted by this branch.
+hdiutil convert "$RW_DMG" -format ULMO -o "$OUTPUT_DMG" >/dev/null
 
 echo "==> DMG installer created at: $OUTPUT_DMG"

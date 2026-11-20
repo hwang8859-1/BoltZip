@@ -81,6 +81,9 @@ cp "$BIN_DIR/BoltZipApp" "$CONTENTS/MacOS/BoltZipApp"
 cp "$BIN_DIR/boltzip" "$CONTENTS/Helpers/boltzip"
 cp -R "$ROOT_DIR/showcase/." "$CONTENTS/Resources/showcase/"
 
+# Strip local symbols only in the shipped copies, keeping the build products and matching dSYMs.
+xcrun strip -x "$CONTENTS/MacOS/BoltZipApp" "$CONTENTS/Helpers/boltzip"
+
 echo "==> Building BoltZipFinderSync.appex (arm64, minOS $MIN_MACOS)..."
 SDK_PATH="$(xcrun --show-sdk-path)"
 
@@ -116,6 +119,7 @@ swiftc -O -parse-as-library \
     -sdk "$SDK_PATH" \
     "$ROOT_DIR/Sources/BoltZipCore/Icons/"*.swift \
     "$ROOT_DIR/Scripts/generate_icon.swift" \
+    "$ROOT_DIR/Scripts/IconResourceCompression.swift" \
     -framework AppKit -framework CoreGraphics \
     -o "$ICON_GEN_BIN"
 "$ICON_GEN_BIN" --resources "$CONTENTS/Resources"

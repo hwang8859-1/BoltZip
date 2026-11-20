@@ -804,7 +804,7 @@ final class BoltZipCoreTests: XCTestCase {
 
     func testCentralizedVersionMetadata() {
         XCTAssertEqual(BoltZipVersion.current, "1.0.4")
-        XCTAssertEqual(BoltZipVersion.build, "17")
+        XCTAssertEqual(BoltZipVersion.build, "18")
     }
 
     func testMultiCoreConcurrencyControlAutoAndFixedCoreCount() throws {

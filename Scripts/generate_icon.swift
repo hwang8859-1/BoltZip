@@ -3,11 +3,13 @@ import CryptoKit
 import Foundation
 
 // Compiled alongside `Sources/BoltZipCore/Icons/*.swift` by `Scripts/build_app.sh`:
-// swiftc -O -parse-as-library Sources/BoltZipCore/Icons/*.swift Scripts/generate_icon.swift \
+// swiftc -O -parse-as-library Sources/BoltZipCore/Icons/*.swift Scripts/{generate_icon,IconResourceCompression}.swift \
 //   -framework AppKit -framework CoreGraphics -o <bin>
 
 @main
 struct BoltIconGeneratorCLI {
+    // Keep normal and Retina Finder sizes through 256 physical pixels. The App icon has its own full-size assets.
+    static let documentIconMaxPixels = 256
     static let specs: [(String, Int)] = [
         ("icon_16x16.png", 16),
         ("icon_16x16@2x.png", 32),
@@ -21,13 +23,13 @@ struct BoltIconGeneratorCLI {
         ("icon_512x512@2x.png", 1024)
     ]
 
-    static func writeIconset(at iconsetURL: URL, renderPNG: (Int) -> Data?) throws {
+    static func writeIconset(at iconsetURL: URL, maxPixels: Int = 1024, renderPNG: (Int) -> Data?) throws {
         let fm = FileManager.default
         if fm.fileExists(atPath: iconsetURL.path) {
             try fm.removeItem(at: iconsetURL)
         }
         try fm.createDirectory(at: iconsetURL, withIntermediateDirectories: true)
-        for (filename, px) in specs {
+        for (filename, px) in specs where px <= maxPixels {
             guard let png = renderPNG(px) else {
                 throw NSError(domain: "BoltIconGenerator", code: 1, userInfo: [
                     NSLocalizedDescriptionKey: "Failed to render \(filename)"
@@ -94,16 +96,18 @@ struct BoltIconGeneratorCLI {
             let fm = FileManager.default
             try fm.createDirectory(at: resourcesURL, withIntermediateDirectories: true)
 
+            let workDir = fm.temporaryDirectory.appendingPathComponent("boltzip-iconsets-\(UUID().uuidString)", isDirectory: true)
+            try fm.createDirectory(at: workDir, withIntermediateDirectories: true)
+            defer { try? fm.removeItem(at: workDir) }
+            let iconCompression = IconResourceCompression(workDirectory: workDir)
+
             for (name, whiteBackground) in [("BoltZipDockLight", true), ("BoltZipDockDark", false)] {
                 guard let png = BoltIconArtwork.renderAppIconPNG(pixelSize: 512, whiteBackground: whiteBackground) else {
                     throw CocoaError(.fileWriteUnknown)
                 }
-                try png.write(to: resourcesURL.appendingPathComponent(name).appendingPathExtension("png"))
+                let optimizedPNG = try iconCompression.optimizePNG(png)
+                try optimizedPNG.write(to: resourcesURL.appendingPathComponent(name).appendingPathExtension("png"))
             }
-
-            let workDir = fm.temporaryDirectory.appendingPathComponent("boltzip-iconsets-\(UUID().uuidString)", isDirectory: true)
-            try fm.createDirectory(at: workDir, withIntermediateDirectories: true)
-            defer { try? fm.removeItem(at: workDir) }
 
             let appIconBundle = workDir.appendingPathComponent("AppIcon.icon", isDirectory: true)
             let assetsDir = appIconBundle.appendingPathComponent("Assets", isDirectory: true)
@@ -173,6 +177,7 @@ struct BoltIconGeneratorCLI {
                 "--compile", resourcesURL.path,
                 "--platform", "macosx",
                 "--minimum-deployment-target", "26.0",
+                "--optimization", "space",
                 "--app-icon", "AppIcon",
                 "--output-partial-info-plist", workDir.appendingPathComponent("assetcatalog_info.plist").path,
                 "--warnings",
@@ -194,13 +199,12 @@ struct BoltIconGeneratorCLI {
 
             for kind in BoltDocumentIconKind.allCases {
                 let docIconset = workDir.appendingPathComponent("\(kind.icnsBaseName).iconset", isDirectory: true)
-                try writeIconset(at: docIconset) { px in
+                try writeIconset(at: docIconset, maxPixels: documentIconMaxPixels) { px in
                     BoltIconArtwork.renderDocumentIconPNG(kind: kind, pixelSize: px)
                 }
-                try convertToIcns(
-                    iconsetURL: docIconset,
-                    outputIcnsURL: resourcesURL.appendingPathComponent("\(kind.icnsBaseName).icns")
-                )
+                let output = resourcesURL.appendingPathComponent("\(kind.icnsBaseName).icns")
+                try convertToIcns(iconsetURL: docIconset, outputIcnsURL: output)
+                try iconCompression.compactICNS(at: output)
             }
         } else {
             let iconsetURL = URL(fileURLWithPath: first, isDirectory: true)
