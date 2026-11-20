@@ -22,8 +22,8 @@ extension BoltArchiveEngine {
         var comment = listing.comment
         let fm = FileManager.default
         func destinationFor(_ path: String) throws -> URL {
-            let url = try safeDestinationURL(for: path, under: contents)
-            try assertNoSymlinkTraversal(at: url, under: contents)
+            let url = try ArchiveExtractionDestination.safeDestinationURL(for: path, under: contents)
+            try ArchiveExtractionDestination.assertNoSymlinkTraversal(at: url, under: contents)
             return url
         }
         func copy(_ input: URL, to path: String) throws {

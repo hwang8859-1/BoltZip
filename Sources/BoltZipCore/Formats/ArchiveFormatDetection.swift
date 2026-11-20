@@ -2,6 +2,13 @@ import CBoltCompression
 import Foundation
 
 extension ArchiveFormat {
+    static func requireForReading(from archiveURL: URL) throws -> ArchiveFormat {
+        guard let format = try detectForReading(from: archiveURL) else {
+            throw BoltZipError.unsupportedFormat(archiveURL.pathExtension)
+        }
+        return format
+    }
+
     /// Reading uses content; `detect(from:)` remains the filename policy for output names and split volumes.
     public static func detectForReading(from url: URL) throws -> ArchiveFormat? {
         let named = detect(from: url)

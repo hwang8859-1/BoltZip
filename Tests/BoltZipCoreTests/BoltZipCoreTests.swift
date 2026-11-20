@@ -968,9 +968,9 @@ final class BoltZipCoreTests: XCTestCase {
 
     func testArchiveSizeAggregationRejectsUnsupportedTotals() throws {
         let maxSize = UInt64(Int64.max)
-        XCTAssertEqual(try BoltArchiveEngine.checkedArchiveSize(maxSize - 1, adding: 1), maxSize)
-        XCTAssertThrowsError(try BoltArchiveEngine.checkedArchiveSize(maxSize, adding: 1))
-        XCTAssertThrowsError(try BoltArchiveEngine.checkedArchiveSize(1, adding: UInt64.max))
+        XCTAssertEqual(try ArchiveByteCount.checkedSum(maxSize - 1, 1), maxSize)
+        XCTAssertThrowsError(try ArchiveByteCount.checkedSum(maxSize, 1))
+        XCTAssertThrowsError(try ArchiveByteCount.checkedSum(1, UInt64.max))
     }
 
     func testCodecEnforcesExactDecodedSizeForBufferFileAndVerification() throws {

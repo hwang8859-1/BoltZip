@@ -10,129 +10,7 @@ public enum ZipEditOperation: Sendable {
     case replaceEntry(path: String, fileURL: URL)
 }
 
-private final class SplitVolumeSink {
-    let baseURL: URL
-    let splitLimit: UInt64?
-    private(set) var currentDisk: Int = 0
-    private(set) var currentOffset: UInt64 = 0
-    private var currentHandle: FileHandle?
-    private(set) var createdFiles: [URL] = []
-    private let tempPrefix: String
-
-    init(outputURL: URL, splitLimit: UInt64?) throws {
-        self.baseURL = outputURL
-        self.splitLimit = (splitLimit ?? 0) >= 65536 ? splitLimit : nil
-        self.tempPrefix = ".\(outputURL.lastPathComponent).boltzip.tmp.\(UUID().uuidString)"
-        try openDisk(0)
-        if self.splitLimit != nil {
-            // Standard PKWARE split archive signature 0x08074B50 at start of disk 0
-            var sig = Data()
-            ZipBinary.appendUInt32LE(&sig, ZipSignature.dataDescriptor)
-            try writeData(sig)
-        }
-    }
-
-    private func tempURL(forDisk disk: Int) -> URL {
-        let dir = baseURL.deletingLastPathComponent()
-        return dir.appendingPathComponent("\(tempPrefix).part\(disk)")
-    }
-
-    private func finalURL(forDisk disk: Int, totalDisks: Int) -> URL {
-        if disk == totalDisks - 1 {
-            return baseURL
-        }
-        let stem = baseURL.deletingPathExtension()
-        return stem.appendingPathExtension(String(format: "z%02d", disk + 1))
-    }
-
-    private func openDisk(_ disk: Int) throws {
-        if let fh = currentHandle {
-            try fh.close()
-        }
-        let url = tempURL(forDisk: disk)
-        FileManager.default.createFile(atPath: url.path, contents: nil)
-        let fh = try FileHandle(forWritingTo: url)
-        currentHandle = fh
-        currentDisk = disk
-        currentOffset = 0
-        createdFiles.append(url)
-    }
-
-    func ensureRoomBeforeHeader() throws {
-        if let limit = splitLimit, currentOffset >= limit {
-            try openDisk(currentDisk + 1)
-        }
-    }
-
-    func writeData(_ data: Data) throws {
-        guard !data.isEmpty else { return }
-        guard let limit = splitLimit else {
-            try currentHandle?.write(contentsOf: data)
-            currentOffset += UInt64(data.count)
-            return
-        }
-
-        var pos = 0
-        while pos < data.count {
-            if currentOffset >= limit {
-                try openDisk(currentDisk + 1)
-            }
-            let room = Int(limit - currentOffset)
-            let chunkLen = min(room, data.count - pos)
-            let sub = data.subdata(in: pos..<(pos + chunkLen))
-            try currentHandle?.write(contentsOf: sub)
-            currentOffset += UInt64(chunkLen)
-            pos += chunkLen
-        }
-    }
-
-    func writeFile(
-        from fileURL: URL,
-        chunkSize: Int = BoltConcurrency.streamChunkSize,
-        controller: ArchiveTaskController? = nil
-    ) throws {
-        let fh = try FileHandle(forReadingFrom: fileURL)
-        defer { try? fh.close() }
-        while true {
-            try controller?.checkpoint()
-            let chunk = try fh.read(upToCount: chunkSize) ?? Data()
-            if chunk.isEmpty { break }
-            try writeData(chunk)
-        }
-    }
-
-    func finalizeAll() throws -> [URL] {
-        try currentHandle?.close()
-        currentHandle = nil
-
-        let totalDisks = createdFiles.count
-        let finalURLs = createdFiles.indices.map { finalURL(forDisk: $0, totalDisks: totalDisks) }
-        try ArchiveOutputTransaction.publish(createdFiles, to: finalURLs)
-        createdFiles.removeAll()
-        return finalURLs
-    }
-
-    func abortCleanup() {
-        try? currentHandle?.close()
-        currentHandle = nil
-        for url in createdFiles {
-            try? FileManager.default.removeItem(at: url)
-        }
-        createdFiles.removeAll()
-    }
-}
-
 public enum ZipWriter {
-    struct InputItem: Sendable {
-        let archivePath: String
-        let fileURL: URL? // nil if synthetic directory or symlink
-        let isDirectory: Bool
-        let isSymbolicLink: Bool
-        let symlinkTarget: String?
-        let modifiedDate: Date
-        let permissions: UInt16
-        let fileSize: UInt64
-    }
 
     private enum PreparedPayload: @unchecked Sendable {
         case memory(Data)
@@ -191,13 +69,13 @@ public enum ZipWriter {
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws -> [URL] {
         try controller?.checkpoint()
-        let items = try collectInputItems(
+        let items = try ArchiveInputCollector.collect(
             from: inputURLs,
             excludeMacJunk: options.excludeMacJunk,
             preserveSymlinks: options.preserveSymlinks,
             excluding: [outputURL], controller: controller
         )
-        let sink = try SplitVolumeSink(outputURL: outputURL, splitLimit: options.splitVolumeSizeBytes)
+        let sink = try ZipVolumeSink(outputURL: outputURL, splitLimit: options.splitVolumeSizeBytes)
         do {
             let totalBytes = items.reduce(UInt64(0)) { $0 + $1.fileSize }
             var cdEntries: [CentralDirEntry] = []
@@ -259,7 +137,7 @@ public enum ZipWriter {
         var itemsToAdd: [(targetFolder: String, url: URL)] = []
         var foldersToCreate: [String] = []
         var resolvedComment = parsed.comment
-        var replacements: [String: InputItem] = [:]
+        var replacements: [String: ArchiveInputItem] = [:]
 
         for op in operations {
             switch op {
@@ -315,17 +193,17 @@ public enum ZipWriter {
                 let entry = ZipReader.makeEntry(from: original.record, encoding: encoding)
                 let attrs = try FileManager.default.attributesOfItem(atPath: fileURL.path)
                 guard attrs[.type] as? FileAttributeType == .typeRegular else { throw BoltZipError.entryNotFound(fileURL.lastPathComponent) }
-                replacements[path] = InputItem(archivePath: path, fileURL: fileURL, isDirectory: false,
+                replacements[path] = ArchiveInputItem(archivePath: path, fileURL: fileURL, isDirectory: false,
                     isSymbolicLink: false, symlinkTarget: nil, modifiedDate: Date(), permissions: entry.permissions,
                     fileSize: (attrs[.size] as? NSNumber)?.uint64Value ?? 0)
             }
         }
 
         // Collect new files to add
-        var newInputs: [InputItem] = []
+        var newInputs: [ArchiveInputItem] = []
         for folder in foldersToCreate {
             if !existing.contains(where: { $0.decodedPath == folder }) {
-                newInputs.append(InputItem(
+                newInputs.append(ArchiveInputItem(
                     archivePath: folder,
                     fileURL: nil,
                     isDirectory: true,
@@ -338,14 +216,14 @@ public enum ZipWriter {
             }
         }
         for pair in itemsToAdd {
-            let collected = try collectInputItems(
+            let collected = try ArchiveInputCollector.collect(
                 from: [pair.url],
                 excludeMacJunk: options.excludeMacJunk,
                 preserveSymlinks: options.preserveSymlinks
             )
             for var item in collected {
                 let prefixed = pair.targetFolder.isEmpty ? item.archivePath : (pair.targetFolder + item.archivePath)
-                item = InputItem(
+                item = ArchiveInputItem(
                     archivePath: prefixed,
                     fileURL: item.fileURL,
                     isDirectory: item.isDirectory,
@@ -377,7 +255,7 @@ public enum ZipWriter {
             replacementOptions[original.decodedPath] = preservedOptions
         }
 
-        let sink = try SplitVolumeSink(outputURL: archiveURL, splitLimit: nil)
+        let sink = try ZipVolumeSink(outputURL: archiveURL, splitLimit: nil)
         do {
             var cdEntries: [CentralDirEntry] = []
             let totalCount = existing.count + newInputs.count
@@ -477,181 +355,10 @@ public enum ZipWriter {
 
     // MARK: - Helpers
 
-    static func collectInputItems(
-        from inputURLs: [URL],
-        excludeMacJunk: Bool,
-        preserveSymlinks: Bool = true,
-        excluding excludedURLs: [URL] = [],
-        controller: ArchiveTaskController? = nil
-    ) throws -> [InputItem] {
-        let fm = FileManager.default
-        var items: [InputItem] = []
-        let excluded = Set(excludedURLs.map { $0.standardizedFileURL.path })
-        var seenInputs: Set<String> = []
-        var rootNames: Set<String> = []
-
-        for rootURL in inputURLs {
-            try controller?.checkpoint()
-            guard seenInputs.insert(rootURL.standardizedFileURL.path).inserted else { continue }
-            guard !excluded.contains(rootURL.standardizedFileURL.path) else {
-                throw ArchiveOperationError.outputIsInput
-            }
-            let rootAttrs: [FileAttributeKey: Any]
-            do {
-                rootAttrs = try fm.attributesOfItem(atPath: rootURL.path)
-            } catch {
-                throw BoltZipError.ioError(BoltCoreLocalization.t(
-                    "找不到文件或文件夹：\(rootURL.path)",
-                    "找不到檔案或資料夾：\(rootURL.path)",
-                    "File or folder not found: \(rootURL.path)",
-                    "ファイルまたはフォルダが見つかりません: \(rootURL.path)"
-                ))
-            }
-
-            let originalName = rootURL.lastPathComponent
-            var rootName = originalName
-            var suffix = 1
-            while !rootNames.insert(rootName.precomposedStringWithCanonicalMapping.lowercased()).inserted {
-                let isDirectory = rootAttrs[.type] as? FileAttributeType == .typeDirectory
-                let nameURL = URL(fileURLWithPath: originalName)
-                let ext = isDirectory ? "" : nameURL.pathExtension
-                let stem = ext.isEmpty ? originalName : nameURL.deletingPathExtension().lastPathComponent
-                rootName = ext.isEmpty ? "\(stem) (\(suffix))" : "\(stem) (\(suffix)).\(ext)"
-                suffix += 1
-            }
-            if excludeMacJunk && MacJunkFilter.isJunk(path: originalName) {
-                continue
-            }
-
-            let fileType = rootAttrs[.type] as? FileAttributeType
-            let rootMod = (rootAttrs[.modificationDate] as? Date) ?? Date()
-
-            if fileType == .typeSymbolicLink {
-                guard preserveSymlinks else { continue }
-                let target = try fm.destinationOfSymbolicLink(atPath: rootURL.path)
-                let rootPerms = UInt16((rootAttrs[.posixPermissions] as? NSNumber)?.uint16Value ?? 0o777)
-                items.append(InputItem(
-                    archivePath: rootName,
-                    fileURL: nil,
-                    isDirectory: false,
-                    isSymbolicLink: true,
-                    symlinkTarget: target,
-                    modifiedDate: rootMod,
-                    permissions: rootPerms,
-                    fileSize: UInt64(target.utf8.count)
-                ))
-                continue
-            }
-
-            let isRootDir = (fileType == .typeDirectory)
-            let rootPerms = UInt16((rootAttrs[.posixPermissions] as? NSNumber)?.uint16Value ?? (isRootDir ? 0o755 : 0o644))
-
-            if !isRootDir {
-                let sz = (rootAttrs[.size] as? NSNumber)?.uint64Value ?? 0
-                items.append(InputItem(
-                    archivePath: rootName,
-                    fileURL: rootURL,
-                    isDirectory: false,
-                    isSymbolicLink: false,
-                    symlinkTarget: nil,
-                    modifiedDate: rootMod,
-                    permissions: rootPerms,
-                    fileSize: sz
-                ))
-                continue
-            }
-
-            // Directory entry itself
-            items.append(InputItem(
-                archivePath: rootName + "/",
-                fileURL: nil,
-                isDirectory: true,
-                isSymbolicLink: false,
-                symlinkTarget: nil,
-                modifiedDate: rootMod,
-                permissions: rootPerms,
-                fileSize: 0
-            ))
-
-            let canonicalRoot = rootURL.resolvingSymlinksInPath().standardizedFileURL
-            guard let enumerator = fm.enumerator(
-                at: canonicalRoot,
-                includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey],
-                options: []
-            ) else { continue }
-
-            let basePrefix = canonicalRoot.path.hasSuffix("/") ? canonicalRoot.path : (canonicalRoot.path + "/")
-            for case let childURL as URL in enumerator {
-                try controller?.checkpoint()
-                if excluded.contains(childURL.standardizedFileURL.path) {
-                    if (try? childURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true { enumerator.skipDescendants() }
-                    continue
-                }
-                let childParent = childURL.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL.path
-                let childParentPrefix = childParent.hasSuffix("/") ? childParent : (childParent + "/")
-                let canonicalChildPath = childParentPrefix + childURL.lastPathComponent
-                let rel: String
-                if canonicalChildPath.hasPrefix(basePrefix) {
-                    rel = String(canonicalChildPath.dropFirst(basePrefix.count))
-                } else {
-                    let fallbackPath = childURL.standardizedFileURL.path
-                    rel = fallbackPath.hasPrefix(basePrefix)
-                        ? String(fallbackPath.dropFirst(basePrefix.count))
-                        : childURL.lastPathComponent
-                }
-                let archiveRel = "\(rootName)/\(rel)"
-
-                if excludeMacJunk && MacJunkFilter.isJunk(path: archiveRel) {
-                    if (try? childURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
-                        enumerator.skipDescendants()
-                    }
-                    continue
-                }
-
-                let rv = try childURL.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey])
-                let attrs = try? fm.attributesOfItem(atPath: childURL.path)
-                let mod = rv.contentModificationDate ?? Date()
-
-                if rv.isSymbolicLink == true {
-                    guard preserveSymlinks else { continue }
-                    let target = try fm.destinationOfSymbolicLink(atPath: childURL.path)
-                    let perms = UInt16((attrs?[.posixPermissions] as? NSNumber)?.uint16Value ?? 0o777)
-                    items.append(InputItem(
-                        archivePath: archiveRel,
-                        fileURL: nil,
-                        isDirectory: false,
-                        isSymbolicLink: true,
-                        symlinkTarget: target,
-                        modifiedDate: mod,
-                        permissions: perms,
-                        fileSize: UInt64(target.utf8.count)
-                    ))
-                    continue
-                }
-
-                let isSubDir = rv.isDirectory == true
-                let perms = UInt16((attrs?[.posixPermissions] as? NSNumber)?.uint16Value ?? (isSubDir ? 0o755 : 0o644))
-                let sz = isSubDir ? 0 : UInt64(rv.fileSize ?? 0)
-
-                items.append(InputItem(
-                    archivePath: isSubDir ? (archiveRel + "/") : archiveRel,
-                    fileURL: isSubDir ? nil : childURL,
-                    isDirectory: isSubDir,
-                    isSymbolicLink: false,
-                    symlinkTarget: nil,
-                    modifiedDate: mod,
-                    permissions: perms,
-                    fileSize: sz
-                ))
-            }
-        }
-        return items
-    }
-
     private static func writeNewItems(
-        _ items: [InputItem],
+        _ items: [ArchiveInputItem],
         options: CreateArchiveOptions,
-        sink: SplitVolumeSink,
+        sink: ZipVolumeSink,
         controller: ArchiveTaskController?,
         totalBytes: UInt64,
         cdEntries: inout [CentralDirEntry],
@@ -728,7 +435,7 @@ public enum ZipWriter {
     private static func writePreparedEntry(
         _ prepared: PreparedZipItem,
         controller: ArchiveTaskController? = nil,
-        sink: SplitVolumeSink
+        sink: ZipVolumeSink
     ) throws -> CentralDirEntry {
         try writeRawEntry(
             rawPathBytes: prepared.rawPathBytes,
@@ -754,7 +461,7 @@ public enum ZipWriter {
     }
 
     private static func prepareItem(
-        _ item: InputItem,
+        _ item: ArchiveInputItem,
         options: CreateArchiveOptions,
         allowCodecMT: Bool,
         workerCount: Int? = nil,
@@ -1016,8 +723,8 @@ public enum ZipWriter {
         extraWithoutZip64: Data,
         commentData: Data,
         emitDataDescriptor: Bool = false,
-        sink: SplitVolumeSink,
-        writePayloadBody: (SplitVolumeSink) throws -> Void
+        sink: ZipVolumeSink,
+        writePayloadBody: (ZipVolumeSink) throws -> Void
     ) throws -> CentralDirEntry {
         try sink.ensureRoomBeforeHeader()
         let localDisk = UInt32(sink.currentDisk)
@@ -1109,7 +816,7 @@ public enum ZipWriter {
     private static func finishCentralDirectory(
         entries: [CentralDirEntry],
         comment: String,
-        sink: SplitVolumeSink
+        sink: ZipVolumeSink
     ) throws {
         try sink.ensureRoomBeforeHeader()
         let cdStartDisk = UInt32(sink.currentDisk)

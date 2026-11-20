@@ -355,22 +355,22 @@ public enum ExtendedArchiveDriver {
                                     return 0
                                 }
                                 if let sel = st.selectedPaths, !sel.isEmpty,
-                                   !BoltArchiveEngine.pathMatchesSelection(normalized, selectedPaths: sel) {
+                                   !ArchiveExtractionDestination.pathMatchesSelection(normalized, selectedPaths: sel) {
                                     return 0
                                 }
 
-                                let outputPath = BoltArchiveEngine.remapTopLevelFolder(in: normalized, renameMap: st.renameMap)
-                                let initialDest = try BoltArchiveEngine.safeDestinationURL(for: outputPath, under: st.destinationURL)
+                                let outputPath = ArchiveExtractionDestination.remapTopLevelFolder(in: normalized, renameMap: st.renameMap)
+                                let initialDest = try ArchiveExtractionDestination.safeDestinationURL(for: outputPath, under: st.destinationURL)
 
                                 if isDir {
-                                    try BoltArchiveEngine.assertNoSymlinkTraversal(at: initialDest, under: st.destinationURL)
+                                    try ArchiveExtractionDestination.assertNoSymlinkTraversal(at: initialDest, under: st.destinationURL)
                                     try FileManager.default.createDirectory(at: initialDest, withIntermediateDirectories: true)
                                     return 0
                                 }
                                 if info.is_symlink != 0 {
                                     if st.restoreSymlinks, let symPtr = info.symlink_target {
                                         let target = String(cString: symPtr)
-                                        try BoltArchiveEngine.createSafeSymlink(
+                                        try ArchiveExtractionDestination.createSafeSymlink(
                                             at: initialDest,
                                             target: target,
                                             under: st.destinationURL,
@@ -380,7 +380,7 @@ public enum ExtendedArchiveDriver {
                                     return 0
                                 }
 
-                                guard let finalDest = try BoltArchiveEngine.prepareExtractTargetURL(
+                                guard let finalDest = try ArchiveExtractionDestination.prepareExtractTargetURL(
                                     initialURL: initialDest,
                                     under: st.destinationURL,
                                     policy: st.overwritePolicy
@@ -388,7 +388,7 @@ public enum ExtendedArchiveDriver {
                                     return 0
                                 }
                                 st.activeTargetURL = finalDest
-                                let stage = try BoltArchiveEngine.makeExtractionStage(near: finalDest, under: st.destinationURL)
+                                let stage = try ArchiveExtractionDestination.makeExtractionStage(near: finalDest, under: st.destinationURL)
                                 st.activeStage = stage
                                 let stagedFile = stage.appendingPathComponent("payload")
                                 guard FileManager.default.createFile(atPath: stagedFile.path, contents: nil) else {
@@ -462,7 +462,7 @@ public enum ExtendedArchiveDriver {
                                         .posixPermissions: NSNumber(value: st.activePermissions)
                                     ]
                                     try? FileManager.default.setAttributes(attrs, ofItemAtPath: stagedFile.path)
-                                    try BoltArchiveEngine.commitExtractedItem(stagedFile, to: targetURL, under: st.destinationURL,
+                                    try ArchiveExtractionDestination.commitExtractedItem(stagedFile, to: targetURL, under: st.destinationURL,
                                                                               policy: st.overwritePolicy, controller: st.controller)
                                     st.cleanupActivePartialFile()
                                     return 0

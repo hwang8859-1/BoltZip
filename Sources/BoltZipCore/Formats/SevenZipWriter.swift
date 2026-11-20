@@ -7,10 +7,10 @@ enum SevenZipWriter {
                        progress: (@Sendable (OperationProgress) -> Void)?) throws {
         try controller?.checkpoint()
         try ArchiveOutputTransaction.validate(output)
-        let items = try ZipWriter.collectInputItems(from: inputs, excludeMacJunk: excludeMacJunk,
+        let items = try ArchiveInputCollector.collect(from: inputs, excludeMacJunk: excludeMacJunk,
                                                     preserveSymlinks: preserveSymlinks,
                                                     excluding: [output], controller: controller)
-        let total = try items.reduce(UInt64(0)) { try BoltArchiveEngine.checkedArchiveSize($0, adding: $1.fileSize) }
+        let total = try items.reduce(UInt64(0)) { try ArchiveByteCount.checkedSum($0, $1.fileSize) }
         let stage = try ArchiveOutputTransaction.makeStage(for: output)
         defer { try? FileManager.default.removeItem(at: stage) }
         let stagedArchive = stage.appendingPathComponent("archive.7z")
