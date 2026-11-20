@@ -22,6 +22,36 @@ final class ArchiveReliabilityTests: XCTestCase {
         return url
     }
 
+    func testArchiveContentOverridesUnknownAndMisleadingExtensions() throws {
+        let file = try source()
+        for format in ArchiveFormat.creatableFormats {
+            let archive = root.appendingPathComponent("original.\(format.fileExtension)")
+            try BoltArchiveEngine.createArchive(from: [file], to: archive, options: CreateArchiveOptions(format: format, algorithm: format.defaultAlgorithm))
+            for ext in ["arbitrary", "", "jar", "apk"] {
+                let renamed = root.appendingPathComponent("renamed-\(format.rawValue)-\(ext)" + (ext.isEmpty ? "" : ".\(ext)"))
+                try FileManager.default.copyItem(at: archive, to: renamed)
+                XCTAssertEqual(try ArchiveFormat.detectForReading(from: renamed), format)
+                let listing = try BoltArchiveEngine.inspect(archiveURL: renamed)
+                XCTAssertEqual(listing.format, format)
+                XCTAssertEqual(try BoltArchiveEngine.readEntryData(archiveURL: renamed, entryPath: file.lastPathComponent), Data("payload".utf8))
+                XCTAssertTrue(try BoltArchiveEngine.testIntegrity(archiveURL: renamed).isHealthy)
+            }
+        }
+        let text = try source("plain.unknown", data: Data("not an archive".utf8))
+        XCTAssertNil(try ArchiveFormat.detectForReading(from: text))
+        XCTAssertThrowsError(try BoltArchiveEngine.inspect(archiveURL: text))
+    }
+
+    func testSingleCompressedStreamsAreRecognizedWithoutExtensions() throws {
+        let data = Data("single stream".utf8)
+        for (format, algorithm) in [(ArchiveFormat.gz, CompressionAlgorithm.deflate), (.zst, .zstd), (.xz, .xz), (.bz2, .bzip2), (.lz4, .lz4)] {
+            let archive = try source("stream-\(format.rawValue).data", data: CompressionCodec.compress(data: data, algorithm: algorithm, gzipContainer: format == .gz))
+            XCTAssertEqual(try ArchiveFormat.detectForReading(from: archive), format)
+            let listing = try BoltArchiveEngine.inspect(archiveURL: archive)
+            XCTAssertEqual(try BoltArchiveEngine.readEntryData(archiveURL: archive, entryPath: XCTUnwrap(listing.entries.first).path), data)
+        }
+    }
+
     func testCreatingArchivesNeverDeletesExistingDirectories() throws {
         let file = try source()
         for format in ArchiveFormat.creatableFormats {

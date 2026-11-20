@@ -28,6 +28,7 @@ extern int archive_read_support_format_iso9660(struct archive *a);
 extern int archive_read_support_format_cab(struct archive *a);
 extern int archive_read_support_format_xar(struct archive *a);
 extern int archive_read_support_format_all(struct archive *a);
+extern int archive_read_support_format_raw(struct archive *a);
 extern int archive_read_support_filter_all(struct archive *a);
 extern int archive_read_add_passphrase(struct archive *a, const char *passphrase);
 extern int archive_read_open_filename(struct archive *a, const char *filename, size_t block_size);
@@ -41,6 +42,8 @@ extern const char *archive_error_string(struct archive *a);
 extern const char *archive_format_name(struct archive *a);
 extern const char *archive_version_string(void);
 extern const char *archive_version_details(void);
+extern int archive_format(struct archive *a);
+extern int archive_filter_code(struct archive *a, int filter);
 extern struct archive *archive_write_new(void);
 extern int archive_write_set_format_7zip(struct archive *a);
 extern int archive_write_set_options(struct archive *a, const char *options);
@@ -84,7 +87,26 @@ const char *bolt_libarchive_version(void) {
     return ver;
 }
 
-
+int32_t bolt_la_probe(const char *path, int32_t *format, int32_t *filter) {
+    struct archive *a = archive_read_new();
+    if (!a) return -1;
+    archive_read_support_format_all(a);
+    archive_read_support_format_raw(a);
+    archive_read_support_filter_all(a);
+    int result = archive_read_open_filename(a, path, 65536);
+    if (result == BOLT_ARCHIVE_OK || result == BOLT_ARCHIVE_WARN) {
+        struct archive_entry *entry = NULL;
+        result = archive_read_next_header(a, &entry);
+        if (result == BOLT_ARCHIVE_OK || result == BOLT_ARCHIVE_WARN || result == BOLT_ARCHIVE_EOF) {
+            *format = archive_format(a) & 0xff0000;
+            *filter = archive_filter_code(a, 0);
+            archive_read_free(a);
+            return 0;
+        }
+    }
+    archive_read_free(a);
+    return -1;
+}
 
 static void write_err(char *err_buf, size_t err_cap, const char *msg) {
     if (!err_buf || err_cap == 0) return;

@@ -179,6 +179,8 @@ const char *bolt_libarchive_version(void);
 #define BOLT_LA_ERR_WRONG_PASSWORD    (-1002)
 #define BOLT_LA_ERR_CANCELLED         (-499)
 
+/* Content detection uses libarchive's stable format/filter identifiers. */
+int32_t bolt_la_probe(const char *path, int32_t *format, int32_t *filter);
 void *bolt_la_7z_open(const char *path, const char *options, char *err, size_t err_cap);
 int32_t bolt_la_7z_header(void *writer, const char *path, uint8_t kind,
     const char *link_target, uint64_t size, uint16_t permissions, int64_t mtime,

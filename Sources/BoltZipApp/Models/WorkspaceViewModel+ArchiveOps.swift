@@ -10,6 +10,8 @@ extension WorkspaceViewModel {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
+        panel.allowedContentTypes = [.item]
+        panel.allowsOtherFileTypes = true
         panel.title = l10n.openArchive
         if panel.runModal() == .OK, let url = panel.url {
             openArchive(url: url, fromExternalFinder: false)

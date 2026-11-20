@@ -30,7 +30,7 @@ public enum BoltArchiveEngine {
         encoding: FilenameEncodingOption = .auto,
         password: String? = nil
     ) throws -> ArchiveListing {
-        guard let format = ArchiveFormat.detect(from: archiveURL) else {
+        guard let format = try ArchiveFormat.detectForReading(from: archiveURL) else {
             throw BoltZipError.unsupportedFormat(archiveURL.pathExtension)
         }
 
@@ -63,7 +63,7 @@ public enum BoltArchiveEngine {
         password: String? = nil,
         encoding: FilenameEncodingOption = .auto
     ) throws -> Data {
-        guard let format = ArchiveFormat.detect(from: archiveURL) else {
+        guard let format = try ArchiveFormat.detectForReading(from: archiveURL) else {
             throw BoltZipError.unsupportedFormat(archiveURL.pathExtension)
         }
         switch format {
@@ -92,7 +92,7 @@ public enum BoltArchiveEngine {
         controller: ArchiveTaskController? = nil
     ) throws {
         try controller?.checkpoint()
-        guard let format = ArchiveFormat.detect(from: archiveURL) else {
+        guard let format = try ArchiveFormat.detectForReading(from: archiveURL) else {
             throw BoltZipError.unsupportedFormat(archiveURL.pathExtension)
         }
         let fm = FileManager.default
@@ -204,7 +204,7 @@ public enum BoltArchiveEngine {
         encoding: FilenameEncodingOption = .auto,
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
-        guard ArchiveFormat.detect(from: archiveURL) == .zip else {
+        guard try ArchiveFormat.detectForReading(from: archiveURL) == .zip else {
             throw BoltZipError.unsupportedFormat(BoltCoreLocalization.t("仅 ZIP 格式支持包内原地增删改", "僅 ZIP 格式支援封存檔內原地編輯", "In-place editing is only supported for ZIP archives", "書庫内での直接編集は ZIP 形式のみ対応しています"))
         }
         try ZipWriter.editArchive(at: archiveURL, operations: operations, options: options, encoding: encoding, progress: progress)
@@ -378,7 +378,7 @@ public enum BoltArchiveEngine {
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws -> URL {
         try controller?.checkpoint()
-        guard let format = ArchiveFormat.detect(from: archiveURL) else {
+        guard let format = try ArchiveFormat.detectForReading(from: archiveURL) else {
             throw BoltZipError.unsupportedFormat(archiveURL.pathExtension)
         }
         let fm = FileManager.default
@@ -643,7 +643,7 @@ public enum BoltArchiveEngine {
         workerCount: Int? = nil,
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws -> IntegrityReport {
-        guard let format = ArchiveFormat.detect(from: archiveURL) else {
+        guard let format = try ArchiveFormat.detectForReading(from: archiveURL) else {
             throw BoltZipError.unsupportedFormat(archiveURL.pathExtension)
         }
         switch format {
@@ -658,7 +658,7 @@ public enum BoltArchiveEngine {
 
     public static func filterArchiveURLs(_ urls: [URL]) -> [URL] {
         urls.filter { url in
-            guard ArchiveFormat.detect(from: url) != nil else { return false }
+            guard (try? ArchiveFormat.detectForReading(from: url)) != nil else { return false }
             let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
             return !isDir
         }
