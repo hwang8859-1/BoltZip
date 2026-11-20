@@ -57,6 +57,7 @@ struct L10n: Sendable {
     }
 
     func operationErrorMessage(_ error: any Error) -> String {
+        if let updateError = error as? UpdateError { return updateErrorMessage(updateError) }
         if let error = error as? ArchiveOperationError {
             switch error {
             case .outputIsInput:
@@ -76,7 +77,21 @@ struct L10n: Sendable {
         return error.localizedDescription
     }
 
-
+    func updateErrorMessage(_ error: UpdateError) -> String {
+        switch error {
+        case .networkFailed(let detail): return detail
+        case .noDMGAsset:
+            return t("该版本没有适用于 Apple Silicon 的 DMG 安装包", "此版本沒有適用於 Apple Silicon 的 DMG 安裝檔", "This release has no Apple Silicon DMG installer.", "このリリースには Apple Silicon 用の DMG インストーラがありません。")
+        case .missingChecksumManifest:
+            return t("该版本缺少有效的 SHA-256 校验清单", "此版本缺少有效的 SHA-256 校驗清單", "This release has no valid SHA-256 checksum manifest.", "このリリースには有効な SHA-256 チェックサム一覧がありません。")
+        case .checksumMismatch(let expected, let actual):
+            return t("安装包 SHA-256 校验失败（预期 \(expected.prefix(12))，实际 \(actual.prefix(12))）", "安裝檔 SHA-256 校驗失敗（預期 \(expected.prefix(12))，實際 \(actual.prefix(12))）", "Installer SHA-256 mismatch (expected \(expected.prefix(12)), got \(actual.prefix(12))).", "インストーラの SHA-256 が一致しません（期待値 \(expected.prefix(12))、実際 \(actual.prefix(12))）。")
+        case .invalidResponse:
+            return t("更新服务返回了无效数据", "更新服務傳回了無效資料", "The update service returned invalid data.", "更新サービスから無効なデータが返されました。")
+        case .downloadFailed:
+            return t("安装包下载失败，请稍后重试", "安裝檔下載失敗，請稍後重試", "The installer download failed. Try again later.", "インストーラをダウンロードできませんでした。後でもう一度お試しください。")
+        }
+    }
 
     private func t(_ sc: String, _ tc: String, _ en: String, _ ja: String) -> String {
         switch lang {
