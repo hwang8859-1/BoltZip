@@ -804,7 +804,7 @@ final class BoltZipCoreTests: XCTestCase {
 
     func testCentralizedVersionMetadata() {
         XCTAssertEqual(BoltZipVersion.current, "1.0.4")
-        XCTAssertEqual(BoltZipVersion.build, "16")
+        XCTAssertEqual(BoltZipVersion.build, "17")
     }
 
     func testMultiCoreConcurrencyControlAutoAndFixedCoreCount() throws {
@@ -1138,7 +1138,7 @@ final class BoltZipCoreTests: XCTestCase {
         }
     }
 
-    func testContainerVariantsReadOnlyAndSevenZipHardlinkStaging() throws {
+    func testContainerVariantsEditableAndSevenZipRoundTrip() throws {
         let fm = FileManager.default
         let payloadDir = tempDir.appendingPathComponent("PayloadApp", isDirectory: true)
         try fm.createDirectory(at: payloadDir, withIntermediateDirectories: true)
@@ -1153,11 +1153,13 @@ final class BoltZipCoreTests: XCTestCase {
             try fm.copyItem(at: baseZip, to: variantURL)
             XCTAssertEqual(ArchiveFormat.detect(from: variantURL), .zip)
             let listing = try BoltArchiveEngine.inspect(archiveURL: variantURL)
-            XCTAssertFalse(listing.canEditInPlace)
+            XCTAssertTrue(listing.canEditInPlace)
             XCTAssertTrue(listing.entries.contains { $0.path.hasSuffix("manifest.json") })
+            try BoltArchiveEngine.editZip(at: variantURL, operations: [.setComment("edited")])
+            XCTAssertEqual(try BoltArchiveEngine.inspect(archiveURL: variantURL).comment, "edited")
         }
 
-        // Verify .7z creation with hardlink staging and nested symlink
+        // Verify streaming .7z creation and nested symlink preservation
         let sevenZURL = tempDir.appendingPathComponent("HardlinkStage.7z")
         try BoltArchiveEngine.createArchive(from: [payloadDir], to: sevenZURL, options: CreateArchiveOptions(format: .sevenZip, algorithm: .xz))
         let szOut = tempDir.appendingPathComponent("SevenZipHardlinkOut", isDirectory: true)

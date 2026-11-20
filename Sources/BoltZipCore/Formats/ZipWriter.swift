@@ -7,6 +7,7 @@ public enum ZipEditOperation: Sendable {
     case deletePaths(Set<String>)
     case renamePath(oldPath: String, newPath: String)
     case setComment(String)
+    case replaceEntry(path: String, fileURL: URL)
 }
 
 private final class SplitVolumeSink {
@@ -232,8 +233,7 @@ public enum ZipWriter {
     ) throws {
         let reader = ZipReader(url: archiveURL)
         let parsed = try reader.parseArchive()
-        let ext = archiveURL.pathExtension.lowercased()
-        if parsed.totalDisks > 1 || ext != "zip" {
+        if parsed.totalDisks > 1 {
             throw BoltZipError.unsupportedFormat(BoltCoreLocalization.t(
                 "分卷 ZIP 归档不支持包内原地编辑，请先解压或另存为单文件 ZIP",
                 "分卷 ZIP 封存檔不支援封存檔內原地編輯，請先解壓或另存為單一 ZIP",
@@ -259,6 +259,7 @@ public enum ZipWriter {
         var itemsToAdd: [(targetFolder: String, url: URL)] = []
         var foldersToCreate: [String] = []
         var resolvedComment = parsed.comment
+        var replacements: [String: InputItem] = [:]
 
         for op in operations {
             switch op {
@@ -303,6 +304,20 @@ public enum ZipWriter {
                 }
             case .setComment(let newComment):
                 resolvedComment = newComment
+            case .replaceEntry(let path, let fileURL):
+                let path = ArchiveEntry.normalizePath(path, isDirectory: false)
+                guard let original = existing.first(where: { $0.decodedPath == path && !$0.isDirectory }) else {
+                    throw BoltZipError.entryNotFound(path)
+                }
+                guard existing.filter({ $0.decodedPath == path }).count == 1 else {
+                    throw ArchiveEditCompatibilityError.ambiguousEntry(path)
+                }
+                let entry = ZipReader.makeEntry(from: original.record, encoding: encoding)
+                let attrs = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+                guard attrs[.type] as? FileAttributeType == .typeRegular else { throw BoltZipError.entryNotFound(fileURL.lastPathComponent) }
+                replacements[path] = InputItem(archivePath: path, fileURL: fileURL, isDirectory: false,
+                    isSymbolicLink: false, symlinkTarget: nil, modifiedDate: Date(), permissions: entry.permissions,
+                    fileSize: (attrs[.size] as? NSNumber)?.uint64Value ?? 0)
             }
         }
 
@@ -341,9 +356,25 @@ public enum ZipWriter {
                     fileSize: item.fileSize
                 )
                 // Replace same-path existing entry like Windows Zip
-                existing.removeAll { $0.decodedPath == item.archivePath }
-                newInputs.append(item)
+                if existing.contains(where: { $0.decodedPath == item.archivePath }) {
+                    guard existing.filter({ $0.decodedPath == item.archivePath }).count == 1 else {
+                        throw ArchiveEditCompatibilityError.ambiguousEntry(item.archivePath)
+                    }
+                    replacements[item.archivePath] = item
+                } else {
+                    newInputs.removeAll { $0.archivePath == item.archivePath }
+                    newInputs.append(item)
+                }
             }
+        }
+
+        // Preflight every replacement before opening output or consuming user edits.
+        var replacementOptions: [String: CreateArchiveOptions] = [:]
+        for original in existing where replacements[original.decodedPath] != nil {
+            var preservedOptions = try ZipEntryStoragePolicy.options(for: original.record,
+                path: original.decodedPath, reader: reader, accessor: accessor, base: options)
+            preservedOptions.encoding = encoding
+            replacementOptions[original.decodedPath] = preservedOptions
         }
 
         let sink = try SplitVolumeSink(outputURL: archiveURL, splitLimit: nil)
@@ -357,7 +388,18 @@ public enum ZipWriter {
                     fractionCompleted: totalCount > 0 ? Double(idx) / Double(totalCount) : 0,
                     currentItem: ex.decodedPath
                 ))
-                let pathEncoded = FilenameEncoding.encode(ex.decodedPath, option: .utf8)
+                if let replacement = replacements[ex.decodedPath], let entryOptions = replacementOptions[ex.decodedPath] {
+                    let prepared = try prepareItem(replacement, options: entryOptions, allowCodecMT: true,
+                        workerCount: options.workerCount, preserving: ex.record)
+                    defer { prepared.cleanupTempIfNeeded() }
+                    cdEntries.append(try writePreparedEntry(prepared, sink: sink))
+                    idx += 1
+                    continue
+                }
+                let originalPath = ZipReader.makeEntry(from: ex.record, encoding: encoding).path
+                let pathEncoded = ex.decodedPath == originalPath
+                    ? (data: ex.record.rawPathBytes, isUTF8: ex.record.flags & 0x0800 != 0)
+                    : FilenameEncoding.encode(ex.decodedPath, option: .utf8)
                 let flags = ex.record.flags | (pathEncoded.isUTF8 ? 0x0800 : 0)
                 // Preserve bit 3 for untouched legacy ZipCrypto entries encrypted with the data-descriptor header byte
                 // so 7-Zip/WinRAR continue validating (dosTime >> 8) properly; emit a compliant Data Descriptor below.
@@ -717,9 +759,15 @@ public enum ZipWriter {
         allowCodecMT: Bool,
         workerCount: Int? = nil,
         controller: ArchiveTaskController? = nil,
-        progress: ((UInt64, UInt64) -> Void)? = nil
+        progress: ((UInt64, UInt64) -> Void)? = nil,
+        preserving original: ZipRecord? = nil
     ) throws -> PreparedZipItem {
-        let pathEnc = FilenameEncoding.encode(item.archivePath, option: options.encoding)
+        let pathEnc: (data: Data, isUTF8: Bool)
+        if let original, ZipReader.makeEntry(from: original, encoding: options.encoding).path == item.archivePath {
+            pathEnc = (original.rawPathBytes, original.flags & 0x0800 != 0)
+        } else {
+            pathEnc = FilenameEncoding.encode(item.archivePath, option: options.encoding)
+        }
         let (dosTime, dosDate) = ZipBinary.dosDateTime(from: item.modifiedDate)
         let unixMode: UInt32
         if item.isSymbolicLink {
@@ -783,7 +831,8 @@ public enum ZipWriter {
                 allowCodecMT: allowCodecMT,
                 workerCount: workerCount,
                 controller: controller,
-                progress: progress
+                progress: progress,
+                preserving: original
             )
         }
 
@@ -795,7 +844,7 @@ public enum ZipWriter {
         }
 
         let crc = CompressionCodec.crc32(plainData)
-        var method = options.algorithm.zipMethodCode
+        var method = original.map { $0.aesExtra?.actualMethod ?? $0.compressionMethod } ?? options.algorithm.zipMethodCode
         var compressed = try CompressionCodec.compress(
             data: plainData,
             algorithm: options.algorithm,
@@ -807,12 +856,13 @@ public enum ZipWriter {
             progress: progress
         )
         // Store fallback if DEFLATE/Bzip2/Zstd expanded a tiny/incompressible file
-        if options.algorithm != .store && compressed.count >= plainData.count && plainData.count < 64 {
+        if original == nil && options.algorithm != .store && compressed.count >= plainData.count && plainData.count < 64 {
             method = 0
             compressed = plainData
         }
 
-        var extra = buildExtendedTimestampExtra(date: item.modifiedDate)
+        var extra = original.map { preservedEntryExtra($0.extraData) } ?? Data()
+        extra.append(buildExtendedTimestampExtra(date: item.modifiedDate))
         var finalPayload = compressed
         var headerCRC = crc
         var headerMethod = method
@@ -823,8 +873,9 @@ public enum ZipWriter {
             case .aes256:
                 finalPayload = try ZipCrypto.encryptAES256(plaintext: compressed, password: password)
                 headerMethod = 99
-                headerCRC = 0 // AE-2 spec zeroes CRC32 and relies on HMAC-SHA1
-                extra.append(buildWinZipAESExtra(actualMethod: method))
+                let vendor = original?.aesExtra?.vendorVersion ?? 2
+                headerCRC = vendor == 2 ? 0 : crc
+                extra.append(buildWinZipAESExtra(actualMethod: method, vendorVersion: vendor))
             case .zipCrypto:
                 finalPayload = try ZipCrypto.encryptZipCrypto(plaintext: compressed, crc32: crc, password: password)
             case .none:
@@ -841,9 +892,9 @@ public enum ZipWriter {
             crc32: headerCRC,
             payload: .memory(finalPayload),
             uncompressedSize: UInt64(plainData.count),
-            externalAttrs: extAttrs,
+            externalAttrs: preservedExternalAttributes(original, fallback: extAttrs),
             extraWithoutZip64: extra,
-            commentData: Data()
+            commentData: original?.commentData ?? Data()
         )
     }
 
@@ -859,14 +910,16 @@ public enum ZipWriter {
         allowCodecMT: Bool,
         workerCount: Int?,
         controller: ArchiveTaskController?,
-        progress: ((UInt64, UInt64) -> Void)?
+        progress: ((UInt64, UInt64) -> Void)?,
+        preserving original: ZipRecord? = nil
     ) throws -> PreparedZipItem {
         let fm = FileManager.default
         let isEncrypted = options.encryption != .none && !(options.password ?? "").isEmpty
-        let needsHeaderCRC = !(isEncrypted && options.encryption == .aes256)
+        let vendor = original?.aesExtra?.vendorVersion ?? 2
+        let needsHeaderCRC = !(isEncrypted && options.encryption == .aes256 && vendor == 2)
         let crc = needsHeaderCRC ? try CompressionCodec.crc32File(at: fileURL, controller: controller) : 0
 
-        let method = options.algorithm.zipMethodCode
+        let method = original.map { $0.aesExtra?.actualMethod ?? $0.compressionMethod } ?? options.algorithm.zipMethodCode
         let compURL: URL
         let compSize: UInt64
         let deleteCompAfter: Bool
@@ -899,7 +952,8 @@ public enum ZipWriter {
         }
 
         var flags: UInt16 = pathEnc.isUTF8 ? 0x0800 : 0x0000
-        var extra = buildExtendedTimestampExtra(date: modifiedDate)
+        var extra = original.map { preservedEntryExtra($0.extraData) } ?? Data()
+        extra.append(buildExtendedTimestampExtra(date: modifiedDate))
         var headerCRC = crc
         var headerMethod = method
         var payload: PreparedPayload = .file(url: compURL, size: compSize, deleteAfterWrite: deleteCompAfter)
@@ -912,8 +966,8 @@ public enum ZipWriter {
                 case .aes256:
                     try ZipCrypto.encryptAES256Stream(from: compURL, to: encURL, password: password, controller: controller)
                     headerMethod = 99
-                    headerCRC = 0
-                    extra.append(buildWinZipAESExtra(actualMethod: method))
+                    headerCRC = vendor == 2 ? 0 : crc
+                    extra.append(buildWinZipAESExtra(actualMethod: method, vendorVersion: vendor))
                 case .zipCrypto:
                     try ZipCrypto.encryptZipCryptoStream(from: compURL, to: encURL, crc32: crc, password: password, controller: controller)
                 case .none:
@@ -943,9 +997,9 @@ public enum ZipWriter {
             crc32: headerCRC,
             payload: payload,
             uncompressedSize: fileSize,
-            externalAttrs: extAttrs,
+            externalAttrs: preservedExternalAttributes(original, fallback: extAttrs),
             extraWithoutZip64: extra,
-            commentData: Data()
+            commentData: original?.commentData ?? Data()
         )
     }
 
@@ -1156,16 +1210,38 @@ public enum ZipWriter {
         return extra
     }
 
-    private static func buildWinZipAESExtra(actualMethod: UInt16) -> Data {
+    private static func buildWinZipAESExtra(actualMethod: UInt16, vendorVersion: UInt16 = 2) -> Data {
         var extra = Data()
         ZipBinary.appendUInt16LE(&extra, ZipExtraTag.winZipAES)
         ZipBinary.appendUInt16LE(&extra, 7)
-        ZipBinary.appendUInt16LE(&extra, 2) // AE-2
+        ZipBinary.appendUInt16LE(&extra, vendorVersion)
         extra.append(0x41) // 'A'
         extra.append(0x45) // 'E'
         extra.append(ZipCrypto.AESStrength.aes256.rawValue)
         ZipBinary.appendUInt16LE(&extra, actualMethod)
         return extra
+    }
+
+    private static func preservedExternalAttributes(_ record: ZipRecord?, fallback: UInt32) -> UInt32 {
+        guard let record else { return fallback }
+        let typeMask: UInt32 = 0o170000 << 16
+        // Replacing a symlink with a regular file must also change its Unix file type.
+        guard record.externalAttributes & typeMask == fallback & typeMask else { return fallback }
+        return record.externalAttributes
+    }
+
+    private static func preservedEntryExtra(_ data: Data) -> Data {
+        var output = Data()
+        var offset = 0
+        let regenerated: Set<UInt16> = [ZipExtraTag.zip64, ZipExtraTag.extendedTimestamp, ZipExtraTag.winZipAES, ZipExtraTag.infoZipUnicodePath]
+        while offset + 4 <= data.count {
+            let tag = ZipBinary.readUInt16LE(data, at: offset)
+            let length = Int(ZipBinary.readUInt16LE(data, at: offset + 2))
+            guard offset + 4 + length <= data.count else { break }
+            if !regenerated.contains(tag) { output.append(data.subdata(in: offset..<(offset + 4 + length))) }
+            offset += 4 + length
+        }
+        return output
     }
 
     private static func stripZip64Extra(_ extra: Data) -> Data {

@@ -14,7 +14,7 @@ public struct ArchiveListing: Sendable {
     public let isSplitVolume: Bool
 
     public var canEditInPlace: Bool {
-        format.supportsInPlaceEditing && !isSplitVolume && archiveURL.pathExtension.lowercased() == "zip"
+        format.supportsInPlaceEditing && !isSplitVolume
     }
 
     public var overallCompressionRatioPercent: Double {

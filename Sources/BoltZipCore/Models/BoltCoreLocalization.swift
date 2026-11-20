@@ -83,4 +83,18 @@ public enum BoltCoreLocalization: Sendable {
         t("压缩过程中输入文件发生变化：\(path)", "壓縮過程中輸入檔案發生變化：\(path)",
           "Input changed while archiving: \(path)", "圧縮中に入力ファイルが変更されました: \(path)")
     }
+
+    static func archiveEditCompatibilityMessage(_ error: ArchiveEditCompatibilityError) -> String {
+        switch error {
+        case .unsupportedCompression(let path, let method):
+            return t("无法按条目“\(path)”原有的压缩方式 \(method) 写入。", "無法依項目「\(path)」原有的壓縮方式 \(method) 寫入。",
+                     "Cannot write entry “\(path)” with its original method \(method).", "項目「\(path)」を元の圧縮方式 \(method) で書き込めません。")
+        case .unsupportedEncryption(let path):
+            return t("无法保留条目“\(path)”原有的加密模式。", "無法保留項目「\(path)」原有的加密模式。",
+                     "Cannot preserve the encryption mode of “\(path)”.", "項目「\(path)」の元の暗号化方式を保持できません。")
+        case .ambiguousEntry(let path):
+            return t("原包包含多个同名条目“\(path)”，无法安全确定替换目标。", "原套件包含多個同名項目「\(path)」，無法安全確認替換目標。",
+                     "Multiple entries are named “\(path)”; the replacement target is ambiguous.", "同名の項目「\(path)」が複数あるため、安全に置換対象を特定できません。")
+        }
+    }
 }
