@@ -52,7 +52,7 @@
   - Smart Extract / Extract to Subfolder / Extract to… / Browse in BoltZip / Verify Integrity
   - Instant Compress to `ZIP`, `TAR.ZST (Zstd)`, `7z`, Individual ZIPs on Multi-Select, or Encrypted & Split Archive Wizard
 - **Browse, Drag Out & Edit Inside Archives**: Double-click or press `Space` for macOS Quick Look without full extraction, drill into **nested archives with breadcrumb back navigation**, drag items straight out to Finder (`NSFilePromiseProvider`), view/edit ZIP comments, and **add, rename, or delete inside ZIP files** with zero recompression of untouched entries.
-- **Chunked Streaming I/O, Safe Symlinks & In-App Updater**: Streams entries `>= 64 MB` in `1 MB` chunks across ZIP, WinZip AE-2, ZipCrypto, and TAR.*, safely preserves/restores symlinks with traversal guards, stages `.7z` via APFS hardlinks, ships 17 per-format document icons, and checks GitHub Releases updates with `SHA256SUMS.txt` verification.
+- **Chunked Streaming I/O, Safe Symlinks & In-App Updater**: Streams entries `>= 64 MB` in `1 MB` chunks across ZIP, WinZip AE-2, ZipCrypto, and TAR.*, safely preserves/restores symlinks with traversal guards, writes `.7z` directly with byte-based progress, ships 17 per-format document icons, and checks GitHub Releases updates with `SHA256SUMS.txt` verification.
 - **Native Liquid Glass Experience**:
   - On macOS 26+, toggle window translucency and fine-tune background opacity (`25% – 100%`) live;
   - Independently show/hide home modules (Finder setup banner, feature highlights, recent archives), sidebar summary, and status bar;

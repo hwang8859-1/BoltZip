@@ -53,7 +53,9 @@ BoltZip/
 │   │   │   ├── ZipReader.swift          # ZIP/ZIP64/split-volume reader, decryption, integrity check
 │   │   │   ├── ZipWriter.swift          # ZIP/ZIP64 writer, split volumes (.z01/.zip), zero-recompress editing
 │   │   │   ├── TarCodec.swift           # Pure Swift USTAR/PAX tar + .tar.{gz,zst,xz,bz2,lz4} + single-stream
-│   │   │   └── ExtendedArchiveDriver.swift # System libarchive reader for extended formats; /usr/bin/tar for 7z creation
+│   │   │   ├── SevenZipWriter.swift       # Streaming libarchive 7z writer with byte progress and cancellation
+│   │   │   ├── ArchiveFormatDetection.swift # Content-based read format detection, independent of filename
+│   │   │   └── ExtendedArchiveDriver.swift # System libarchive reader for extended formats
 │   │   ├── Engine/
 │   │   │   ├── ArchiveAssociationService.swift # Shared LaunchServices UTI & default app association logic
 │   │   │   ├── BoltArchiveSession.swift # High-level BoltArchiveEngine (inspect, extract, create, editZip, test)

@@ -2,6 +2,18 @@
 
 All notable changes to **BoltZip** will be documented in this file.
 
+## [Unreleased] - dev-1.0.4
+
+### Fixed
+- Refresh document icons after association changes and version bundled document icon resources by content.
+- Stream 7z creation with real byte progress and cancellation instead of time-based estimates and subprocess staging.
+- Detect archive contents independently of filename extensions when opening, extracting, or testing archives.
+- Preserve existing directories and archives during output collisions, cancellation, and split-volume publication failures.
+- Preserve same-named input files and decode duplicate ZIP records using their own payloads.
+- Reject unsupported encryption and split-volume options instead of silently ignoring them.
+- Keep skipped automatic update checks from resetting their timer, validate release versions, and preserve existing downloads.
+- Centralize interface error messages in L10n.swift across all four supported languages.
+
 ## [1.0.3] - 2026-11-19
 
 ### Improved
