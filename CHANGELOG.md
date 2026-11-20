@@ -2,7 +2,7 @@
 
 All notable changes to **BoltZip** will be documented in this file.
 
-## [Unreleased] - dev-1.0.4
+## [1.0.4] - 2026-11-20
 
 ### Added
 - Edit UTF-8/UTF-16 text and replace files inside ZIP containers, including JAR and APK, while keeping the original suffix, entry order, compression methods, Store status, and unchanged compressed payloads.
@@ -16,6 +16,8 @@ All notable changes to **BoltZip** will be documented in this file.
 - Keep the original filename suffix in the archive format badge and preserve non-TAR outer compression streams.
 - Preserve existing directories and archives during output collisions, cancellation, and split-volume publication failures.
 - Preserve same-named input files and decode duplicate ZIP records using their own payloads.
+- Verify the original password before replacing encrypted ZIP entries and leave the archive intact if verification fails.
+- Keep ZIP files with extra prefix or trailing data read-only so editing cannot discard that data.
 - Reject unsupported encryption and split-volume options instead of silently ignoring them.
 - Keep skipped automatic update checks from resetting their timer, validate release versions, and preserve existing downloads.
 - Centralize interface error messages in L10n.swift across all four supported languages.
