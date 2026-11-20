@@ -25,7 +25,7 @@ enum ActiveSheet: Identifiable {
     case extractOptions(ExtractMode)
     case integrityReport(IntegrityReport)
     case benchmark
-    case passwordPrompt(PasswordPurpose)
+    case passwordPrompt(PasswordPurpose, wrongAttempt: Bool = false)
     case createFolder(parentFolder: String)
     case renamePath(oldPath: String, currentName: String)
     case entryProperties(ArchiveEntry)
@@ -50,14 +50,30 @@ enum ActiveSheet: Identifiable {
     }
 }
 
-enum PasswordPurpose {
-    case openArchive(url: URL, fromExternalFinder: Bool)
+enum PasswordPurpose: Sendable {
+    case openArchive(
+        url: URL,
+        fromExternalFinder: Bool,
+        isNestedOpening: Bool,
+        initialFolder: String,
+        encoding: FilenameEncodingOption
+    )
+    case returnToParent(frameID: UUID)
     case openNested(ArchiveEntry)
+    case openNestedContents(ArchiveEntry, parentPassword: String?)
     case preview(ArchiveEntry)
-    case extract(archiveURL: URL, options: ExtractOptions)
+    case extract(archiveURL: URL, options: ExtractOptions, trashArchiveOnCompletion: Bool)
     case testIntegrity(archiveURL: URL)
     case unlockForEdit(urls: [URL], targetFolder: String)
     case editText(ArchiveEntry)
+
+    func prompt(for error: any Error) -> ActiveSheet? {
+        switch error {
+        case BoltZipError.passwordRequired: return .passwordPrompt(self)
+        case BoltZipError.wrongPassword: return .passwordPrompt(self, wrongAttempt: true)
+        default: return nil
+        }
+    }
 }
 
 struct ArchiveNavigationFrame: Identifiable, Sendable {

@@ -27,7 +27,7 @@ struct CLIArguments {
 
     init(_ args: [String]) {
         let booleanFlags: Set<String> = [
-            "aes256", "zipcrypto", "keep-junk", "no-symlinks",
+            "aes256", "zipcrypto", "encrypt-filenames", "keep-junk", "no-symlinks",
             "status", "restore", "include-iso", "json", "quiet"
         ]
 

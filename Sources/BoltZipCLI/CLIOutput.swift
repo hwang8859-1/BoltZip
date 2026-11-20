@@ -6,7 +6,7 @@ func printUsage() {
     print("""
     BoltZip CLI v\(BoltZipVersion.current) (Open-Source macOS Compression Engine)
     Usage:
-      boltzip a <output.zip|tar.zst|tar.gz|tar.xz|tar.bz2|tar.lz4|tar|7z> <input1> [input2...] [--algo deflate|zstd|bzip2|xz|lz4|store] [--level N] [--password PW] [--aes256|--zipcrypto] [--split MB] [--comment TEXT] [--threads auto|N] [--keep-junk] [--no-symlinks]
+      boltzip a <output.zip|tar.zst|tar.gz|tar.xz|tar.bz2|tar.lz4|tar|7z> <input1> [input2...] [--algo deflate|zstd|bzip2|xz|lz4|store] [--level N] [--password PW] [--aes256|--zipcrypto] [--encrypt-filenames] [--split MB] [--comment TEXT] [--threads auto|N] [--keep-junk] [--no-symlinks]
       boltzip x <archive> [dest_dir] [--mode smart|here|subfolder] [--overwrite overwrite|skip|rename] [--password PW] [--encoding auto|utf8|gb18030|big5|shiftjis|euckr|cp437] [--threads auto|N] [--keep-junk] [--no-symlinks]
       boltzip e <archive> [dest_dir] [--overwrite overwrite|skip|rename] [--password PW] [--encoding auto|utf8|gb18030|big5|shiftjis|euckr|cp437] [--threads auto|N] [--keep-junk]
       boltzip add <archive.zip> <input...> [--target folder/] [--algo deflate|zstd|bzip2|store] [--level N] [--password PW] [--aes256|--zipcrypto] [--comment TEXT]
@@ -19,6 +19,8 @@ func printUsage() {
       boltzip bench [--threads auto|N] [--json]
       boltzip engines
       boltzip version
+
+    --encrypt-filenames requires 7z output and an AES-256 password.
     """)
 }
 

@@ -78,7 +78,15 @@ struct L10n: Sendable {
             case .inputChanged(let path):
                 return t("压缩过程中输入文件发生变化：\(path)", "壓縮過程中輸入檔案發生變化：\(path)", "Input changed while archiving: \(path)", "圧縮中に入力ファイルが変更されました: \(path)")
             case .encryptionRequiresZIP:
-                return t("该格式不支持加密，请使用 ZIP 或关闭加密", "此格式不支援加密，請使用 ZIP 或關閉加密", "This format does not support encryption. Use ZIP or disable encryption.", "この形式は暗号化に対応していません。ZIP を使用するか暗号化を解除してください。")
+                return t("加密归档请选择 ZIP 或 7z 格式", "加密封存檔請選擇 ZIP 或 7z 格式", "Choose ZIP or 7z to create an encrypted archive.", "暗号化するには ZIP または 7z を選択してください。")
+            case .filenameEncryptionRequires7z:
+                return t("加密文件名需要使用 7z 格式并选择 AES-256", "加密檔案名稱需要使用 7z 格式並選擇 AES-256", "Choose 7z with AES-256 to encrypt file names.", "ファイル名を暗号化するには 7z 形式で AES-256 を選択してください。")
+            case .sevenZipEncryptionRequiresAES256:
+                return t("7z 加密仅支持 AES-256", "7z 加密僅支援 AES-256", "7z encryption requires AES-256.", "7z の暗号化には AES-256 を使用してください。")
+            case .invalidSevenZipPassword:
+                return t("请输入 7z 密码。密码不能包含换行符或空字符。", "請輸入 7z 密碼。密碼不能包含換行字元或空字元。", "Enter a 7z password without line breaks or null characters.", "改行やヌル文字を含まない 7z パスワードを入力してください。")
+            case .sevenZipEngineUnavailable:
+                return t("7z 加密组件不可用，请重新安装 BoltZip", "7z 加密元件無法使用，請重新安裝 BoltZip", "The 7z encryption component is unavailable. Reinstall BoltZip.", "7z の暗号化コンポーネントを使用できません。BoltZip を再インストールしてください。")
             case .splitVolumesRequireZIP:
                 return t("该格式不支持分卷，请使用 ZIP", "此格式不支援分卷，請使用 ZIP", "This format does not support split volumes. Use ZIP.", "この形式は分割に対応していません。ZIP を使用してください。")
             case .applicationNotFound:
@@ -465,7 +473,8 @@ struct L10n: Sendable {
     var runningBench: String { t("正在运行本机基准测试...", "正在執行本機基準測試...", "Running local benchmark...", "ベンチマークを実行中...") }
     var benchHardwareNote: String { t("说明：结果均为当前 Mac 硬件实际测量值", "說明：結果均為目前 Mac 硬體實測數據", "Measured live on your Mac hardware", "お使いの Mac 実機で計測された結果です") }
     var passwordPromptTitle: String { t("该压缩包已加密", "此封存檔已加密", "Archive Is Encrypted", "この書庫は暗号化されています") }
-    var passwordPromptDesc: String { t("请输入解密密码（支持 AE-2 AES-256、ZipCrypto 与 RAR / 7z）", "請輸入解密密碼（支援 AE-2 AES-256、ZipCrypto 與 RAR / 7z）", "Enter password (AE-2 AES-256, ZipCrypto, RAR & 7z supported)", "パスワードを入力してください (AES-256 / ZipCrypto / RAR / 7z 対応)") }
+    var passwordPromptDesc: String { t("输入压缩包密码以继续", "輸入封存檔密碼以繼續", "Enter the archive password to continue.", "書庫のパスワードを入力してください。") }
+    var retryArchivePassword: String { t("密码错误，请重试", "密碼錯誤，請再試一次", "Incorrect password. Try again.", "パスワードが正しくありません。再入力してください。") }
     var passwordPlaceholder: String { t("输入密码", "輸入密碼", "Password", "パスワード") }
     var createFolderTitle: String { t("在归档内新建文件夹", "在封存檔內新增資料夾", "New Folder in Archive", "書庫内に新規フォルダを作成") }
     var renameEntryTitle: String { t("重命名归档条目", "重新命名封存檔項目", "Rename Archive Entry", "書庫内の項目名を変更") }
@@ -484,6 +493,8 @@ struct L10n: Sendable {
     var fineLevelLabel: String { t("精细级别", "精細等級", "Level", "圧縮レベル") }
     var encryptionSection: String { t("加密保护", "加密保護", "Encryption", "暗号化") }
     var encryptionMethodLabel: String { t("加密方式", "加密方式", "Encryption", "暗号化方式") }
+    var encryptFileNames: String { t("加密文件名", "加密檔案名稱", "Encrypt File Names", "ファイル名を暗号化") }
+    var encryptFileNamesDescription: String { t("查看包内文件名和目录时也需要密码", "查看封存檔內的檔案名稱和資料夾也需要密碼", "Require the password to view files and folders.", "書庫内のファイル名やフォルダ名の表示にもパスワードが必要です。") }
     var confirmPasswordField: String { t("确认密码", "確認密碼", "Confirm", "パスワード確認") }
     var passwordMismatch: String { t("两次输入的密码不一致", "兩次輸入的密碼不一致", "Passwords do not match", "パスワードが一致しません") }
     var advancedOptionsSection: String { t("高级选项", "進階選項", "Advanced", "詳細オプション") }

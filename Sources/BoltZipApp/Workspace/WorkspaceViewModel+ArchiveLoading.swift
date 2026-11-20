@@ -22,10 +22,13 @@ extension WorkspaceViewModel {
         fromExternalFinder: Bool = false,
         password: String? = nil,
         isNestedOpening: Bool = false,
-        initialFolder: String = ""
+        initialFolder: String = "",
+        encoding: FilenameEncodingOption? = nil,
+        returningTo parentFrame: ArchiveNavigationFrame? = nil
     ) {
-        let encoding = encodingOption
+        let encoding = encoding ?? encodingOption
         let fromHomeOrigin: Bool = {
+            if let parentFrame { return parentFrame.openedFromHome }
             if isNestedOpening { return openedArchiveFromHome }
             if fromExternalFinder { return false }
             if listing == nil { return true }
@@ -38,6 +41,8 @@ extension WorkspaceViewModel {
             do {
                 let (result, detectedAlgo, navIndex) = try Self.loadArchiveContents(at: url, encoding: encoding, password: password)
                 await MainActor.run {
+                    self.isBusy = false
+                    if let parentFrame, self.archiveBackStack.last?.id != parentFrame.id { return }
                     if !isNestedOpening {
                         self.archiveBackStack.removeAll()
                         if self.listing?.archiveURL != url {
@@ -52,27 +57,43 @@ extension WorkspaceViewModel {
                         openedFromHome: fromHomeOrigin,
                         initialFolder: initialFolder
                     )
+                    if let parentFrame {
+                        self.encodingOption = parentFrame.encoding
+                        self.archiveBackStack.removeLast()
+                        if let dir = parentFrame.nestedTempDirToCleanup {
+                            self.nestedTempDirs.removeAll { $0 == dir }
+                            try? FileManager.default.removeItem(at: dir)
+                        }
+                    }
                     self.preferredZipEditAlgorithm = detectedAlgo
                     if let password, !password.isEmpty {
                         self.savedPassword = password
                     } else {
                         self.savedPassword = nil
                     }
-                    self.isBusy = false
                     if !isNestedOpening {
                         self.recordRecent(url)
                     }
                     self.statusMessage = "\(url.lastPathComponent) · \(self.l10n.itemCount(result.entries.count))"
                 }
-            } catch BoltZipError.passwordRequired, BoltZipError.wrongPassword {
-                await MainActor.run {
-                    self.isBusy = false
-                    self.activeSheet = .passwordPrompt(.openArchive(url: url, fromExternalFinder: fromExternalFinder))
-                }
             } catch {
                 await MainActor.run {
                     self.isBusy = false
-                    self.alertMessage = self.l10n.operationErrorMessage(error)
+                    let purpose: PasswordPurpose
+                    if let parentFrame {
+                        guard self.archiveBackStack.last?.id == parentFrame.id else { return }
+                        purpose = .returnToParent(frameID: parentFrame.id)
+                    } else {
+                        purpose = .openArchive(
+                            url: url, fromExternalFinder: fromExternalFinder,
+                            isNestedOpening: isNestedOpening, initialFolder: initialFolder, encoding: encoding
+                        )
+                    }
+                    if let prompt = purpose.prompt(for: error) {
+                        self.activeSheet = prompt
+                    } else {
+                        self.alertMessage = self.l10n.operationErrorMessage(error)
+                    }
                 }
             }
         }
@@ -125,23 +146,21 @@ extension WorkspaceViewModel {
         statusMessage = l10n.readyStatus
     }
 
-    func navigateBackFromNestedArchive() {
-        guard let frame = archiveBackStack.popLast() else { return }
-        if let dir = frame.nestedTempDirToCleanup {
-            nestedTempDirs.removeAll { $0 == dir }
-            try? FileManager.default.removeItem(at: dir)
-        }
-        encodingOption = frame.encoding
+    func navigateBackFromNestedArchive(password: String? = nil, expectedFrameID: UUID? = nil) {
+        guard !isBusy, let frame = archiveBackStack.last,
+              expectedFrameID == nil || expectedFrameID == frame.id else { return }
         openArchive(
             url: frame.archiveURL,
             fromExternalFinder: !frame.openedFromHome,
-            password: frame.savedPassword,
+            password: password ?? frame.savedPassword,
             isNestedOpening: true,
-            initialFolder: frame.currentFolder
+            initialFolder: frame.currentFolder,
+            encoding: frame.encoding,
+            returningTo: frame
         )
     }
 
-    func openNestedArchiveEntry(_ entry: ArchiveEntry, password: String? = nil) {
+    func openNestedArchiveEntry(_ entry: ArchiveEntry, password: String? = nil, nestedPassword: String? = nil) {
         guard let parentListing = listing else { return }
         let pw = password ?? savedPassword
         let enc = encodingOption
@@ -151,18 +170,21 @@ extension WorkspaceViewModel {
         statusMessage = "\(entry.name)..."
         Task.detached(priority: .userInitiated) {
             let nestedDir = previewRoot.appendingPathComponent("Nested-\(UUID().uuidString)", isDirectory: true)
+            var passwordPurpose = PasswordPurpose.openNested(entry)
             do {
                 let nestedURL = try Self.extractEntryToTemporaryDirectory(
                     entry, from: parentListing.archiveURL, into: nestedDir, password: pw, encoding: enc
                 )
 
-                let (inspectedNested, detectedAlgo, nestedIndex) = try Self.loadArchiveContents(at: nestedURL, encoding: enc)
+                passwordPurpose = .openNestedContents(entry, parentPassword: pw)
+                let (inspectedNested, detectedAlgo, nestedIndex) = try Self.loadArchiveContents(
+                    at: nestedURL, encoding: enc, password: nestedPassword
+                )
                 await MainActor.run {
                     self.isBusy = false
-                    if let pw, !pw.isEmpty { self.savedPassword = pw }
                     let backFrame = ArchiveNavigationFrame(
                         archiveURL: parentListing.archiveURL,
-                        savedPassword: self.savedPassword,
+                        savedPassword: pw,
                         encoding: self.encodingOption,
                         currentFolder: self.currentFolder,
                         openedFromHome: self.openedArchiveFromHome,
@@ -175,21 +197,20 @@ extension WorkspaceViewModel {
                         prebuiltIndex: nestedIndex,
                         initialFolder: ""
                     )
-                    self.savedPassword = nil
+                    self.savedPassword = nestedPassword
                     self.preferredZipEditAlgorithm = detectedAlgo
                     self.statusMessage = "\(nestedURL.lastPathComponent) · \(self.l10n.itemCount(inspectedNested.entries.count))"
                 }
-            } catch BoltZipError.passwordRequired, BoltZipError.wrongPassword {
-                try? FileManager.default.removeItem(at: nestedDir)
-                await MainActor.run {
-                    self.isBusy = false
-                    self.activeSheet = .passwordPrompt(.openNested(entry))
-                }
             } catch {
                 try? FileManager.default.removeItem(at: nestedDir)
+                let purpose = passwordPurpose
                 await MainActor.run {
                     self.isBusy = false
-                    self.alertMessage = self.l10n.operationErrorMessage(error)
+                    if let prompt = purpose.prompt(for: error) {
+                        self.activeSheet = prompt
+                    } else {
+                        self.alertMessage = self.l10n.operationErrorMessage(error)
+                    }
                 }
             }
         }

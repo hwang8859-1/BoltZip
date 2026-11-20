@@ -8,6 +8,7 @@ APP_VERSION="$(sed -n 's/.*current = "\(.*\)".*/\1/p' Sources/BoltZipCore/Models
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/BoltZip.app"
 CLI="$APP_DIR/Contents/Helpers/boltzip"
+SEVEN_ZIP="$APP_DIR/Contents/Helpers/7zz"
 DOCK_PLUGIN="$APP_DIR/Contents/PlugIns/BoltZipDockTile.plugin"
 DMG="$DIST_DIR/BoltZip-${APP_VERSION}-macOS-arm64.dmg"
 SUMS="$DIST_DIR/BoltZip-${APP_VERSION}-SHA256SUMS.txt"
@@ -21,11 +22,16 @@ plutil -lint \
     "$DOCK_PLUGIN/Contents/Info.plist"
 test "$(plutil -extract NSDockTilePlugIn raw "$APP_DIR/Contents/Info.plist")" = "$(basename "$DOCK_PLUGIN")"
 test -x "$DOCK_PLUGIN/Contents/MacOS/BoltZipDockTile"
+test -x "$SEVEN_ZIP"
+codesign --verify --strict "$SEVEN_ZIP"
+test -s "$APP_DIR/Contents/Resources/Licenses/7-Zip/License.txt"
+test -s "$APP_DIR/Contents/Resources/Licenses/7-Zip/LGPL-2.1.txt"
+test -s "$APP_DIR/Contents/Resources/Licenses/7-Zip/UPSTREAM.txt"
 test -s "$APP_DIR/Contents/Resources/BoltZipDockLight.png"
 test -s "$APP_DIR/Contents/Resources/BoltZipDockDark.png"
 
 echo "==> [2/6] Verifying zero third-party Homebrew dylib dependencies..."
-for BIN in "$APP_DIR/Contents/MacOS/BoltZipApp" "$CLI"; do
+for BIN in "$APP_DIR/Contents/MacOS/BoltZipApp" "$CLI" "$SEVEN_ZIP"; do
     if otool -L "$BIN" | grep -qE "homebrew|/usr/local/(opt|lib)"; then
         echo "FAIL: Non-system dylib dependency found in $BIN"
         otool -L "$BIN"
@@ -37,7 +43,7 @@ echo "==> [3/6] Verifying DMG & SHA-256 checksums for v${APP_VERSION}..."
 hdiutil verify "$DMG"
 (cd "$DIST_DIR" && shasum -a 256 -c "$(basename "$SUMS")")
 
-echo "==> [4/6] Running packaged CLI regression (engines, threads, aes256, .DS_Store, symlinks, in-place zip edit, flat extract, json)..."
+echo "==> [4/6] Running packaged CLI regression (engines, threads, AES-256 ZIP and 7z, .DS_Store, symlinks, in-place zip edit, flat extract, json)..."
 TMP_CLI="$(mktemp -d "${TMPDIR:-/tmp}/boltzip-verify-cli.XXXXXX")"
 trap 'rm -rf "$TMP_CLI"' EXIT
 
@@ -55,6 +61,16 @@ touch "$TMP_CLI/src/.DS_Store"
 "$CLI" a "$TMP_CLI/test.tar.zst" "$TMP_CLI/src" --algo zstd
 "$CLI" a "$TMP_CLI/test.7z" "$TMP_CLI/src" --algo xz
 "$CLI" a "$TMP_CLI/enc.zip" "$TMP_CLI/src" --password "secret!${APP_VERSION}" --aes256
+"$CLI" a "$TMP_CLI/enc.7z" "$TMP_CLI/src" --password "secret!${APP_VERSION}" --encrypt-filenames
+if "$CLI" l "$TMP_CLI/enc.7z" > "$TMP_CLI/locked.txt" 2>&1 || grep -q "hello.txt" "$TMP_CLI/locked.txt"; then
+    echo "FAIL: 7z encrypted file names were accessible without a password"
+    exit 1
+fi
+"$CLI" l "$TMP_CLI/enc.7z" --password "secret!${APP_VERSION}" --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert any(e["path"] == "src/sub/hello.txt" for e in d["entries"])'
+"$CLI" t "$TMP_CLI/enc.7z" --password "secret!${APP_VERSION}" >/dev/null
+"$CLI" x "$TMP_CLI/enc.7z" "$TMP_CLI/unlocked" --mode here --password "secret!${APP_VERSION}"
+cmp "$TMP_CLI/src/sub/hello.txt" "$TMP_CLI/unlocked/src/sub/hello.txt"
+test -L "$TMP_CLI/unlocked/src/hello_link"
 
 "$CLI" add "$TMP_CLI/test.zip" "$TMP_CLI/extra.txt"
 "$CLI" mkdir "$TMP_CLI/test.zip" "docs/"

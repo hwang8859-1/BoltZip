@@ -47,17 +47,15 @@ extension WorkspaceViewModel {
                         }
                     }
                 }
-            } catch BoltZipError.passwordRequired, BoltZipError.wrongPassword {
-                try? FileManager.default.removeItem(at: subDir)
-                await MainActor.run {
-                    self.isBusy = false
-                    self.activeSheet = .passwordPrompt(.preview(entry))
-                }
             } catch {
                 try? FileManager.default.removeItem(at: subDir)
                 await MainActor.run {
                     self.isBusy = false
-                    self.alertMessage = self.l10n.operationErrorMessage(error)
+                    if let prompt = PasswordPurpose.preview(entry).prompt(for: error) {
+                        self.activeSheet = prompt
+                    } else {
+                        self.alertMessage = self.l10n.operationErrorMessage(error)
+                    }
                 }
             }
         }

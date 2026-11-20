@@ -16,6 +16,7 @@ struct CreateArchiveSheet: View {
     @State private var preset: CompressionPreset = .balanced
     @State private var level: Int = 6
     @State private var encryption: EncryptionMethod = .none
+    @State private var encryptFileNames = true
     @State private var password: String = ""
     @State private var confirmPassword: String = ""
     @State private var splitPreset: SplitPreset = .none
@@ -341,9 +342,9 @@ struct CreateArchiveSheet: View {
                 title: l.encryptionMethodLabel,
                 selectedTitle: l.encryptionCompactTitle(encryption)
             ) {
-                ForEach(EncryptionMethod.allCases) { enc in
+                ForEach(availableEncryptionMethods) { enc in
                     BoltMenuOptionButton(
-                        title: enc.displayName,
+                        title: format.supportsFilenameEncryption ? l.encryptionCompactTitle(enc) : enc.displayName,
                         isSelected: encryption == enc
                     ) {
                         encryption = enc
@@ -376,6 +377,16 @@ struct CreateArchiveSheet: View {
                     Text(l.passwordMismatch)
                         .font(BoltType.caption)
                         .foregroundStyle(.red)
+                }
+
+                if format.supportsFilenameEncryption {
+                    BoltSectionDivider(glassEnabled: glassEnabled)
+
+                    BoltFormSwitchRow(
+                        title: l.encryptFileNames,
+                        subtitle: l.encryptFileNamesDescription,
+                        isOn: $encryptFileNames
+                    )
                 }
             }
         }
@@ -509,8 +520,13 @@ struct CreateArchiveSheet: View {
             algorithm = newFmt.defaultAlgorithm
         }
         level = preset.level(for: algorithm)
-        if !newFmt.supportsEncryption { encryption = .none }
+        if !availableEncryptionMethods.contains(encryption) { encryption = .none }
         if !newFmt.supportsSplitVolumes { splitPreset = .none }
+    }
+
+    private var availableEncryptionMethods: [EncryptionMethod] {
+        if format.supportsFilenameEncryption { return [.none, .aes256] }
+        return format.supportsEncryption ? EncryptionMethod.allCases : [.none]
     }
 
     private func selectedWorkersSummary(_ l: L10n) -> String {
@@ -604,7 +620,8 @@ struct CreateArchiveSheet: View {
             encoding: encoding,
             archiveComment: format == .zip ? archiveComment : "",
             workerCount: overrideWorkers,
-            preserveSymlinks: vm.preserveSymlinksOnCreate
+            preserveSymlinks: vm.preserveSymlinksOnCreate,
+            encryptFileNames: format.supportsFilenameEncryption && encryption == .aes256 && encryptFileNames
         )
         let out = resolvedOutputURL
         let useFloatingHUD = isStandaloneWindow && !vm.hasVisibleMainWindow

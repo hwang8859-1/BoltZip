@@ -62,6 +62,32 @@ public enum ExtendedArchiveDriver {
         encoding: FilenameEncodingOption = .auto,
         password: String? = nil
     ) throws -> [ArchiveEntry] {
+        guard format == .sevenZip else {
+            return try listNativeEntries(at: url, format: format, encoding: encoding, password: password)
+        }
+        return try sevenZipEntries(at: url, encoding: encoding, password: password).entries
+    }
+
+    private static func sevenZipEntries(at url: URL, encoding: FilenameEncodingOption, password: String?) throws
+        -> (entries: [ArchiveEntry], needsDecryption: Bool) {
+        let entries: [ArchiveEntry]
+        do {
+            entries = try listNativeEntries(at: url, format: .sevenZip, encoding: encoding, password: nil)
+        } catch BoltZipError.passwordRequired {
+            return (try SevenZipEncryption.list(archiveURL: url, password: password), true)
+        }
+        if entries.contains(where: \.isEncrypted) {
+            return (try SevenZipEncryption.list(archiveURL: url, password: nil), true)
+        }
+        return (entries, false)
+    }
+
+    private static func listNativeEntries(
+        at url: URL,
+        format: ArchiveFormat,
+        encoding: FilenameEncodingOption,
+        password: String?
+    ) throws -> [ArchiveEntry] {
         final class ListState {
             let format: ArchiveFormat
             let encoding: FilenameEncodingOption
@@ -154,6 +180,14 @@ public enum ExtendedArchiveDriver {
         encoding: FilenameEncodingOption = .auto,
         exactOutputSize: UInt64? = nil
     ) throws -> Data {
+        let resolvedFormat = try format ?? ArchiveFormat.detectForReading(from: url) ?? ArchiveFormat.detect(from: url) ?? .sevenZip
+        if resolvedFormat == .sevenZip {
+            let listing = try sevenZipEntries(at: url, encoding: encoding, password: password)
+            if listing.needsDecryption {
+                return try SevenZipEncryptedReader.readEntry(at: url, path: path, entries: listing.entries,
+                                                             password: password, exactOutputSize: exactOutputSize)
+            }
+        }
         final class ReadState {
             let targetPath: String
             let encoding: FilenameEncodingOption
@@ -170,7 +204,6 @@ public enum ExtendedArchiveDriver {
             }
         }
 
-        let resolvedFormat = format ?? ArchiveFormat.detect(from: url) ?? .sevenZip
         let state = ReadState(targetPath: path, encoding: encoding, exactOutputSize: exactOutputSize)
         let volumePaths = resolveVolumePaths(for: url, format: resolvedFormat)
         var errBuf = [CChar](repeating: 0, count: 512)
@@ -248,6 +281,19 @@ public enum ExtendedArchiveDriver {
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
         try controller?.checkpoint()
+        let resolvedFormat = try format ?? ArchiveFormat.detectForReading(from: url) ?? ArchiveFormat.detect(from: url) ?? .sevenZip
+        if resolvedFormat == .sevenZip {
+            let listing = try sevenZipEntries(at: url, encoding: encoding, password: password)
+            if listing.needsDecryption {
+                try SevenZipEncryptedReader.extract(
+                    at: url, entries: listing.entries, to: destinationURL, selectedPaths: selectedPaths,
+                    overwritePolicy: overwritePolicy, password: password, stripMacJunk: stripMacJunk,
+                    restoreSymlinks: restoreSymlinks, exactEntrySize: exactEntrySize, topLevelDirRenameMap: topLevelDirRenameMap,
+                    controller: controller, progress: progress
+                )
+                return
+            }
+        }
         let fm = FileManager.default
         try fm.createDirectory(at: destinationURL, withIntermediateDirectories: true)
 
@@ -310,7 +356,6 @@ public enum ExtendedArchiveDriver {
             }
         }
 
-        let resolvedFormat = format ?? ArchiveFormat.detect(from: url) ?? .sevenZip
         let state = ExtractState(
             destinationURL: destinationURL,
             selectedPaths: selectedPaths,
@@ -499,6 +544,12 @@ public enum ExtendedArchiveDriver {
         format: ArchiveFormat,
         password: String? = nil
     ) throws -> IntegrityReport {
+        if format == .sevenZip {
+            let listing = try sevenZipEntries(at: url, encoding: .auto, password: password)
+            if listing.needsDecryption {
+                return try SevenZipEncryptedReader.testIntegrity(at: url, entries: listing.entries, password: password)
+            }
+        }
         final class TestState {
             var results: [IntegrityEntryResult] = []
             var passed = 0

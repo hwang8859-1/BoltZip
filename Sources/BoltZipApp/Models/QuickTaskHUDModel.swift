@@ -112,16 +112,9 @@ final class QuickTaskHUDModel {
             switch self {
             case .compress:
                 return self
-            case .extract(let id, let archiveURL, let options):
-                let updated = ExtractOptions(
-                    destinationURL: options.destinationURL,
-                    mode: options.mode,
-                    overwritePolicy: options.overwritePolicy,
-                    password: password,
-                    encoding: options.encoding,
-                    stripMacJunk: options.stripMacJunk
-                )
-                return .extract(id: id, archiveURL: archiveURL, options: updated)
+            case .extract(let id, let archiveURL, var options):
+                options.password = password
+                return .extract(id: id, archiveURL: archiveURL, options: options)
             }
         }
     }

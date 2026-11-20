@@ -47,6 +47,12 @@ if [ -z "$APP_VERSION" ] || [ -z "$APP_BUILD" ]; then
 fi
 MIN_MACOS="26.0"
 VENDOR_LIB_DIR="$ROOT_DIR/Vendor/Compression/lib"
+SEVEN_ZIP_DIR="$ROOT_DIR/Vendor/SevenZip"
+
+(
+    cd "$SEVEN_ZIP_DIR"
+    shasum -a 256 --check 7zz.sha256
+)
 
 if [ ! -f "$VENDOR_LIB_DIR/libzstd.a" ] || [ ! -f "$VENDOR_LIB_DIR/liblzma.a" ] || [ ! -f "$VENDOR_LIB_DIR/liblz4.a" ]; then
     echo "==> Building Apple Silicon (arm64) compression static libraries..."
@@ -79,6 +85,9 @@ mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources/showcase" "$CONTENTS/Helpers" "$
 
 cp "$BIN_DIR/BoltZipApp" "$CONTENTS/MacOS/BoltZipApp"
 cp "$BIN_DIR/boltzip" "$CONTENTS/Helpers/boltzip"
+cp "$SEVEN_ZIP_DIR/7zz" "$CONTENTS/Helpers/7zz"
+mkdir -p "$CONTENTS/Resources/Licenses/7-Zip"
+cp "$SEVEN_ZIP_DIR/License.txt" "$SEVEN_ZIP_DIR/LGPL-2.1.txt" "$SEVEN_ZIP_DIR/UPSTREAM.txt" "$CONTENTS/Resources/Licenses/7-Zip/"
 cp -R "$ROOT_DIR/showcase/." "$CONTENTS/Resources/showcase/"
 
 # Strip local symbols only in the shipped copies, keeping the build products and matching dSYMs.
@@ -136,11 +145,13 @@ NOTARY_PROFILE="${BOLTZIP_NOTARY_PROFILE:-}"
 echo "==> Code signing helpers, FinderSync.appex, and BoltZip.app (identity: $SIGN_IDENTITY)..."
 if [ "$SIGN_IDENTITY" = "-" ]; then
     codesign --force --sign - "$CONTENTS/Helpers/boltzip"
+    codesign --force --sign - "$CONTENTS/Helpers/7zz"
     codesign --force --sign - --entitlements "$ROOT_DIR/Sources/BoltZipFinderSync/FinderSync.entitlements" "$APPEX_DIR"
     codesign --force --sign - "$DOCK_PLUGIN_DIR"
     codesign --force --sign - "$APP_DIR"
 else
     codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$CONTENTS/Helpers/boltzip"
+    codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$CONTENTS/Helpers/7zz"
     codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" --entitlements "$ROOT_DIR/Sources/BoltZipFinderSync/FinderSync.entitlements" "$APPEX_DIR"
     codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$DOCK_PLUGIN_DIR"
     codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP_DIR"

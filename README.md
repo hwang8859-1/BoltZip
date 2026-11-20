@@ -62,6 +62,7 @@
 - **全开源多算法内核**（静态编译 Apple Silicon `arm64` 版 `zlib`、`libzstd`、`liblzma`、`libbz2`、`liblz4`，零第三方动态库依赖，外加系统 `libarchive` 桥接 `.rar/.7z/.iso/.cab/.xar`）。
 - **跨平台安全与痛点修复**：
   - **WinZip AE-2 AES-256** 双向加密（PBKDF2-HMAC-SHA1 + AES-256-CTR + 10B HMAC-SHA1）及传统 ZipCrypto 兼容；
+  - **7z AES-256** 支持同时加密内容和文件名。新建 7z 并设置密码后，可用「加密文件名」隐藏包内的文件和目录列表；
   - **GB18030 / GBK / Big5 / Shift-JIS / EUC-KR** 文件名编码自动识别，告别 Windows 中文压缩包乱码；
   - 支持 `.z01 / .z02 / ... / .zip` 分卷压缩与 Smart 智能解压（单目录不套娃）。
 
@@ -87,6 +88,7 @@ swift run -c release boltzip bench
 swift run -c release boltzip a release.zip ./src --algo zstd --aes256 --password YourPassword
 swift run -c release boltzip t release.zip --password YourPassword
 swift run -c release boltzip x release.zip ./out --mode smart
+swift run -c release boltzip a release.7z ./src --password YourPassword --encrypt-filenames
 ```
 
 ## 🧩 展示页面与开发者指引

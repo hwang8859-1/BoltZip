@@ -23,7 +23,8 @@ enum ArchiveCommands {
             excludeMacJunk: arguments.stripMacJunk,
             archiveComment: arguments.options["comment"] ?? "",
             workerCount: workers,
-            preserveSymlinks: arguments.restoreSymlinks
+            preserveSymlinks: arguments.restoreSymlinks,
+            encryptFileNames: arguments.flags.contains("encrypt-filenames")
         )
         let created = try BoltArchiveEngine.createArchive(from: inputs, to: outURL, options: opts, progress: progress)
         print("Created: \(created.map(\.lastPathComponent).joined(separator: ", "))")

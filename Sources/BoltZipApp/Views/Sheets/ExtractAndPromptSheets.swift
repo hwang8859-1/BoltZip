@@ -197,6 +197,7 @@ struct ExtractOptionsSheet: View {
 struct PasswordPromptSheet: View {
     @Bindable var vm: WorkspaceViewModel
     let purpose: PasswordPurpose
+    let wrongAttempt: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var password: String = ""
 
@@ -215,9 +216,9 @@ struct PasswordPromptSheet: View {
 
             Text(l.passwordPromptTitle)
                 .font(BoltType.windowTitle)
-            Text(l.passwordPromptDesc)
+            Text(wrongAttempt ? l.retryArchivePassword : l.passwordPromptDesc)
                 .font(BoltType.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(wrongAttempt ? Color.red : Color.secondary)
                 .multilineTextAlignment(.center)
 
             SecureField(l.passwordPlaceholder, text: $password)
@@ -231,17 +232,28 @@ struct PasswordPromptSheet: View {
                         .keyboardShortcut(.cancelAction)
                     Button(l.confirm) {
                         let pw = password
-                        dismiss()
+                        vm.activeSheet = nil
                         switch purpose {
-                        case .openArchive(let url, let fromExternalFinder):
-                            vm.openArchive(url: url, fromExternalFinder: fromExternalFinder, password: pw)
+                        case .openArchive(let url, let fromExternalFinder, let isNestedOpening, let initialFolder, let encoding):
+                            vm.openArchive(
+                                url: url,
+                                fromExternalFinder: fromExternalFinder,
+                                password: pw,
+                                isNestedOpening: isNestedOpening,
+                                initialFolder: initialFolder,
+                                encoding: encoding
+                            )
+                        case .returnToParent(let frameID):
+                            vm.navigateBackFromNestedArchive(password: pw, expectedFrameID: frameID)
                         case .openNested(let entry):
                             vm.openNestedArchiveEntry(entry, password: pw)
+                        case .openNestedContents(let entry, let parentPassword):
+                            vm.openNestedArchiveEntry(entry, password: parentPassword, nestedPassword: pw)
                         case .preview(let entry):
                             vm.previewOrOpenEntry(entry, password: pw)
-                        case .extract(let archiveURL, var opts):
+                        case .extract(let archiveURL, var opts, let trashArchiveOnCompletion):
                             opts.password = pw
-                            vm.runExtract(options: opts, archiveURL: archiveURL, skipConflictCheck: true)
+                            vm.runExtract(options: opts, archiveURL: archiveURL, trashArchiveOnCompletion: trashArchiveOnCompletion)
                         case .testIntegrity(let archiveURL):
                             vm.testIntegrity(password: pw, archiveURL: archiveURL)
                         case .unlockForEdit(let urls, let targetFolder):

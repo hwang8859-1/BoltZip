@@ -66,7 +66,11 @@ public enum BoltArchiveEngine {
     ) throws -> [URL] {
         try controller?.checkpoint()
         try ArchiveOutputTransaction.validate(outputURL)
-        if !options.format.supportsEncryption && (options.encryption != .none || !(options.password ?? "").isEmpty) {
+        let requestsEncryption = options.encryptFileNames || options.encryption != .none || !(options.password ?? "").isEmpty
+        if options.encryptFileNames && !options.format.supportsFilenameEncryption {
+            throw ArchiveOperationError.filenameEncryptionRequires7z
+        }
+        if requestsEncryption && !options.format.supportsEncryption {
             throw ArchiveOperationError.encryptionRequiresZIP
         }
         if !options.format.supportsSplitVolumes && (options.splitVolumeSizeBytes ?? 0) > 0 {
@@ -79,16 +83,22 @@ public enum BoltArchiveEngine {
             try TarCodec.create(from: inputURLs, to: outputURL, options: options, controller: controller, progress: progress)
             return [outputURL]
         case .sevenZip:
-            try ExtendedArchiveDriver.create7z(
-                from: inputURLs,
-                to: outputURL,
-                algorithm: options.algorithm,
-                level: options.level,
-                excludeMacJunk: options.excludeMacJunk,
-                preserveSymlinks: options.preserveSymlinks,
-                controller: controller,
-                progress: progress
-            )
+            if requestsEncryption {
+                guard options.encryption == .aes256 else { throw ArchiveOperationError.sevenZipEncryptionRequiresAES256 }
+                try SevenZipEncryption.create(from: inputURLs, to: outputURL, options: options,
+                                              controller: controller, progress: progress)
+            } else {
+                try ExtendedArchiveDriver.create7z(
+                    from: inputURLs,
+                    to: outputURL,
+                    algorithm: options.algorithm,
+                    level: options.level,
+                    excludeMacJunk: options.excludeMacJunk,
+                    preserveSymlinks: options.preserveSymlinks,
+                    controller: controller,
+                    progress: progress
+                )
+            }
             progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outputURL.lastPathComponent))
             return [outputURL]
         default:

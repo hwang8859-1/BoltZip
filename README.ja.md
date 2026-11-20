@@ -62,6 +62,7 @@
 - **純オープンソース Apple Silicon 圧縮コア**：`arm64` 向けの `zlib`・`libzstd`・`liblzma`・`libbz2`・`liblz4` を静的リンク（外部ランタイムライブラリ不要）し、システム `libarchive` 経由で `.rar` / `.7z` / `.iso` / `.cab` / `.xar` にも対応。
 - **クロスプラットフォーム互換性**：
   - **WinZip AE-2 AES-256** 暗号化（`PBKDF2-HMAC-SHA1` + `AES-256-CTR` + 10B `HMAC-SHA1`）および ZipCrypto 互換；
+  - **7z AES-256** は内容とファイル名の両方を暗号化できます。パスワード付きの 7z を作成するときに「ファイル名を暗号化」を選ぶと、ファイルとフォルダの一覧が非表示になります。
   - Windows 環境で作成された `Shift-JIS` / `GB18030 (GBK)` / `Big5` / `EUC-KR` ファイル名の文字化け自動補正；
   - `.z01/.z02/.../.zip` 分割ボリュームおよび二重フォルダを防ぐスマート展開に対応。
 
@@ -87,6 +88,7 @@ swift run -c release boltzip bench
 swift run -c release boltzip a release.zip ./src --algo zstd --aes256 --password YourPassword
 swift run -c release boltzip t release.zip --password YourPassword
 swift run -c release boltzip x release.zip ./out --mode smart
+swift run -c release boltzip a release.7z ./src --password YourPassword --encrypt-filenames
 ```
 
 ## 🧩 紹介ページ ＆ 開発者向けドキュメント

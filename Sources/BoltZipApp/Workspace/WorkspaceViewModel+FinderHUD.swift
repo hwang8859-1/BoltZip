@@ -90,26 +90,13 @@ extension WorkspaceViewModel {
             self.applyTrashCleanupIfScheduled(for: operation.id)
             switch operation {
             case .compress(_, _, _, let options):
-                self.statusMessage = resultURL.lastPathComponent
-                let encoding = options.encoding
-                let fromHomeOrigin = (self.listing == nil) ? true : self.openedArchiveFromHome
-                Task.detached(priority: .userInitiated) {
-                    if let refreshed = try? BoltArchiveEngine.inspect(archiveURL: resultURL, encoding: encoding) {
-                        let navIndex = ArchiveNavigationIndex.build(from: refreshed)
-                        await MainActor.run {
-                            self.applyLoadedListing(
-                                refreshed,
-                                prebuiltIndex: navIndex,
-                                openedFromHome: fromHomeOrigin,
-                                initialFolder: ""
-                            )
-                            self.recordRecent(resultURL)
-                            self.statusMessage = "\(resultURL.lastPathComponent) · \(self.l10n.itemCount(refreshed.entries.count))"
-                        }
-                    }
-                }
-            case .extract(_, _, let options):
-                if let pw = options.password, !pw.isEmpty {
+                self.openArchive(
+                    url: resultURL,
+                    password: options.encryption == .none ? nil : options.password,
+                    encoding: options.encoding
+                )
+            case .extract(_, let archiveURL, let options):
+                if archiveURL == self.listing?.archiveURL, let pw = options.password, !pw.isEmpty {
                     self.savedPassword = pw
                 }
                 self.statusMessage = "-> \(resultURL.lastPathComponent)"
@@ -276,8 +263,18 @@ extension WorkspaceViewModel {
             var checked: [(archiveURL: URL, options: ExtractOptions, conflicts: ExtractConflictSummary?)] = []
             checked.reserveCapacity(initialPlans.count)
             for plan in initialPlans {
-                let summary = try? BoltArchiveEngine.detectExtractConflicts(archiveURL: plan.archiveURL, options: plan.options)
-                checked.append((plan.archiveURL, plan.options, summary))
+                var options = plan.options
+                let summary: ExtractConflictSummary?
+                do {
+                    summary = try BoltArchiveEngine.detectExtractConflicts(archiveURL: plan.archiveURL, options: options)
+                } catch BoltZipError.passwordRequired, BoltZipError.wrongPassword {
+                    // The HUD retries after unlocking; without a conflict check keep both files.
+                    options.overwritePolicy = .rename
+                    summary = nil
+                } catch {
+                    summary = nil
+                }
+                checked.append((plan.archiveURL, options, summary))
             }
 
             await MainActor.run {

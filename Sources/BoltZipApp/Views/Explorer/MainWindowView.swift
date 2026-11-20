@@ -413,8 +413,8 @@ struct MainWindowView: View {
             IntegrityReportSheet(vm: vm, report: report)
         case .benchmark:
             BenchmarkSheet(vm: vm)
-        case .passwordPrompt(let purpose):
-            PasswordPromptSheet(vm: vm, purpose: purpose)
+        case .passwordPrompt(let purpose, let wrongAttempt):
+            PasswordPromptSheet(vm: vm, purpose: purpose, wrongAttempt: wrongAttempt)
         case .createFolder(let parentFolder):
             SimpleNamePromptSheet(
                 vm: vm,

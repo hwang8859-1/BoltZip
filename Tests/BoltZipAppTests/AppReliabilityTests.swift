@@ -16,7 +16,11 @@ final class AppReliabilityTests: XCTestCase {
     }
 
     func testOperationErrorsUseTheSelectedInterfaceLanguage() {
-        let errors: [ArchiveOperationError] = [.outputIsInput, .outputIsDirectory("keep"), .inputChanged("data"), .encryptionRequiresZIP, .splitVolumesRequireZIP, .applicationNotFound]
+        let errors: [ArchiveOperationError] = [
+            .outputIsInput, .outputIsDirectory("keep"), .inputChanged("data"), .encryptionRequiresZIP,
+            .filenameEncryptionRequires7z, .sevenZipEncryptionRequiresAES256, .invalidSevenZipPassword,
+            .sevenZipEngineUnavailable, .splitVolumesRequireZIP, .applicationNotFound
+        ]
         for error in errors {
             let messages = [AppLanguage.zhHans, .zhHant, .en, .ja].map { L10n(language: $0).operationErrorMessage(error) }
             XCTAssertEqual(Set(messages).count, 4)

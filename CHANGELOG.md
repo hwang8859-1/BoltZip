@@ -2,6 +2,11 @@
 
 All notable changes to **BoltZip** will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Create AES-256 encrypted 7z archives with an option to require the password before showing file and folder names. Open, preview, extract and test encrypted 7z archives in BoltZip.
+
 ## [1.0.4] - 2026-11-20
 
 ### Added

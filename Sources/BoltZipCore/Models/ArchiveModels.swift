@@ -50,7 +50,8 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
     }
 
     public var supportsInPlaceEditing: Bool { self == .zip }
-    public var supportsEncryption: Bool { self == .zip }
+    public var supportsEncryption: Bool { self == .zip || self == .sevenZip }
+    public var supportsFilenameEncryption: Bool { self == .sevenZip }
     public var supportsSplitVolumes: Bool { self == .zip }
 
     public var supportedAlgorithms: [CompressionAlgorithm] {
@@ -450,6 +451,7 @@ public struct CreateArchiveOptions: Sendable {
     /// `nil` = follow global `BoltConcurrency.preference`; `0` = auto; `>= 1` = explicit core cap.
     public var workerCount: Int?
     public var preserveSymlinks: Bool
+    public var encryptFileNames: Bool
 
     public init(
         format: ArchiveFormat = .zip,
@@ -462,7 +464,8 @@ public struct CreateArchiveOptions: Sendable {
         encoding: FilenameEncodingOption = .utf8,
         archiveComment: String = "",
         workerCount: Int? = nil,
-        preserveSymlinks: Bool = true
+        preserveSymlinks: Bool = true,
+        encryptFileNames: Bool = false
     ) {
         self.format = format
         self.algorithm = algorithm
@@ -475,6 +478,7 @@ public struct CreateArchiveOptions: Sendable {
         self.archiveComment = archiveComment
         self.workerCount = workerCount
         self.preserveSymlinks = preserveSymlinks
+        self.encryptFileNames = encryptFileNames
     }
 }
 

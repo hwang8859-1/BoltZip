@@ -65,8 +65,28 @@ public enum BoltCoreLocalization: Sendable {
     }
 
     static var encryptionRequiresZIP: String {
-        t("该格式不支持加密，请使用 ZIP 或关闭加密", "此格式不支援加密，請使用 ZIP 或關閉加密",
-          "This format does not support encryption. Use ZIP or disable encryption.", "この形式は暗号化に対応していません。ZIP を使用するか暗号化を解除してください。")
+        t("该格式不支持加密，请使用 ZIP 或 7z", "此格式不支援加密，請使用 ZIP 或 7z",
+          "This format does not support encryption. Use ZIP or 7z.", "この形式は暗号化に対応していません。ZIP または 7z を使用してください。")
+    }
+
+    static var filenameEncryptionRequires7z: String {
+        t("请使用 7z 格式加密文件名。", "請使用 7z 格式加密檔名。",
+          "Use the 7z format to encrypt file names.", "ファイル名を暗号化するには 7z 形式を使用してください。")
+    }
+
+    static var sevenZipEncryptionRequiresAES256: String {
+        t("7z 加密需要使用 AES-256。", "7z 加密需要使用 AES-256。",
+          "7z encryption requires AES-256.", "7z の暗号化には AES-256 が必要です。")
+    }
+
+    static var invalidSevenZipPassword: String {
+        t("请输入 7z 密码。密码不能包含换行符或空字符。", "請輸入 7z 密碼。密碼不能包含換行字元或空字元。",
+          "Enter a 7z password without line breaks or null characters.", "改行やヌル文字を含まない 7z パスワードを入力してください。")
+    }
+
+    static var sevenZipEngineUnavailable: String {
+        t("找不到处理加密 7z 所需的组件。", "找不到處理加密 7z 所需的元件。",
+          "The component for handling encrypted 7z archives is unavailable.", "暗号化された 7z を処理するコンポーネントが見つかりません。")
     }
 
     static var splitVolumesRequireZIP: String {

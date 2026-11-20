@@ -62,6 +62,7 @@
 - **Pure Open-Source Apple Silicon Codec Core**: Statically links `arm64` `zlib`, `libzstd`, `liblzma`, `libbz2`, and `liblz4` (zero Homebrew runtime dylib dependencies), plus system `libarchive` bridging for `.rar`, `.7z`, `.iso`, `.cab`, and `.xar`.
 - **Cross-Platform Fidelity**:
   - **WinZip AE-2 AES-256** encryption (`PBKDF2-HMAC-SHA1` + `AES-256-CTR` + 10-byte `HMAC-SHA1`) and legacy `ZipCrypto`;
+  - **7z AES-256** can encrypt both contents and file names. Select “Encrypt file names” when creating a password-protected 7z to hide its file and folder list;
   - Automatic detection of `GB18030 / GBK`, `Big5`, `Shift-JIS`, and `EUC-KR` filenames in Windows-created ZIPs;
   - Supports `.z01/.z02/.../.zip` split volumes and Smart Extract (avoids nested duplicate folders).
 
@@ -87,6 +88,7 @@ swift run -c release boltzip bench
 swift run -c release boltzip a release.zip ./src --algo zstd --aes256 --password YourPassword
 swift run -c release boltzip t release.zip --password YourPassword
 swift run -c release boltzip x release.zip ./out --mode smart
+swift run -c release boltzip a release.7z ./src --password YourPassword --encrypt-filenames
 ```
 
 ## 🧩 Interactive Showcase & Developer Docs

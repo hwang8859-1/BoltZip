@@ -4,7 +4,7 @@ import Foundation
 extension WorkspaceViewModel {
     func testIntegrity(password: String? = nil, archiveURL overrideURL: URL? = nil) {
         guard let archiveURL = overrideURL ?? listing?.archiveURL else { return }
-        let pw = password ?? savedPassword
+        let pw = password ?? (archiveURL == listing?.archiveURL ? savedPassword : nil)
         let enc = encodingOption
         isBusy = true
         progress = OperationProgress(fractionCompleted: 0, currentItem: "CRC32 / HMAC...")
@@ -22,7 +22,7 @@ extension WorkspaceViewModel {
                     if report.skippedEncryptedCount > 0 && pw == nil {
                         self.activeSheet = .passwordPrompt(.testIntegrity(archiveURL: archiveURL))
                     } else {
-                        if let pw, !pw.isEmpty { self.savedPassword = pw }
+                        if archiveURL == self.listing?.archiveURL, let pw, !pw.isEmpty { self.savedPassword = pw }
                         self.activeSheet = .integrityReport(report)
                         self.statusMessage = "\(report.passedCount)/\(report.totalEntries)"
                     }
@@ -31,7 +31,11 @@ extension WorkspaceViewModel {
                 await MainActor.run {
                     self.isBusy = false
                     self.progress = nil
-                    self.alertMessage = self.l10n.operationErrorMessage(error)
+                    if let prompt = PasswordPurpose.testIntegrity(archiveURL: archiveURL).prompt(for: error) {
+                        self.activeSheet = prompt
+                    } else {
+                        self.alertMessage = self.l10n.operationErrorMessage(error)
+                    }
                 }
             }
         }

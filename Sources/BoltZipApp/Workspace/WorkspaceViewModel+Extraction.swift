@@ -7,7 +7,8 @@ extension WorkspaceViewModel {
     func quickExtract(mode: ExtractMode, archiveURL overrideURL: URL? = nil) {
         guard let targetArchive = overrideURL ?? listing?.archiveURL,
               let destination = selectExtractDestination(for: targetArchive) else { return }
-        let options = makeQuickExtractOptions(destination: destination, mode: mode, password: savedPassword)
+        let password = targetArchive == listing?.archiveURL ? savedPassword : nil
+        let options = makeQuickExtractOptions(destination: destination, mode: mode, password: password)
         runExtract(options: options, archiveURL: targetArchive)
     }
 
@@ -40,28 +41,42 @@ extension WorkspaceViewModel {
     func runExtract(
         options: ExtractOptions,
         archiveURL overrideURL: URL? = nil,
-        skipConflictCheck: Bool = false,
         trashArchiveOnCompletion: Bool = false
     ) {
         guard let archiveURL = overrideURL ?? listing?.archiveURL else { return }
-        if !skipConflictCheck && options.overwritePolicy == .overwrite {
+        if options.overwritePolicy == .overwrite {
             Task.detached(priority: .userInitiated) {
-                let conflicts = try? BoltArchiveEngine.detectExtractConflicts(archiveURL: archiveURL, options: options)
-                await MainActor.run {
-                    if let conflicts, conflicts.hasConflicts {
-                        self.pendingExtractConflict = PendingExtractConflict(
+                do {
+                    let conflicts = try BoltArchiveEngine.detectExtractConflicts(archiveURL: archiveURL, options: options)
+                    await MainActor.run {
+                        if conflicts.hasConflicts {
+                            self.pendingExtractConflict = PendingExtractConflict(
+                                archiveURL: archiveURL,
+                                options: options,
+                                destinationRoot: conflicts.destinationRoot,
+                                conflictingNames: conflicts.conflictingNames,
+                                trashArchiveOnCompletion: trashArchiveOnCompletion
+                            )
+                        } else {
+                            self.enqueueInAppExtract(
+                                archiveURL: archiveURL,
+                                options: options,
+                                trashArchiveOnCompletion: trashArchiveOnCompletion
+                            )
+                        }
+                    }
+                } catch {
+                    await MainActor.run {
+                        let purpose = PasswordPurpose.extract(
                             archiveURL: archiveURL,
                             options: options,
-                            destinationRoot: conflicts.destinationRoot,
-                            conflictingNames: conflicts.conflictingNames,
                             trashArchiveOnCompletion: trashArchiveOnCompletion
                         )
-                    } else {
-                        self.enqueueInAppExtract(
-                            archiveURL: archiveURL,
-                            options: options,
-                            trashArchiveOnCompletion: trashArchiveOnCompletion
-                        )
+                        if let prompt = purpose.prompt(for: error) {
+                            self.activeSheet = prompt
+                        } else {
+                            self.alertMessage = self.l10n.operationErrorMessage(error)
+                        }
                     }
                 }
             }

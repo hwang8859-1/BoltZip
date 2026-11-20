@@ -87,8 +87,11 @@ final class ArchiveReliabilityTests: XCTestCase {
         let file = try source()
         for format in ArchiveFormat.creatableFormats where format != .zip {
             let output = try source("preserved.\(format.fileExtension)", data: Data("existing archive".utf8))
-            for options in [CreateArchiveOptions(format: format, encryption: .aes256, password: "secret"),
-                            CreateArchiveOptions(format: format, splitVolumeSizeBytes: 65536)] {
+            var unsupportedOptions = [CreateArchiveOptions(format: format, splitVolumeSizeBytes: 65536)]
+            if !format.supportsEncryption {
+                unsupportedOptions.append(CreateArchiveOptions(format: format, encryption: .aes256, password: "secret"))
+            }
+            for options in unsupportedOptions {
                 XCTAssertThrowsError(try BoltArchiveEngine.createArchive(from: [file], to: output, options: options))
                 XCTAssertEqual(try Data(contentsOf: output), Data("existing archive".utf8))
             }
