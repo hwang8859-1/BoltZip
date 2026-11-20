@@ -16,9 +16,6 @@ extension ArchiveFormat {
             return nil
         }
         let named = detect(from: url)
-        let ext = url.pathExtension.lowercased()
-        if ext.hasPrefix("z"), Int(ext.dropFirst()) != nil { return .zip }
-        if ext.count == 3, ext.hasPrefix("r"), Int(ext.dropFirst()) != nil { return .rar }
 
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
@@ -64,6 +61,8 @@ extension ArchiveFormat {
             default: break
             }
         }
-        return stream ?? named
+        let ext = url.pathExtension.lowercased()
+        let splitZIP = ext.hasPrefix("z") && Int(ext.dropFirst()) != nil
+        return stream ?? (splitZIP ? .zip : named)
     }
 }

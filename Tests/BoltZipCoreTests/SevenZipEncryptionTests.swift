@@ -134,6 +134,30 @@ final class SevenZipEncryptionTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: destination.appendingPathComponent("hidden/empty-folder").path))
     }
 
+    func testAmbiguousSevenZipPathsFailBeforeReplacingExistingArchive() throws {
+        let folder = root.appendingPathComponent("folder")
+        let nested = folder.appendingPathComponent("sub")
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try payload(0).write(to: nested.appendingPathComponent("data"))
+        try payload(1).write(to: folder.appendingPathComponent("sub\\data"))
+        let output = root.appendingPathComponent("collision.7z")
+        let before = Data("keep this archive".utf8)
+        try before.write(to: output)
+        for options in [encryptedOptions(hideNames: true), CreateArchiveOptions(format: .sevenZip, algorithm: .xz, workerCount: 1)] {
+            XCTAssertThrowsError(try BoltArchiveEngine.createArchive(from: [folder], to: output, options: options)) { error in
+                guard case BoltZipError.entryAlreadyExists = error else { return XCTFail("\(error)") }
+            }
+            XCTAssertEqual(try Data(contentsOf: output), before)
+        }
+    }
+
+    func testHelperProgressDecodesSplitFramesAndIgnoresFileNames() {
+        var parser = SevenZipWriteProgress()
+        XCTAssertEqual(parser.receive(Data("  0%\u{8}  3".utf8)), [])
+        XCTAssertEqual(parser.receive(Data("5% + made-up 92%\u{8}\u{8} 80".utf8)), [35])
+        XCTAssertEqual(parser.receive(Data("% + name\r 77%\r100%".utf8)), [80, 100])
+    }
+
     private func encryptedOptions(hideNames: Bool) -> CreateArchiveOptions {
         CreateArchiveOptions(format: .sevenZip, algorithm: .xz, level: 1,
                              encryption: .aes256, password: password, encryptFileNames: hideNames)

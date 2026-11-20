@@ -9,55 +9,29 @@ extension BoltArchiveEngine {
         let targetRoot = resolveExtractDestination(listing: listing, options: options)
         let fm = FileManager.default
 
+        let outputLocations: [URL]
         if targetRoot.standardizedFileURL != options.destinationURL.standardizedFileURL {
-            if fm.fileExists(atPath: targetRoot.path) {
-                return ExtractConflictSummary(
-                    destinationRoot: options.destinationURL,
-                    conflictingNames: [targetRoot.lastPathComponent]
-                )
-            }
-            return ExtractConflictSummary(destinationRoot: options.destinationURL, conflictingNames: [])
-        }
-
-        let entriesToExtract = ArchiveExtractionPlan.filteredEntries(listing.entries, options: options)
-        var seen: Set<String> = []
-        var conflicts: [String] = []
-
-        switch options.mode {
-        case .selected(let chosen):
-            var targetRootsToCheck: [String] = []
-            for raw in chosen {
-                let clean = raw.hasSuffix("/") ? String(raw.dropLast()) : raw
-                guard !clean.isEmpty, seen.insert(clean).inserted else { continue }
-                targetRootsToCheck.append(clean)
-            }
-            if targetRootsToCheck.isEmpty {
-                for entry in entriesToExtract {
-                    let clean = entry.path.hasSuffix("/") ? String(entry.path.dropLast()) : entry.path
-                    guard let top = clean.split(separator: "/").first.map(String.init),
-                          seen.insert(top).inserted else { continue }
-                    targetRootsToCheck.append(top)
+            outputLocations = [targetRoot]
+        } else {
+            let paths: [String]
+            if case .selected(let chosen) = options.mode, !chosen.isEmpty {
+                paths = chosen.sorted()
+            } else {
+                paths = ArchiveExtractionPlan.filteredEntries(listing.entries, options: options).compactMap {
+                    $0.path.split(separator: "/").first.map(String.init)
                 }
             }
-            for rel in targetRootsToCheck {
-                if let url = try? ArchiveExtractionDestination.safeDestinationURL(for: rel, under: targetRoot),
-                   fm.fileExists(atPath: url.path) {
-                    conflicts.append(url.lastPathComponent)
-                }
-            }
-        case .smart, .here, .subfolder:
-            for entry in entriesToExtract {
-                let clean = entry.path.hasSuffix("/") ? String(entry.path.dropLast()) : entry.path
-                guard let top = clean.split(separator: "/").first.map(String.init),
-                      seen.insert(top).inserted else { continue }
-                if let url = try? ArchiveExtractionDestination.safeDestinationURL(for: top, under: targetRoot),
-                   fm.fileExists(atPath: url.path) {
-                    conflicts.append(top)
-                }
+            var seen: Set<String> = []
+            outputLocations = paths.compactMap { path in
+                guard let url = try? ArchiveExtractionDestination.safeDestinationURL(for: path, under: targetRoot),
+                      url.path != targetRoot.path,
+                      seen.insert(ArchiveExtractionDestination.pathKey(url)).inserted else { return nil }
+                return url
             }
         }
-
-        return ExtractConflictSummary(destinationRoot: targetRoot, conflictingNames: conflicts)
+        return ExtractConflictSummary(destinationRoot: options.destinationURL,
+                                      conflictingNames: outputLocations.filter { fm.fileExists(atPath: $0.path) }.map(\.lastPathComponent),
+                                      outputLocations: outputLocations)
     }
 
     /// Bandizip/Windows-Zip style smart destination folder detection
@@ -95,10 +69,12 @@ struct ArchiveExtractionPlan {
     let entries: [ArchiveEntry]
     let topLevelDirRenameMap: [String: String]
     let totalBytes: UInt64
+    let protectedSourcePaths: Set<String>
 
     static func prepare(
         listing: ArchiveListing,
-        options: ExtractOptions
+        options: ExtractOptions,
+        sourceURLs: [URL]
     ) throws -> ArchiveExtractionPlan {
         var targetRoot = BoltArchiveEngine.resolveExtractDestination(listing: listing, options: options)
         let fm = FileManager.default
@@ -108,9 +84,15 @@ struct ArchiveExtractionPlan {
            fm.fileExists(atPath: targetRoot.path) {
             targetRoot = ArchiveExtractionDestination.uniqueNonCollidingURL(for: targetRoot, isDirectoryHint: true)
         }
-        try fm.createDirectory(at: targetRoot, withIntermediateDirectories: true)
-
         let entriesToExtract = filteredEntries(listing.entries, options: options)
+        let protected = Set((sourceURLs + options.protectedArchiveURLs).map(ArchiveExtractionDestination.pathKey))
+        if options.overwritePolicy == .overwrite {
+            for entry in entriesToExtract where !entry.isDirectory && (!entry.isSymbolicLink || options.restoreSymlinks) {
+                let target = try ArchiveExtractionDestination.safeDestinationURL(for: entry.path, under: targetRoot)
+                try ArchiveExtractionDestination.protectSourcePaths(protected, from: target)
+            }
+        }
+        try fm.createDirectory(at: targetRoot, withIntermediateDirectories: true)
 
         var topLevelDirRenameMap: [String: String] = [:]
         if options.overwritePolicy == .rename,
@@ -137,7 +119,8 @@ struct ArchiveExtractionPlan {
             targetRoot: targetRoot,
             entries: entriesToExtract,
             topLevelDirRenameMap: topLevelDirRenameMap,
-            totalBytes: totalBytes
+            totalBytes: totalBytes,
+            protectedSourcePaths: protected
         )
     }
 
@@ -150,7 +133,7 @@ struct ArchiveExtractionPlan {
             case .smart, .here, .subfolder:
                 return true
             case .selected(let chosen):
-                return ArchiveExtractionDestination.pathMatchesSelection(entry.path, selectedPaths: chosen)
+                return chosen.isEmpty || ArchiveExtractionDestination.pathMatchesSelection(entry.path, selectedPaths: chosen)
             }
         }
     }

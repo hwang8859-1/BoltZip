@@ -27,17 +27,14 @@ public enum ExtendedArchiveDriver {
         let isSplitVolume: Bool
         let needsSevenZip: Bool
         let linkTargets: [String: String]
+        let hardLinkTargets: [String: String]
+        let volumeURLs: [URL]
     }
 
     static func openRAR(at url: URL, encoding: FilenameEncodingOption, password: String?,
                         controller: ArchiveTaskController? = nil) throws -> RARContents {
         try controller?.checkpoint()
-        var volumes = try RARVolumeDiscovery.resolve(url)
-        if volumes.needsVolumeProbe,
-           try SevenZipArchiveListing.rarHasVolumes(archiveURL: volumes.first, password: password,
-                                                    allowPartialVolumeInfo: true, controller: controller) {
-            volumes = try RARVolumeDiscovery.resolve(url, confirmedMultiVolume: true)
-        }
+        let volumes = try rarVolumes(at: url, password: password, controller: controller)
 
         var catalog: SevenZipArchiveListing.Catalog?
         if !volumes.isSplitVolume && !volumes.isLegacySolid && !volumes.needsVolumeProbe {
@@ -47,18 +44,31 @@ public enum ExtendedArchiveDriver {
                                                              controller: controller)
             }
             // Keep the native filename encoding and metadata for ordinary single-volume RAR.
-            if catalog?.entries.contains(where: \.isEncrypted) != true,
+            if catalog?.entries.contains(where: \.isEncrypted) != true, catalog?.hardLinkTargets.isEmpty != false,
                let nativeEntries = try? listNativeEntries(at: volumes.first, format: .rar, encoding: encoding, password: nil),
                !nativeEntries.contains(where: \.isEncrypted) {
                 return RARContents(entries: nativeEntries, sourceURL: volumes.first, isSplitVolume: false,
-                                   needsSevenZip: false, linkTargets: [:])
+                                   needsSevenZip: false, linkTargets: [:], hardLinkTargets: [:], volumeURLs: [url])
             }
         }
 
         let compatible = try catalog ?? SevenZipArchiveListing.catalog(archiveURL: volumes.first, password: password, format: .rar,
                                                                          controller: controller)
         return RARContents(entries: compatible.entries, sourceURL: volumes.first,
-                           isSplitVolume: volumes.isSplitVolume, needsSevenZip: true, linkTargets: compatible.linkTargets)
+                           isSplitVolume: volumes.isSplitVolume, needsSevenZip: true,
+                           linkTargets: compatible.linkTargets, hardLinkTargets: compatible.hardLinkTargets,
+                           volumeURLs: volumes.paths.map { URL(fileURLWithPath: $0) } + [url])
+    }
+
+    static func rarVolumes(at url: URL, password: String?, controller: ArchiveTaskController? = nil) throws
+        -> RARVolumeDiscovery.VolumeSet {
+        let volumes = try RARVolumeDiscovery.resolve(url)
+        if volumes.needsVolumeProbe,
+           try SevenZipArchiveListing.rarHasVolumes(archiveURL: volumes.first, password: password,
+                                                    allowPartialVolumeInfo: true, controller: controller) {
+            return try RARVolumeDiscovery.resolve(url, confirmedMultiVolume: true)
+        }
+        return volumes
     }
 
     private static func sevenZipEntries(at url: URL, encoding: FilenameEncodingOption, password: String?) throws
@@ -178,7 +188,8 @@ public enum ExtendedArchiveDriver {
             let rar = try openRAR(at: url, encoding: encoding, password: password)
             if rar.needsSevenZip {
                 return try SevenZipArchiveReader.readEntry(at: rar.sourceURL, path: path, entries: rar.entries,
-                                                             password: password, exactOutputSize: exactOutputSize, format: .rar)
+                                                             password: password, exactOutputSize: exactOutputSize, format: .rar,
+                                                             hardLinkTargets: rar.hardLinkTargets)
             }
         }
         if resolvedFormat == .sevenZip {
@@ -277,11 +288,13 @@ public enum ExtendedArchiveDriver {
         expectedTotalBytes: UInt64 = 0,
         exactEntrySize: UInt64? = nil,
         topLevelDirRenameMap: [String: String] = [:],
+        protectedSourcePaths: Set<String> = [],
         controller: ArchiveTaskController? = nil,
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
         try controller?.checkpoint()
         let resolvedFormat = try format ?? ArchiveFormat.detectForReading(from: url) ?? ArchiveFormat.detect(from: url) ?? .sevenZip
+        let protected = protectedSourcePaths.union([ArchiveExtractionDestination.pathKey(url)])
         if resolvedFormat == .rar {
             let rar = try openRAR(at: url, encoding: encoding, password: password, controller: controller)
             if rar.needsSevenZip {
@@ -289,7 +302,9 @@ public enum ExtendedArchiveDriver {
                     at: rar.sourceURL, entries: rar.entries, to: destinationURL, selectedPaths: selectedPaths,
                     overwritePolicy: overwritePolicy, password: password, stripMacJunk: stripMacJunk,
                     restoreSymlinks: restoreSymlinks, exactEntrySize: exactEntrySize, topLevelDirRenameMap: topLevelDirRenameMap,
-                    controller: controller, progress: progress, format: .rar, linkTargets: rar.linkTargets
+                    controller: controller, progress: progress, format: .rar,
+                    linkTargets: rar.linkTargets, hardLinkTargets: rar.hardLinkTargets,
+                    protectedSourcePaths: protected.union(rar.volumeURLs.map(ArchiveExtractionDestination.pathKey))
                 )
                 return
             }
@@ -300,7 +315,7 @@ public enum ExtendedArchiveDriver {
                     at: url, entries: listing.entries, to: destinationURL, selectedPaths: selectedPaths,
                     overwritePolicy: overwritePolicy, password: password, stripMacJunk: stripMacJunk,
                     restoreSymlinks: restoreSymlinks, exactEntrySize: exactEntrySize, topLevelDirRenameMap: topLevelDirRenameMap,
-                    controller: controller, progress: progress
+                    controller: controller, progress: progress, protectedSourcePaths: protected
                 )
                 return
             }
@@ -318,6 +333,7 @@ public enum ExtendedArchiveDriver {
             let expectedTotalBytes: UInt64
             let exactEntrySize: UInt64?
             let verifyRARSize: Bool
+            let protectedSourcePaths: Set<String>
             let renameMap: [String: String]
             let controller: ArchiveTaskController?
             let progress: (@Sendable (OperationProgress) -> Void)?
@@ -344,6 +360,7 @@ public enum ExtendedArchiveDriver {
                 expectedTotalBytes: UInt64,
                 exactEntrySize: UInt64?,
                 verifyRARSize: Bool,
+                protectedSourcePaths: Set<String>,
                 renameMap: [String: String],
                 controller: ArchiveTaskController?,
                 progress: (@Sendable (OperationProgress) -> Void)?
@@ -357,6 +374,7 @@ public enum ExtendedArchiveDriver {
                 self.expectedTotalBytes = expectedTotalBytes
                 self.exactEntrySize = exactEntrySize
                 self.verifyRARSize = verifyRARSize
+                self.protectedSourcePaths = protectedSourcePaths
                 self.renameMap = renameMap
                 self.controller = controller
                 self.progress = progress
@@ -381,6 +399,7 @@ public enum ExtendedArchiveDriver {
             expectedTotalBytes: expectedTotalBytes,
             exactEntrySize: exactEntrySize,
             verifyRARSize: resolvedFormat == .rar,
+            protectedSourcePaths: protected,
             renameMap: topLevelDirRenameMap,
             controller: controller,
             progress: progress
@@ -435,7 +454,8 @@ public enum ExtendedArchiveDriver {
                                             at: initialDest,
                                             target: target,
                                             under: st.destinationURL,
-                                            overwritePolicy: st.overwritePolicy
+                                            overwritePolicy: st.overwritePolicy,
+                                            protectedSourcePaths: st.protectedSourcePaths
                                         )
                                     }
                                     return 0
@@ -525,7 +545,8 @@ public enum ExtendedArchiveDriver {
                                     ]
                                     try? FileManager.default.setAttributes(attrs, ofItemAtPath: stagedFile.path)
                                     try ArchiveExtractionDestination.commitExtractedItem(stagedFile, to: targetURL, under: st.destinationURL,
-                                                                              policy: st.overwritePolicy, controller: st.controller)
+                                                                              policy: st.overwritePolicy, protectedSourcePaths: st.protectedSourcePaths,
+                                                                              controller: st.controller)
                                     st.cleanupActivePartialFile()
                                     return 0
                                 }

@@ -4,22 +4,67 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
+CANDIDATE=0
+if [ "${1:-}" = "--candidate" ]; then
+    CANDIDATE=1
+    shift
+fi
+if [ "$#" -ne 0 ]; then
+    echo "Usage: ./Scripts/verify_release.sh [--candidate]" >&2
+    exit 2
+fi
+
 APP_VERSION="$(sed -n 's/.*current = "\(.*\)".*/\1/p' Sources/BoltZipCore/Models/BoltZipVersion.swift | head -n1)"
+APP_BUILD="$(sed -n 's/.*build = "\(.*\)".*/\1/p' Sources/BoltZipCore/Models/BoltZipVersion.swift | head -n1)"
 DIST_DIR="$ROOT_DIR/dist"
-APP_DIR="$DIST_DIR/BoltZip.app"
+DMG="$DIST_DIR/BoltZip-${APP_VERSION}-macOS-arm64.dmg"
+SUMS="$DIST_DIR/BoltZip-${APP_VERSION}-SHA256SUMS.txt"
+VERIFY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/boltzip-verify.XXXXXX")"
+MOUNT_DIR="$VERIFY_DIR/package"
+mkdir "$MOUNT_DIR" "$VERIFY_DIR/regression"
+MOUNTED=0
+cleanup() {
+    if [ "$MOUNTED" -eq 1 ]; then
+        hdiutil detach "$MOUNT_DIR" >/dev/null || return
+    fi
+    rm -rf "$VERIFY_DIR"
+}
+trap cleanup EXIT
+
+echo "==> [1/6] Verifying and mounting the delivery DMG..."
+test -n "$APP_VERSION" && test -n "$APP_BUILD"
+test -f "$DMG" && test -f "$SUMS"
+awk -v dmg="$(basename "$DMG")" '$2 == dmg { found++ } END { exit found != 1 }' "$SUMS"
+(cd "$DIST_DIR" && shasum -a 256 -c "$(basename "$SUMS")")
+hdiutil verify "$DMG"
+hdiutil attach -readonly -nobrowse -noautoopen -mountpoint "$MOUNT_DIR" "$DMG" >/dev/null
+MOUNTED=1
+
+APP_DIR="$MOUNT_DIR/BoltZip.app"
 CLI="$APP_DIR/Contents/Helpers/boltzip"
 SEVEN_ZIP="$APP_DIR/Contents/Helpers/7zz"
 DOCK_PLUGIN="$APP_DIR/Contents/PlugIns/BoltZipDockTile.plugin"
-DMG="$DIST_DIR/BoltZip-${APP_VERSION}-macOS-arm64.dmg"
-SUMS="$DIST_DIR/BoltZip-${APP_VERSION}-SHA256SUMS.txt"
 
-echo "==> [1/6] Verifying bundle code signature, entitlements & Info.plist..."
+echo "==> [2/6] Verifying mounted bundle version, signature, entitlements & Info.plist..."
 codesign --verify --deep --strict "$APP_DIR"
 codesign -d --entitlements - "$APP_DIR/Contents/PlugIns/BoltZipFinderSync.appex" 2>&1 | grep -q "com.apple.security.app-sandbox"
 plutil -lint \
     "$APP_DIR/Contents/Info.plist" \
     "$APP_DIR/Contents/PlugIns/BoltZipFinderSync.appex/Contents/Info.plist" \
     "$DOCK_PLUGIN/Contents/Info.plist"
+for PLIST in "$APP_DIR/Contents/Info.plist" "$APP_DIR/Contents/PlugIns/BoltZipFinderSync.appex/Contents/Info.plist" "$DOCK_PLUGIN/Contents/Info.plist"; do
+    if [ "$(plutil -extract CFBundleVersion raw "$PLIST")" != "$APP_BUILD" ]; then
+        echo "FAIL: The mounted DMG contains an unexpected application version or build: $PLIST" >&2
+        exit 1
+    fi
+done
+# The Dock tile bundle publishes a build number only.
+for PLIST in "$APP_DIR/Contents/Info.plist" "$APP_DIR/Contents/PlugIns/BoltZipFinderSync.appex/Contents/Info.plist"; do
+    if [ "$(plutil -extract CFBundleShortVersionString raw "$PLIST")" != "$APP_VERSION" ]; then
+        echo "FAIL: The mounted DMG contains an unexpected application version or build: $PLIST" >&2
+        exit 1
+    fi
+done
 test "$(plutil -extract NSDockTilePlugIn raw "$APP_DIR/Contents/Info.plist")" = "$(basename "$DOCK_PLUGIN")"
 test -x "$DOCK_PLUGIN/Contents/MacOS/BoltZipDockTile"
 test -x "$SEVEN_ZIP"
@@ -30,7 +75,7 @@ test -s "$APP_DIR/Contents/Resources/Licenses/7-Zip/UPSTREAM.txt"
 test -s "$APP_DIR/Contents/Resources/BoltZipDockLight.png"
 test -s "$APP_DIR/Contents/Resources/BoltZipDockDark.png"
 
-echo "==> [2/6] Verifying zero third-party Homebrew dylib dependencies..."
+echo "==> [3/6] Verifying zero third-party Homebrew dylib dependencies..."
 for BIN in "$APP_DIR/Contents/MacOS/BoltZipApp" "$CLI" "$SEVEN_ZIP"; do
     if otool -L "$BIN" | grep -qE "homebrew|/usr/local/(opt|lib)"; then
         echo "FAIL: Non-system dylib dependency found in $BIN"
@@ -39,13 +84,8 @@ for BIN in "$APP_DIR/Contents/MacOS/BoltZipApp" "$CLI" "$SEVEN_ZIP"; do
     fi
 done
 
-echo "==> [3/6] Verifying DMG & SHA-256 checksums for v${APP_VERSION}..."
-hdiutil verify "$DMG"
-(cd "$DIST_DIR" && shasum -a 256 -c "$(basename "$SUMS")")
-
 echo "==> [4/6] Running packaged CLI regression (engines, threads, AES-256 ZIP and 7z, .DS_Store, symlinks, in-place zip edit, flat extract, json)..."
-TMP_CLI="$(mktemp -d "${TMPDIR:-/tmp}/boltzip-verify-cli.XXXXXX")"
-trap 'rm -rf "$TMP_CLI"' EXIT
+TMP_CLI="$VERIFY_DIR/regression"
 
 mkdir -p "$TMP_CLI/src/sub"
 echo "boltzip v${APP_VERSION} cli regression" > "$TMP_CLI/src/sub/hello.txt"
@@ -79,6 +119,27 @@ test -L "$TMP_CLI/unlocked/src/hello_link"
 "$CLI" rm "$TMP_CLI/test.zip" "docs/extra_moved.txt"
 "$CLI" t "$TMP_CLI/test.zip" --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["failedCount"]==0'
 "$CLI" t "$TMP_CLI/enc.zip" --password "secret!${APP_VERSION}" >/dev/null
+if "$CLI" t "$TMP_CLI/enc.zip" --json > "$TMP_CLI/unverified.json"; then
+    echo "FAIL: An encrypted ZIP returned success without a password" >&2
+    exit 1
+fi
+python3 - "$TMP_CLI/unverified.json" <<'PY'
+import json, sys
+with open(sys.argv[1]) as stream:
+    assert json.load(stream)["skippedEncryptedCount"] > 0
+PY
+
+cp "$TMP_CLI/test.zip" "$TMP_CLI/standalone.z01"
+"$CLI" t "$TMP_CLI/standalone.z01" >/dev/null
+mkdir "$TMP_CLI/self-source"
+echo "nested archive name" > "$TMP_CLI/self-source/self.zip"
+"$CLI" a "$TMP_CLI/self.zip" "$TMP_CLI/self-source/self.zip"
+cp "$TMP_CLI/self.zip" "$TMP_CLI/self-before"
+if "$CLI" x "$TMP_CLI/self.zip" "$TMP_CLI" --mode here; then
+    echo "FAIL: Extraction would replace its own input" >&2
+    exit 1
+fi
+cmp "$TMP_CLI/self.zip" "$TMP_CLI/self-before"
 
 "$CLI" x "$TMP_CLI/test.zip" "$TMP_CLI/out" --mode smart --overwrite overwrite
 grep -q "boltzip v${APP_VERSION} cli regression" "$TMP_CLI/out/test/src/sub/hello.txt"
@@ -98,10 +159,11 @@ elif [ -x /System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers
     fi
 fi
 
-python3 - "$APP_VERSION" <<'PY'
+python3 - "$APP_VERSION" "$CANDIDATE" <<'PY'
 import pathlib, re, sys
 
 ver = sys.argv[1]
+candidate = sys.argv[2] == "1"
 html = pathlib.Path("showcase/index.html").read_text(encoding="utf-8")
 js = pathlib.Path("showcase/app.js").read_text(encoding="utf-8")
 
@@ -116,7 +178,7 @@ for i, lang in enumerate(langs):
 
 downloads = set(re.findall(r'href="\./downloads/([^"]+)"', html))
 current_assets = {d for d in downloads if ver in d}
-assert current_assets, f"No downloads referencing v{ver} found in showcase/index.html"
+assert candidate or current_assets, f"No downloads referencing v{ver} found in showcase/index.html"
 for asset in sorted(current_assets):
     p = pathlib.Path("dist") / asset
     assert p.is_file(), f"Missing referenced v{ver} artifact in dist/: {p}"

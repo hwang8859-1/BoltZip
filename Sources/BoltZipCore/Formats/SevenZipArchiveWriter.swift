@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-enum SevenZipEncryption {
+enum SevenZipArchiveWriter {
     static func create(
         from inputs: [URL],
         to output: URL,
@@ -9,10 +9,14 @@ enum SevenZipEncryption {
         controller: ArchiveTaskController?,
         progress: (@Sendable (OperationProgress) -> Void)?
     ) throws {
-        guard let password = options.password, !password.isEmpty else {
-            throw ArchiveOperationError.invalidSevenZipPassword
+        let password: String?
+        if options.encryption == .aes256 {
+            guard let supplied = options.password else { throw ArchiveOperationError.invalidSevenZipPassword }
+            try SevenZipCommand.validatePassword(supplied)
+            password = supplied
+        } else {
+            password = nil
         }
-        try SevenZipCommand.validatePassword(password)
         try controller?.checkpoint()
         try ArchiveOutputTransaction.validate(output)
         let canonicalOutput = output.deletingLastPathComponent().resolvingSymlinksInPath()
@@ -20,6 +24,7 @@ enum SevenZipEncryption {
         let items = try ArchiveInputCollector.collect(from: inputs, excludeMacJunk: options.excludeMacJunk,
                                                       preserveSymlinks: options.preserveSymlinks, excluding: [output, canonicalOutput],
                                                       controller: controller)
+        try validatePaths(items)
         let total = try items.reduce(UInt64(0)) { try ArchiveByteCount.checkedSum($0, $1.fileSize) }
         let command = try createArguments(options)
         let stage = try ArchiveOutputTransaction.makeStage(for: output)
@@ -78,9 +83,19 @@ enum SevenZipEncryption {
         }
 
         progress?(OperationProgress(fractionCompleted: 0.05, currentItem: output.lastPathComponent, totalBytes: total))
+        var progressParser = SevenZipWriteProgress()
         let result = try SevenZipCommand.run(
             command + [followStagedLinks ? "-snl-" : "-snl", "--", archive.path],
-            password: password, directory: inputStage, controller: controller
+            password: password, directory: inputStage, controller: controller, observeOutput: { chunk in
+                for percent in progressParser.receive(chunk) {
+                    progress?(OperationProgress(
+                        fractionCompleted: 0.05 + 0.9 * Double(percent) / 100,
+                        currentItem: output.lastPathComponent,
+                        processedBytes: UInt64((Double(total) * Double(percent) / 100).rounded(.down)),
+                        totalBytes: total
+                    ))
+                }
+            }
         )
         try SevenZipArchiveListing.check(result, archive: output, password: password)
         for (file, item, followsSymbolicLink) in files {
@@ -114,6 +129,23 @@ enum SevenZipEncryption {
                                     processedBytes: total, totalBytes: total))
     }
 
+    static func validatePaths(_ items: [ArchiveInputItem]) throws {
+        var layout: [String: Bool] = [:]
+        for item in items {
+            let path = ArchiveEntry.normalizePath(item.archivePath, isDirectory: false)
+            guard layout.updateValue(item.isDirectory, forKey: path) == nil else {
+                throw BoltZipError.entryAlreadyExists(path)
+            }
+        }
+        for path in layout.keys {
+            var parent = path[...]
+            while let slash = parent.lastIndex(of: "/") {
+                parent = parent[..<slash]
+                if layout[String(parent)] == false { throw BoltZipError.entryAlreadyExists(String(parent)) }
+            }
+        }
+    }
+
     private static func createArguments(_ options: CreateArchiveOptions) throws -> [String] {
         let codec: String
         switch options.algorithm {
@@ -126,9 +158,12 @@ enum SevenZipEncryption {
         let minimum = options.algorithm == .xz ? 0 : 1
         let level = options.algorithm == .store ? 0 : min(9, max(minimum, options.level))
         let workers = BoltConcurrency.resolvedWorkerCount(override: options.workerCount)
-        return ["a", "-t7z", "-p", options.encryptFileNames ? "-mhe=on" : "-mhe=off",
-                "-m0=\(codec)", "-mx=\(level)", "-mmt=\(workers)", "-ms=off", "-spd", "-ssc",
-                "-scsUTF-8", "-sccUTF-8", "-bsp0"]
+        var args = ["a", "-t7z", "-m0=\(codec)", "-mx=\(level)", "-mmt=\(workers)", "-spd", "-ssc",
+                    "-scsUTF-8", "-sccUTF-8", "-bso0", "-bse2", "-bsp1"]
+        if options.encryption == .aes256 {
+            args += ["-p", options.encryptFileNames ? "-mhe=on" : "-mhe=off", "-ms=off"]
+        }
+        return args
     }
 
     private static func stagedItemURL(_ item: ArchiveInputItem, in stage: URL) throws -> URL {
@@ -169,5 +204,36 @@ enum SevenZipEncryption {
               UInt64(info.st_size) == item.fileSize else {
             throw ArchiveOperationError.inputChanged(item.archivePath)
         }
+    }
+}
+
+/// The helper writes each progress frame after a backspace or carriage return.
+struct SevenZipWriteProgress {
+    private var prefix: [UInt8] = []
+    private var atFrameStart = true
+    private var lastPercent = 0
+
+    mutating func receive(_ data: Data) -> [Int] {
+        var updates: [Int] = []
+        for byte in data {
+            if byte == 8 || byte == 13 || byte == 10 {
+                prefix.removeAll(keepingCapacity: true)
+                atFrameStart = true
+            } else if atFrameStart {
+                if byte == 37 {
+                    let number = String(decoding: prefix, as: UTF8.self).trimmingCharacters(in: .whitespaces)
+                    if let percent = Int(number), percent > lastPercent, percent <= 100 {
+                        updates.append(percent)
+                        lastPercent = percent
+                    }
+                    atFrameStart = false
+                } else if prefix.count < 5 && (byte == 32 || (48...57).contains(byte)) {
+                    prefix.append(byte)
+                } else {
+                    atFrameStart = false
+                }
+            }
+        }
+        return updates
     }
 }

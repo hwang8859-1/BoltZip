@@ -6,20 +6,25 @@ private func splitVolumeURL(for archiveURL: URL, disk: Int) -> URL {
 
 final class ZipVolumeAccessor: @unchecked Sendable {
     let mainURL: URL
-    let volumeURLs: [URL]
+    var volumeURLs: [URL] {
+        ioLock.lock()
+        defer { ioLock.unlock() }
+        return allVolumes.isEmpty ? [mainURL] : allVolumes
+    }
     private var handles: [Int: FileHandle] = [:]
     private var sizes: [Int: UInt64] = [:]
     private let ioLock = NSLock()
 
     static func isNumberedVolume(_ archiveURL: URL) -> Bool {
         let ext = archiveURL.pathExtension.lowercased()
-        return ext.hasPrefix("z") && Int(ext.dropFirst()) != nil
+        guard ext.hasPrefix("z"), Int(ext.dropFirst()) != nil else { return false }
+        return (try? ZipReader(url: archiveURL).parseArchive(resolveNumberedVolume: false).totalDisks) != 1
     }
 
-    init(archiveURL: URL) throws {
+    init(archiveURL: URL, resolveNumberedVolume: Bool = true) throws {
         // If opened via .z01/.z02, locate matching .zip central file
         let resolvedMain: URL
-        if Self.isNumberedVolume(archiveURL) {
+        if resolveNumberedVolume && Self.isNumberedVolume(archiveURL) {
             resolvedMain = archiveURL.deletingPathExtension().appendingPathExtension("zip")
         } else {
             resolvedMain = archiveURL
@@ -28,7 +33,6 @@ final class ZipVolumeAccessor: @unchecked Sendable {
             throw BoltZipError.missingSplitVolume(resolvedMain.lastPathComponent)
         }
         self.mainURL = resolvedMain
-        self.volumeURLs = [resolvedMain]
     }
 
     private var allVolumes: [URL] = []

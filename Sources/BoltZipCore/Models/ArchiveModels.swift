@@ -339,12 +339,14 @@ public enum OverwritePolicy: String, CaseIterable, Identifiable, Codable, Sendab
 public struct ExtractConflictSummary: Sendable, Equatable {
     public let destinationRoot: URL
     public let conflictingNames: [String]
+    public let outputLocations: [URL]
 
     public var hasConflicts: Bool { !conflictingNames.isEmpty }
 
-    public init(destinationRoot: URL, conflictingNames: [String]) {
+    public init(destinationRoot: URL, conflictingNames: [String], outputLocations: [URL] = []) {
         self.destinationRoot = destinationRoot
         self.conflictingNames = conflictingNames
+        self.outputLocations = outputLocations
     }
 }
 
@@ -492,6 +494,8 @@ public struct ExtractOptions: Sendable {
     /// `nil` = follow global `BoltConcurrency.preference`; `0` = auto; `>= 1` = explicit core cap.
     public var workerCount: Int?
     public var restoreSymlinks: Bool
+    /// Other input archives in the same extraction batch.
+    public var protectedArchiveURLs: [URL] = []
 
     public init(
         destinationURL: URL,

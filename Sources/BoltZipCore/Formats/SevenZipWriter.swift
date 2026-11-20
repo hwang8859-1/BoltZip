@@ -10,6 +10,7 @@ enum SevenZipWriter {
         let items = try ArchiveInputCollector.collect(from: inputs, excludeMacJunk: excludeMacJunk,
                                                     preserveSymlinks: preserveSymlinks,
                                                     excluding: [output], controller: controller)
+        try SevenZipArchiveWriter.validatePaths(items)
         let total = try items.reduce(UInt64(0)) { try ArchiveByteCount.checkedSum($0, $1.fileSize) }
         let stage = try ArchiveOutputTransaction.makeStage(for: output)
         defer { try? FileManager.default.removeItem(at: stage) }

@@ -15,8 +15,8 @@ public final class ZipReader: @unchecked Sendable {
         self.url = url
     }
 
-    func parseArchive() throws -> ParsedArchive {
-        let accessor = try ZipVolumeAccessor(archiveURL: url)
+    func parseArchive(resolveNumberedVolume: Bool = true) throws -> ParsedArchive {
+        let accessor = try ZipVolumeAccessor(archiveURL: url, resolveNumberedVolume: resolveNumberedVolume)
         defer { accessor.closeAll() }
 
         let mainSize = try accessor.mainFileSize()
@@ -427,10 +427,14 @@ public final class ZipReader: @unchecked Sendable {
         entry: ArchiveEntry,
         overwritePolicy: OverwritePolicy,
         password: String?,
+        protectedSourcePaths: Set<String> = [],
         controller: ArchiveTaskController? = nil,
         progress: (@Sendable (UInt64, UInt64) -> Void)? = nil
     ) throws {
         try controller?.checkpoint()
+        let protected = protectedSourcePaths.isEmpty
+            ? Set((accessor.volumeURLs + [url]).map(ArchiveExtractionDestination.pathKey))
+            : protectedSourcePaths
         let threshold = BoltConcurrency.streamingThresholdBytes
         let actualMethod = record.aesExtra?.actualMethod ?? record.compressionMethod
 
@@ -445,7 +449,7 @@ public final class ZipReader: @unchecked Sendable {
                 progress: progress
             )
             try ArchiveExtractionDestination.writeExtractedFile(plain, to: initialURL, under: destinationRoot, entry: entry,
-                                                     policy: overwritePolicy, controller: controller)
+                                                     policy: overwritePolicy, protectedSourcePaths: protected, controller: controller)
             return
         }
 
@@ -486,7 +490,7 @@ public final class ZipReader: @unchecked Sendable {
                 }
             }
             try ArchiveExtractionDestination.commitExtractedItem(stagedURL, to: targetURL, under: destinationRoot,
-                                                      policy: overwritePolicy, controller: controller)
+                                                      policy: overwritePolicy, protectedSourcePaths: protected, controller: controller)
             let attrs: [FileAttributeKey: Any] = [
                 .modificationDate: entry.modifiedDate,
                 .posixPermissions: NSNumber(value: entry.permissions)
@@ -652,7 +656,7 @@ public final class ZipReader: @unchecked Sendable {
         }
 
         try ArchiveExtractionDestination.commitExtractedItem(stagePlainURL, to: targetURL, under: destinationRoot,
-                                                  policy: overwritePolicy, controller: controller)
+                                                  policy: overwritePolicy, protectedSourcePaths: protected, controller: controller)
         let attrs: [FileAttributeKey: Any] = [
             .modificationDate: entry.modifiedDate,
             .posixPermissions: NSNumber(value: entry.permissions)

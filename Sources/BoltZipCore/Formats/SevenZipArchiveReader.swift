@@ -2,14 +2,16 @@ import Foundation
 
 enum SevenZipArchiveReader {
     static func readEntry(at url: URL, path: String, entries: [ArchiveEntry],
-                          password: String?, exactOutputSize: UInt64?, format: ArchiveFormat = .sevenZip) throws -> Data {
+                          password: String?, exactOutputSize: UInt64?, format: ArchiveFormat = .sevenZip,
+                          hardLinkTargets: [String: String] = [:]) throws -> Data {
         let normalized = ArchiveEntry.normalizePath(path, isDirectory: false)
         guard let entry = entries.first(where: { $0.path == normalized && !$0.isDirectory }) else {
             throw BoltZipError.entryNotFound(path)
         }
         try verifyDeclaredSize(entry, exactSize: exactOutputSize)
+        let source = try payloadEntry(for: entry, in: entriesByPath(entries), hardLinks: hardLinkTargets)
         var data = Data()
-        try streamEntries(at: url, entries: [entry], password: password, format: format, controller: nil) { _, chunk in
+        try streamEntries(at: url, entries: [source], password: password, format: format, controller: nil) { _, chunk in
             data.append(chunk)
         }
         return data
@@ -20,26 +22,39 @@ enum SevenZipArchiveReader {
         overwritePolicy: OverwritePolicy, password: String?, stripMacJunk: Bool, restoreSymlinks: Bool, exactEntrySize: UInt64?,
         topLevelDirRenameMap: [String: String], controller: ArchiveTaskController?,
         progress: (@Sendable (OperationProgress) -> Void)?, format: ArchiveFormat = .sevenZip,
-        linkTargets: [String: String] = [:]
+        linkTargets: [String: String] = [:], hardLinkTargets: [String: String] = [:],
+        protectedSourcePaths: Set<String> = []
     ) throws {
         let selected = entries.filter { entry in
             (!entry.isSymbolicLink || restoreSymlinks) &&
             (!stripMacJunk || !MacJunkFilter.isJunk(path: entry.path)) &&
             (selectedPaths.map { $0.isEmpty || ArchiveExtractionDestination.pathMatchesSelection(entry.path, selectedPaths: $0) } ?? true)
         }
-        let destinations = try selected.map { entry -> URL in
+        let fm = FileManager.default
+        let destinations = try selected.compactMap { entry -> (entry: ArchiveEntry, destination: URL)? in
             if !entry.isDirectory && !entry.isSymbolicLink { try verifyDeclaredSize(entry, exactSize: exactEntrySize) }
             let raw = try selector(for: entry).replacingOccurrences(of: "\\", with: "/")
             guard !raw.hasPrefix("/"), !raw.split(separator: "/").contains("..") else {
                 throw BoltZipError.pathTraversalDetected(raw)
             }
             let outputPath = ArchiveExtractionDestination.remapTopLevelFolder(in: entry.path, renameMap: topLevelDirRenameMap)
-            return try ArchiveExtractionDestination.safeDestinationURL(for: outputPath, under: root)
+            let destination = try ArchiveExtractionDestination.safeDestinationURL(for: outputPath, under: root)
+            if overwritePolicy == .skip, !entry.isDirectory, (try? fm.attributesOfItem(atPath: destination.path)) != nil {
+                return nil
+            }
+            return (entry, destination)
         }
 
-        let items = zip(selected, destinations).filter { !$0.0.isDirectory && linkTargets[$0.0.path] == nil }
-        let total = try items.reduce(UInt64(0)) { try ArchiveByteCount.checkedSum($0, $1.0.uncompressedSize) }
-        let fm = FileManager.default
+        let byPath = entriesByPath(entries)
+        var sourcesByOutput: [String: String] = [:]
+        var sourceUses: [String: Int] = [:]
+        for (entry, _) in destinations where !entry.isDirectory && linkTargets[entry.path] == nil {
+            let source = try payloadEntry(for: entry, in: byPath, hardLinks: hardLinkTargets)
+            sourcesByOutput[entry.path] = source.path
+            sourceUses[source.path, default: 0] += 1
+        }
+        let payloads = entries.filter { sourceUses[$0.path] != nil }
+        let total = try payloads.reduce(UInt64(0)) { try ArchiveByteCount.checkedSum($0, $1.uncompressedSize) }
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
         let stage = try ArchiveExtractionDestination.makeExtractionStage(near: root.appendingPathComponent("payload"), under: root)
         defer { try? fm.removeItem(at: stage) }
@@ -48,7 +63,7 @@ enum SevenZipArchiveReader {
         var nextIndex = 0
         var handle: FileHandle?
         defer { try? handle?.close() }
-        let stagedFiles = try items.enumerated().map { index, item -> URL in
+        let stagedFiles = try payloads.indices.map { index -> URL in
             let file = stage.appendingPathComponent(String(index))
             guard fm.createFile(atPath: file.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
                 throw CocoaError(.fileWriteUnknown)
@@ -58,7 +73,7 @@ enum SevenZipArchiveReader {
         // Keep the 7zz selectors literal, and keep each batch below the child process' argument limit.
         var batch: [ArchiveEntry] = []
         var argumentBytes = 0
-        for (entry, _) in items {
+        for entry in payloads {
             let length = entry.rawPathBytes.count + 1
             if !batch.isEmpty && argumentBytes + length > 96 * 1024 {
                 try writeBatch()
@@ -69,31 +84,46 @@ enum SevenZipArchiveReader {
         try writeBatch()
         try controller?.checkpoint()
 
-        for (entry, destination) in zip(selected, destinations) where entry.isDirectory {
+        let stagedByPath = Dictionary(uniqueKeysWithValues: zip(payloads.map(\.path), stagedFiles))
+        for (entry, destination) in destinations where entry.isDirectory {
             try ArchiveExtractionDestination.assertNoSymlinkTraversal(at: destination, under: root)
             try fm.createDirectory(at: destination, withIntermediateDirectories: true)
         }
-        for (index, item) in items.enumerated() {
+        for (entry, destination) in destinations where !entry.isDirectory {
             try controller?.checkpoint()
-            let (entry, destination) = item
+            if let target = linkTargets[entry.path] {
+                try ArchiveExtractionDestination.createSafeSymlink(at: destination, target: target, under: root,
+                                                                   overwritePolicy: overwritePolicy, protectedSourcePaths: protectedSourcePaths)
+                continue
+            }
+            guard let sourcePath = sourcesByOutput[entry.path], let staged = stagedByPath[sourcePath] else {
+                throw BoltZipError.entryNotFound(entry.path)
+            }
             if entry.isSymbolicLink {
-                guard entry.uncompressedSize <= 4096,
-                      let target = String(data: try Data(contentsOf: stagedFiles[index]), encoding: .utf8) else {
+                guard entry.uncompressedSize <= 4096, let target = String(data: try Data(contentsOf: staged), encoding: .utf8) else {
                     throw BoltZipError.pathTraversalDetected(entry.path)
                 }
-                try ArchiveExtractionDestination.createSafeSymlink(at: destination, target: target, under: root, overwritePolicy: overwritePolicy)
+                try ArchiveExtractionDestination.createSafeSymlink(at: destination, target: target, under: root,
+                                                                   overwritePolicy: overwritePolicy, protectedSourcePaths: protectedSourcePaths)
             } else if let final = try ArchiveExtractionDestination.prepareExtractTargetURL(initialURL: destination, under: root, policy: overwritePolicy) {
-                try? fm.setAttributes([.posixPermissions: NSNumber(value: entry.permissions),
-                                      .modificationDate: entry.modifiedDate], ofItemAtPath: stagedFiles[index].path)
-                try ArchiveExtractionDestination.commitExtractedItem(stagedFiles[index], to: final, under: root,
-                                                                      policy: overwritePolicy, controller: controller)
+                let attributes = byPath[sourcePath] ?? entry
+                try? fm.setAttributes([.posixPermissions: NSNumber(value: attributes.permissions),
+                                      .modificationDate: attributes.modifiedDate], ofItemAtPath: staged.path)
+                let item: URL
+                if sourceUses[sourcePath, default: 0] > 1 {
+                    item = stage.appendingPathComponent(UUID().uuidString)
+                    do {
+                        try fm.linkItem(at: staged, to: item)
+                    } catch {
+                        try fm.copyItem(at: staged, to: item)
+                    }
+                } else {
+                    item = staged
+                }
+                try ArchiveExtractionDestination.commitExtractedItem(item, to: final, under: root,
+                                                                      policy: overwritePolicy, protectedSourcePaths: protectedSourcePaths,
+                                                                      controller: controller)
             }
-        }
-        for (entry, destination) in zip(selected, destinations) {
-            guard let target = linkTargets[entry.path] else { continue }
-            try controller?.checkpoint()
-            try ArchiveExtractionDestination.createSafeSymlink(at: destination, target: target, under: root,
-                                                               overwritePolicy: overwritePolicy)
         }
 
         func writeBatch() throws {
@@ -108,7 +138,7 @@ enum SevenZipArchiveReader {
                 try handle?.write(contentsOf: chunk)
                 processed += UInt64(chunk.count)
                 progress?(OperationProgress(fractionCompleted: Double(processed) / Double(max(1, total)),
-                                            currentItem: items[nextIndex].0.path, processedBytes: processed, totalBytes: total))
+                                            currentItem: payloads[nextIndex].path, processedBytes: processed, totalBytes: total))
             }
             try handle?.close()
             handle = nil
@@ -135,6 +165,25 @@ enum SevenZipArchiveReader {
         }
         return IntegrityReport(archiveName: archiveName ?? url.lastPathComponent, totalEntries: passed.count, passedCount: passed.count,
                                failedCount: 0, skippedEncryptedCount: 0, elapsedSeconds: -start.timeIntervalSinceNow, results: passed)
+    }
+
+    private static func entriesByPath(_ entries: [ArchiveEntry]) -> [String: ArchiveEntry] {
+        Dictionary(entries.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    private static func payloadEntry(for entry: ArchiveEntry, in entries: [String: ArchiveEntry],
+                                     hardLinks: [String: String]) throws -> ArchiveEntry {
+        var source = entry
+        var seen: Set<String> = []
+        while let path = hardLinks[source.path] {
+            guard seen.insert(source.path).inserted, let next = entries[path],
+                  !next.isDirectory, !next.isSymbolicLink,
+                  next.uncompressedSize == entry.uncompressedSize else {
+                throw BoltZipError.invalidArchive(entry.path)
+            }
+            source = next
+        }
+        return source
     }
 
     private static func selector(for entry: ArchiveEntry) throws -> String {
@@ -172,8 +221,7 @@ enum SevenZipArchiveReader {
             ["x"] + SevenZipArchiveListing.typeArguments(for: format)
                 + ["-so", "-bso0", "-bse2", "-bsp0", "-spd", "-ssc", "--", url.standardizedFileURL.path]
                 + entries.map(selector(for:)),
-            password: password, controller: controller
-        ) { reader in
+            password: password, controller: controller, consumeOutput: { reader in
             // 7zz concatenates the selected payloads in archive order.
             for (index, entry) in entries.enumerated() {
                 var remaining = entry.uncompressedSize
@@ -196,7 +244,7 @@ enum SevenZipArchiveReader {
             if let excess = try reader.read(upToCount: 1), !excess.isEmpty {
                 mismatch = mismatch ?? url.lastPathComponent
             }
-        }
+        })
         try SevenZipArchiveListing.check(result, archive: url, password: password, format: format)
         if let mismatch {
             throw BoltZipError.corruptedEntry(entry: mismatch, detail: "CRC / size")

@@ -86,7 +86,9 @@ public enum TarCodec {
             throw BoltZipError.unsupportedFormat(format.displayName)
         }
         try ArchiveExtractionDestination.commitExtractedItem(stagedItem, to: destinationFileURL, under: root,
-                                                  policy: .overwrite, controller: controller)
+                                                  policy: .overwrite,
+                                                  protectedSourcePaths: [ArchiveExtractionDestination.pathKey(url)],
+                                                  controller: controller)
     }
 
     public static func readEntryData(at url: URL, format: ArchiveFormat, path: String) throws -> Data {
@@ -122,11 +124,13 @@ public enum TarCodec {
         restoreSymlinks: Bool,
         topLevelDirRenameMap: [String: String],
         totalExpectedBytes: UInt64,
+        protectedSourcePaths: Set<String> = [],
         controller: ArchiveTaskController? = nil,
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
         try controller?.checkpoint()
         let fm = FileManager.default
+        let protected = protectedSourcePaths.union([ArchiveExtractionDestination.pathKey(url)])
 
         switch format {
         case .gz, .zst, .xz, .bz2, .lz4:
@@ -162,7 +166,7 @@ public enum TarCodec {
             }
 
             try ArchiveExtractionDestination.commitExtractedItem(stageURL, to: targetURL, under: destinationURL,
-                                                      policy: overwritePolicy, controller: controller)
+                                                      policy: overwritePolicy, protectedSourcePaths: protected, controller: controller)
             let attrs: [FileAttributeKey: Any] = [
                 .modificationDate: first.modifiedDate,
                 .posixPermissions: NSNumber(value: first.permissions)
@@ -192,6 +196,7 @@ public enum TarCodec {
                     topLevelDirRenameMap: topLevelDirRenameMap,
                     baseFrac: format == .tar ? 0.0 : 0.4,
                     totalExpectedBytes: totalExpectedBytes,
+                    protectedSourcePaths: protected,
                     controller: controller,
                     progress: progress
                 )
@@ -630,6 +635,7 @@ public enum TarCodec {
         topLevelDirRenameMap: [String: String],
         baseFrac: Double,
         totalExpectedBytes: UInt64,
+        protectedSourcePaths: Set<String> = [],
         controller: ArchiveTaskController?,
         progress: (@Sendable (OperationProgress) -> Void)?
     ) throws {
@@ -661,7 +667,8 @@ public enum TarCodec {
                         at: initialDest,
                         target: info.symlinkTarget,
                         under: destinationURL,
-                        overwritePolicy: overwritePolicy
+                        overwritePolicy: overwritePolicy,
+                        protectedSourcePaths: protectedSourcePaths
                     )
                 }
                 return true
@@ -714,7 +721,7 @@ public enum TarCodec {
             ]
             try? fm.setAttributes(attrs, ofItemAtPath: stagedFile.path)
             try ArchiveExtractionDestination.commitExtractedItem(stagedFile, to: targetURL, under: destinationURL,
-                                                      policy: overwritePolicy, controller: controller)
+                                                      policy: overwritePolicy, protectedSourcePaths: protectedSourcePaths, controller: controller)
             return true
         }
     }

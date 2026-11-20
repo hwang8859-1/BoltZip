@@ -59,6 +59,13 @@ public enum BoltCoreLocalization: Sendable {
           "The archive output cannot also be an input file.", "出力先の圧縮ファイルを入力ファイルとして指定することはできません。")
     }
 
+    static func extractionWouldReplaceSource(_ name: String) -> String {
+        t("解压会覆盖源压缩包或分卷：\(name)。请选择其他目录或保留两份。",
+          "解壓縮會覆蓋來源封存檔或分卷：\(name)。請選擇其他資料夾或保留兩份。",
+          "Extraction would replace a source archive or volume: \(name). Choose another folder or keep both.",
+          "展開すると元の書庫または分割ボリューム「\(name)」が上書きされます。別のフォルダを選ぶか、両方を残してください。")
+    }
+
     static var applicationNotFoundForAssociation: String {
         t("找不到 BoltZip.app，请先安装应用", "找不到 BoltZip.app，請先安裝應用程式",
           "BoltZip.app was not found. Install the app first.", "BoltZip.app が見つかりません。先にアプリをインストールしてください。")

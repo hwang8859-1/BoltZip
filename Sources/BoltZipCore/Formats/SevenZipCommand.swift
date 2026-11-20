@@ -22,6 +22,7 @@ enum SevenZipCommand {
         passwordPromptCount: UInt8 = 1,
         directory: URL? = nil,
         controller: ArchiveTaskController? = nil,
+        observeOutput: ((Data) -> Void)? = nil,
         consumeOutput: ((FileHandle) throws -> Void)? = nil
     ) throws -> Result {
         try controller?.checkpoint()
@@ -107,7 +108,7 @@ enum SevenZipCommand {
                 _ = try captureOutput(reader, limit: 0)
                 return Data()
             }
-            let capture = try captureOutput(reader, limit: 64 * 1024 * 1024)
+            let capture = try captureOutput(reader, limit: 64 * 1024 * 1024, observe: observeOutput)
             guard !capture.truncated else { throw CocoaError(.fileReadTooLarge) }
             return capture.data
         }
@@ -124,10 +125,19 @@ enum SevenZipCommand {
         )
     }
 
-    private static func captureOutput(_ reader: FileHandle, limit: Int) throws -> (data: Data, truncated: Bool) {
+    private static func captureOutput(_ reader: FileHandle, limit: Int, observe: ((Data) -> Void)? = nil)
+        throws -> (data: Data, truncated: Bool) {
         var data = Data()
         var truncated = false
-        while let chunk = try reader.read(upToCount: 64 * 1024), !chunk.isEmpty {
+        while true {
+            let chunk: Data
+            if observe != nil {
+                chunk = reader.availableData
+            } else {
+                chunk = try reader.read(upToCount: 64 * 1024) ?? Data()
+            }
+            if chunk.isEmpty { break }
+            observe?(chunk)
             let remaining = limit - data.count
             if chunk.count > remaining { truncated = true }
             data.append(contentsOf: chunk.prefix(remaining))

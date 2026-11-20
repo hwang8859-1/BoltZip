@@ -262,8 +262,14 @@ extension WorkspaceViewModel {
         Task.detached(priority: .userInitiated) {
             var checked: [(archiveURL: URL, options: ExtractOptions, conflicts: ExtractConflictSummary?)] = []
             checked.reserveCapacity(initialPlans.count)
+            var seenArchives: Set<String> = []
+            var protectedSources: [URL] = []
             for plan in initialPlans {
                 var options = plan.options
+                let sources = (try? BoltArchiveEngine.extractionSourceURLs(archiveURL: plan.archiveURL)) ?? [plan.archiveURL]
+                let key = Self.batchExtractionPathKey(sources.first ?? plan.archiveURL)
+                guard seenArchives.insert(key).inserted else { continue }
+                protectedSources.append(contentsOf: sources)
                 let summary: ExtractConflictSummary?
                 do {
                     summary = try BoltArchiveEngine.detectExtractConflicts(archiveURL: plan.archiveURL, options: options)
@@ -277,8 +283,10 @@ extension WorkspaceViewModel {
                 checked.append((plan.archiveURL, options, summary))
             }
 
+            let extractionPlans = checked
+            let inputArchives = protectedSources
             await MainActor.run {
-                let conflicting = checked.filter { $0.conflicts?.hasConflicts == true }
+                let conflicting = extractionPlans.filter { $0.conflicts?.hasConflicts == true }
                 var chosenOverwritePolicy: OverwritePolicy = .overwrite
 
                 if !conflicting.isEmpty {
@@ -321,25 +329,51 @@ extension WorkspaceViewModel {
                 }
 
                 let targetHUD = useInAppHUD ? self.inAppTaskHUD : self.hudModel
-                for item in checked {
+                let policies = Self.batchExtractionPolicies(
+                    for: extractionPlans.map { ($0.options, $0.conflicts) }, requestedPolicy: chosenOverwritePolicy
+                )
+                for (item, policy) in zip(extractionPlans, policies) {
                     var finalOpts = item.options
-                    if item.conflicts?.hasConflicts == true && chosenOverwritePolicy == .rename {
-                        finalOpts.overwritePolicy = .rename
-                    }
+                    finalOpts.protectedArchiveURLs = inputArchives
+                    finalOpts.overwritePolicy = policy
                     targetHUD.enqueue(.extract(archiveURL: item.archiveURL, options: finalOpts))
                 }
             }
         }
     }
 
+    nonisolated static func batchExtractionPolicies(
+        for jobs: [(options: ExtractOptions, conflicts: ExtractConflictSummary?)], requestedPolicy: OverwritePolicy
+    ) -> [OverwritePolicy] {
+        var previousOutputs: Set<String> = []
+        var uninspectedDestinations: Set<String> = []
+        return jobs.map { job in
+            let destination = batchExtractionPathKey(job.options.destinationURL)
+            let outputs = job.conflicts?.outputLocations.map(batchExtractionPathKey) ?? []
+            let overlapsEarlierOutput = outputs.contains { path in
+                previousOutputs.contains { prior in path == prior || path.hasPrefix(prior + "/") || prior.hasPrefix(path + "/") }
+            }
+            let mayOverwrite = job.conflicts?.hasConflicts == true && requestedPolicy == .overwrite &&
+                !overlapsEarlierOutput && !uninspectedDestinations.contains(destination)
+            if job.conflicts == nil { uninspectedDestinations.insert(destination) }
+            previousOutputs.formUnion(outputs)
+            return mayOverwrite ? .overwrite : .rename
+        }
+    }
+
     func handleDroppedOrOpenedURLs(_ urls: [URL], fromExternalFinder: Bool = false) {
         guard let first = urls.first else { return }
-        if urls.count == 1, ArchiveFormat.detect(from: first) != nil, !isDirectory(first) {
-            openArchive(url: first, fromExternalFinder: fromExternalFinder)
-        } else if urls.count > 1, urls.allSatisfy({ ArchiveFormat.detect(from: $0) != nil && !isDirectory($0) }) {
-            pendingBatchArchiveDrop = PendingBatchArchivePrompt(urls: urls)
-        } else {
-            presentStandaloneCompressWizard(inputs: urls)
+        Task.detached(priority: .userInitiated) {
+            let areArchives = BoltArchiveEngine.filterArchiveURLs(urls).count == urls.count
+            await MainActor.run {
+                if areArchives && urls.count == 1 {
+                    self.openArchive(url: first, fromExternalFinder: fromExternalFinder)
+                } else if areArchives {
+                    self.pendingBatchArchiveDrop = PendingBatchArchivePrompt(urls: urls)
+                } else {
+                    self.presentStandaloneCompressWizard(inputs: urls)
+                }
+            }
         }
     }
 
@@ -348,8 +382,8 @@ extension WorkspaceViewModel {
         quickExtractBatchInHUD(mode: mode, archiveURLs: urls, destinationOverride: dest, useInAppHUD: true)
     }
 
-    private func isDirectory(_ url: URL) -> Bool {
-        (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    private nonisolated static func batchExtractionPathKey(_ url: URL) -> String {
+        url.standardizedFileURL.resolvingSymlinksInPath().path.precomposedStringWithCanonicalMapping.lowercased()
     }
 
     // MARK: - Utilities & History

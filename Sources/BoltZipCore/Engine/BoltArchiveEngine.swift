@@ -86,8 +86,11 @@ public enum BoltArchiveEngine {
         case .sevenZip:
             if requestsEncryption {
                 guard options.encryption == .aes256 else { throw ArchiveOperationError.sevenZipEncryptionRequiresAES256 }
-                try SevenZipEncryption.create(from: inputURLs, to: outputURL, options: options,
-                                              controller: controller, progress: progress)
+            }
+            let parallelCodec = options.algorithm == .xz || options.algorithm == .bzip2
+            if requestsEncryption || (parallelCodec && BoltConcurrency.resolvedWorkerCount(override: options.workerCount) > 1) {
+                try SevenZipArchiveWriter.create(from: inputURLs, to: outputURL, options: options,
+                                                 controller: controller, progress: progress)
             } else {
                 try ExtendedArchiveDriver.create7z(
                     from: inputURLs,

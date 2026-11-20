@@ -69,6 +69,7 @@ enum ArchiveCommands {
         let enc = arguments.encoding
         let workers = try arguments.workerCount()
         let fm = FileManager.default
+        let archiveSources = try BoltArchiveEngine.extractionSourceURLs(archiveURL: archiveURL, password: arguments.password)
         try fm.createDirectory(at: destURL, withIntermediateDirectories: true)
 
         let staging = fm.temporaryDirectory.appendingPathComponent("boltzip-flat-\(UUID().uuidString)", isDirectory: true)
@@ -84,7 +85,7 @@ enum ArchiveCommands {
             restoreSymlinks: false
         )
         _ = try BoltArchiveEngine.extract(archiveURL: archiveURL, options: opts, progress: progress)
-        let flatCount = try publishFlatFiles(from: staging, to: destURL, policy: overwrite)
+        let flatCount = try publishFlatFiles(from: staging, to: destURL, policy: overwrite, protectedSources: archiveSources)
         print("Extracted \(flatCount) file(s) flat to: \(destURL.path)")
         return 0
     }
@@ -152,17 +153,19 @@ enum ArchiveCommands {
         return 0
     }
 
-    private static func publishFlatFiles(from staging: URL, to destURL: URL, policy: OverwritePolicy) throws -> Int {
+    private static func publishFlatFiles(from staging: URL, to destURL: URL, policy: OverwritePolicy,
+                                         protectedSources: [URL]) throws -> Int {
         let fm = FileManager.default
         var flatCount = 0
         if let enumerator = fm.enumerator(at: staging, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey], options: []) {
             for case let fileURL as URL in enumerator {
                 let rv = try fileURL.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
                 if rv.isDirectory == true || rv.isSymbolicLink == true { continue }
-                try BoltArchiveEngine.publishExtractedFile(from: fileURL,
-                                                          to: destURL.appendingPathComponent(fileURL.lastPathComponent),
-                                                          under: destURL, policy: policy)
-                flatCount += 1
+                if try BoltArchiveEngine.publishExtractedFile(from: fileURL,
+                                                             to: destURL.appendingPathComponent(fileURL.lastPathComponent),
+                                                             under: destURL, policy: policy, protectedSources: protectedSources) != nil {
+                    flatCount += 1
+                }
             }
         }
         return flatCount

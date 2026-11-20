@@ -2,6 +2,7 @@ import Foundation
 
 public enum ArchiveOperationError: LocalizedError, Sendable {
     case outputIsInput
+    case extractionWouldReplaceSource(String)
     case outputIsDirectory(String)
     case inputChanged(String)
     case encryptionRequiresZIP
@@ -16,6 +17,7 @@ public enum ArchiveOperationError: LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .outputIsInput: return BoltCoreLocalization.archiveOutputIsInput
+        case .extractionWouldReplaceSource(let name): return BoltCoreLocalization.extractionWouldReplaceSource(name)
         case .outputIsDirectory(let name): return BoltCoreLocalization.cannotReplaceDirectoryWithArchive(name)
         case .inputChanged(let path): return BoltCoreLocalization.inputChangedWhileArchiving(path)
         case .encryptionRequiresZIP: return BoltCoreLocalization.encryptionRequiresZIP

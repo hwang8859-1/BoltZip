@@ -13,15 +13,17 @@ final class ExplorerPointerTracker {
 private final class DragBatchPasswordState {
     var resolvedPassword: String?
     var didPromptOrResolve = false
+    private var rejectedPassword: String?
+    private var cancelled = false
 
     func resolvePasswordIfNeeded(archiveURL: URL, initialPassword: String?, hasEncrypted: Bool, l: L10n) -> (password: String?, cancelled: Bool) {
-        if let initialPassword, !initialPassword.isEmpty {
+        if let initialPassword, !initialPassword.isEmpty, initialPassword != rejectedPassword, !cancelled {
             resolvedPassword = initialPassword
             didPromptOrResolve = true
             return (initialPassword, false)
         }
         if didPromptOrResolve {
-            return (resolvedPassword, false)
+            return (resolvedPassword, cancelled)
         }
         didPromptOrResolve = true
         guard hasEncrypted else {
@@ -43,7 +45,14 @@ private final class DragBatchPasswordState {
             resolvedPassword = pw.isEmpty ? nil : pw
             return (resolvedPassword, false)
         }
+        cancelled = true
         return (nil, true)
+    }
+
+    func reject(_ password: String?) {
+        rejectedPassword = password
+        resolvedPassword = nil
+        didPromptOrResolve = false
     }
 }
 
@@ -124,7 +133,7 @@ final class DragOutCoordinator: NSObject, NSDraggingSource, NSFilePromiseProvide
 
         Task { @MainActor in
             let vm = payload.vm
-            let needsPw = payload.entry.isEncrypted || payload.hasEncryptedEntries
+            let needsPw = payload.entry.isEncrypted || (payload.entry.isDirectory && payload.hasEncryptedEntries)
             let pwResult = payload.batchPasswordState.resolvePasswordIfNeeded(
                 archiveURL: payload.archiveURL,
                 initialPassword: vm?.savedPassword ?? payload.initialPassword,
@@ -135,10 +144,6 @@ final class DragOutCoordinator: NSObject, NSDraggingSource, NSFilePromiseProvide
                 completion.finish(BoltZipError.cancelled)
                 return
             }
-            if let pw = pwResult.password, !pw.isEmpty, vm?.savedPassword == nil {
-                vm?.savedPassword = pw
-            }
-
             let entry = payload.entry
             let archiveURL = payload.archiveURL
             let enc = payload.encoding
@@ -177,40 +182,31 @@ final class DragOutCoordinator: NSObject, NSDraggingSource, NSFilePromiseProvide
                     guard fm.fileExists(atPath: stagedItemURL.path) else {
                         throw BoltZipError.entryNotFound(entry.path)
                     }
-                    if let existingAttrs = try? fm.attributesOfItem(atPath: destFileURL.path) {
-                        let existingIsDir = (existingAttrs[.type] as? FileAttributeType) == .typeDirectory
-                        let stagedIsDir = ((try? fm.attributesOfItem(atPath: stagedItemURL.path)[.type] as? FileAttributeType) == .typeDirectory)
-                        if existingIsDir != stagedIsDir {
-                            // Never silently delete a folder when replacing with a file (or vice versa)
-                            throw BoltZipError.externalToolFailed("Cannot overwrite item of mismatched type: \(destFileURL.lastPathComponent)")
-                        }
-                        if existingIsDir {
-                            try fm.removeItem(at: destFileURL)
-                            try fm.moveItem(at: stagedItemURL, to: destFileURL)
-                        } else {
-                            _ = try fm.replaceItemAt(
-                                destFileURL,
-                                withItemAt: stagedItemURL,
-                                backupItemName: nil,
-                                options: [.usingNewMetadataOnly]
-                            )
-                        }
-                    } else {
-                        try fm.moveItem(at: stagedItemURL, to: destFileURL)
-                    }
+                    try BoltArchiveEngine.publishPromisedItem(
+                        from: stagedItemURL, to: destFileURL,
+                        protectedSources: BoltArchiveEngine.extractionSourceURLs(archiveURL: archiveURL, password: password)
+                    )
                 }.value
-
+                if let password, vm?.listing?.archiveURL == archiveURL { vm?.savedPassword = password }
                 vm?.isBusy = false
                 vm?.progress = nil
                 vm?.statusMessage = "-> \(destFileURL.lastPathComponent)"
                 completion.finish(nil)
             } catch {
+                if let archiveError = error as? BoltZipError {
+                    switch archiveError {
+                    case .wrongPassword, .passwordRequired:
+                        payload.batchPasswordState.reject(password)
+                        if vm?.listing?.archiveURL == archiveURL, vm?.savedPassword == password { vm?.savedPassword = nil }
+                    default: break
+                    }
+                }
                 vm?.isBusy = false
                 vm?.progress = nil
                 if case BoltZipError.cancelled = error {
                     // Cancelled by user
                 } else {
-                    vm?.alertMessage = error.localizedDescription
+                    vm?.alertMessage = vm?.l10n.operationErrorMessage(error)
                 }
                 completion.finish(error)
             }

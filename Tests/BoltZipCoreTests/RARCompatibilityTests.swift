@@ -77,7 +77,43 @@ final class RARCompatibilityTests: XCTestCase {
                 archiveURL: archive, options: ExtractOptions(destinationURL: destination, mode: .selected(["d.txt"]), password: "password2")
             )
             XCTAssertEqual(try Data(contentsOf: destination.appendingPathComponent("d.txt")), payload(for: "d.txt"))
+
+            let skipped = root.appendingPathComponent("\(fixture.rawValue)-skip")
+            try FileManager.default.createDirectory(at: skipped, withIntermediateDirectories: true)
+            for path in ["b.txt", "d.txt"] { try oldBytes.write(to: skipped.appendingPathComponent(path)) }
+            try BoltArchiveEngine.extract(archiveURL: archive, options: ExtractOptions(
+                destinationURL: skipped, mode: .here, overwritePolicy: .skip
+            ))
+            XCTAssertEqual(try Data(contentsOf: skipped.appendingPathComponent("a.txt")), payload(for: "a.txt"))
+            XCTAssertEqual(try Data(contentsOf: skipped.appendingPathComponent("b.txt")), oldBytes)
         }
+    }
+
+    func testEncryptedRAR5HardLinkCanBePreviewedAndExtracted() throws {
+        // Created with RAR 7.23 from a.txt and its hard link b.txt using -oh -hpfixture -m0.
+        let fixture = """
+        UmFyIRoHAQBhDzlwIQQAAAEPysOkQYVODRIKZTqGR6UbdOfmPk8Lhw1MB58UpBOFa5e5YP02YUNebZi6WBQq9aYmF3R3uI/6jyUuW+9FXLIIGGD1bypJ9g7EapZpF7ovLfR2CD1CIzxsBCj+QYWxqLHp4m2BSG4UufzhsCAABnP+lS56hdmLmDbMwhSxbRQTnCEjqlxb7W5izlRxH+pLInPpI0SOCqWU3u5s1U+EVEQyl69BR63UX4wd4weMHd5xOZ75QDL6iEK+kqwIdp+4p6m6w0GQNtbXxu4xzoiPh4sAQId+p6Gf3ZWZTmiO4UH2GjAnRt6pN5UGmVqTcQF35l5HyV+WhuM3zwUR+jOD/AwYSlWFFaBWLsXa6s1GwnE8hrojr+VjjgOX6HEHyjOaEbuBoLf1yEI1Uypqf+7pxW/EKiSdjGa0/2AF2pcER7YdPuceGI0esaVDBBL1SocDHAt3zhq9xc92acfDBSzMfuU9Gxtxutu8hBv2/LN4kw==
+        """
+        let archive = root.appendingPathComponent("hardlinks.rar")
+        try XCTUnwrap(Data(base64Encoded: fixture)).write(to: archive)
+        let password = "fixture"
+        let payload = Data("BoltZip RAR5 hard-link test\n".utf8)
+        XCTAssertEqual(try BoltArchiveEngine.readEntryData(archiveURL: archive, entryPath: "b.txt", password: password), payload)
+        let whole = root.appendingPathComponent("whole")
+        try BoltArchiveEngine.extract(archiveURL: archive, options: ExtractOptions(destinationURL: whole, mode: .here, password: password))
+        for name in ["a.txt", "b.txt"] {
+            XCTAssertEqual(try Data(contentsOf: whole.appendingPathComponent(name)), payload)
+        }
+        let fm = FileManager.default
+        let original = try fm.attributesOfItem(atPath: whole.appendingPathComponent("a.txt").path)[.systemFileNumber] as? NSNumber
+        let linked = try fm.attributesOfItem(atPath: whole.appendingPathComponent("b.txt").path)[.systemFileNumber] as? NSNumber
+        XCTAssertEqual(try XCTUnwrap(original), try XCTUnwrap(linked))
+        let selected = root.appendingPathComponent("selected")
+        try BoltArchiveEngine.extract(archiveURL: archive, options: ExtractOptions(
+            destinationURL: selected, mode: .selected(["b.txt"]), password: password
+        ))
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: selected.path), ["b.txt"])
+        XCTAssertEqual(try Data(contentsOf: selected.appendingPathComponent("b.txt")), payload)
     }
 
     func testLegacySolidRARPreviewsAndExtractsTheSecondFile() throws {

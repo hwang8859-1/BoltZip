@@ -2,6 +2,20 @@ import Darwin
 import Foundation
 
 enum ArchiveExtractionDestination {
+    static func pathKey(_ url: URL) -> String {
+        url.standardizedFileURL.resolvingSymlinksInPath().path.precomposedStringWithCanonicalMapping.lowercased()
+    }
+
+    static func protectSources(_ sources: [URL], from target: URL) throws {
+        try protectSourcePaths(Set(sources.map(pathKey)), from: target)
+    }
+
+    static func protectSourcePaths(_ paths: Set<String>, from target: URL) throws {
+        if !paths.isEmpty && paths.contains(pathKey(target)) {
+            throw ArchiveOperationError.extractionWouldReplaceSource(target.lastPathComponent)
+        }
+    }
+
     static func pathMatchesSelection(_ entryPath: String, selectedPaths: Set<String>) -> Bool {
         let cleanEntry = entryPath.hasSuffix("/") ? String(entryPath.dropLast()) : entryPath
         return selectedPaths.contains { sel in
@@ -78,10 +92,12 @@ enum ArchiveExtractionDestination {
         to target: URL,
         under root: URL,
         policy: OverwritePolicy,
+        protectedSourcePaths: Set<String> = [],
         controller: ArchiveTaskController? = nil
     ) throws {
         try controller?.checkpoint()
         try assertNoSymlinkTraversal(at: target, under: root)
+        if policy == .overwrite { try protectSourcePaths(protectedSourcePaths, from: target) }
         let result = staged.withUnsafeFileSystemRepresentation { source in
             target.withUnsafeFileSystemRepresentation { destination in
                 guard let source, let destination else { return EINVAL }
@@ -101,7 +117,8 @@ enum ArchiveExtractionDestination {
         at initialURL: URL,
         target: String,
         under rootURL: URL,
-        overwritePolicy: OverwritePolicy
+        overwritePolicy: OverwritePolicy,
+        protectedSourcePaths: Set<String> = []
     ) throws {
         let cleanTarget = target.trimmingCharacters(in: CharacterSet(charactersIn: "\0"))
         guard !cleanTarget.isEmpty, !cleanTarget.hasPrefix("/") else {
@@ -125,7 +142,8 @@ enum ArchiveExtractionDestination {
         defer { try? fm.removeItem(at: stage) }
         let stagedLink = stage.appendingPathComponent("link")
         try fm.createSymbolicLink(atPath: stagedLink.path, withDestinationPath: cleanTarget)
-        try commitExtractedItem(stagedLink, to: finalURL, under: rootURL, policy: overwritePolicy)
+        try commitExtractedItem(stagedLink, to: finalURL, under: rootURL, policy: overwritePolicy,
+                                protectedSourcePaths: protectedSourcePaths)
     }
 
     static func writeExtractedFile(
@@ -134,6 +152,7 @@ enum ArchiveExtractionDestination {
         under root: URL,
         entry: ArchiveEntry,
         policy: OverwritePolicy,
+        protectedSourcePaths: Set<String> = [],
         controller: ArchiveTaskController?
     ) throws {
         guard let target = try prepareExtractTargetURL(initialURL: initialURL, under: root, policy: policy) else { return }
@@ -146,7 +165,8 @@ enum ArchiveExtractionDestination {
             .modificationDate: entry.modifiedDate,
             .posixPermissions: NSNumber(value: entry.permissions)
         ], ofItemAtPath: stagedFile.path)
-        try commitExtractedItem(stagedFile, to: target, under: root, policy: policy, controller: controller)
+        try commitExtractedItem(stagedFile, to: target, under: root, policy: policy,
+                                protectedSourcePaths: protectedSourcePaths, controller: controller)
     }
 
     static func remapTopLevelFolder(in entryPath: String, renameMap: [String: String]) -> String {
@@ -183,16 +203,59 @@ enum ArchiveExtractionDestination {
 }
 
 extension BoltArchiveEngine {
+    /// Publish a promised file or directory after staging it on the destination volume.
+    public static func publishPromisedItem(from source: URL, to destination: URL, protectedSources: [URL]) throws {
+        try ArchiveExtractionDestination.protectSources(protectedSources, from: destination)
+        let fm = FileManager.default
+        let sourceKind = try fm.attributesOfItem(atPath: source.path)[.type] as? FileAttributeType
+        func existingKind() throws -> FileAttributeType? {
+            let kind = (try? fm.attributesOfItem(atPath: destination.path))?[.type] as? FileAttributeType
+            if let kind, (kind == .typeDirectory) != (sourceKind == .typeDirectory) {
+                throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: destination.path])
+            }
+            return kind
+        }
+        _ = try existingKind()
+        let root = destination.deletingLastPathComponent()
+        let stage = try ArchiveExtractionDestination.makeExtractionStage(near: destination, under: root)
+        defer { try? fm.removeItem(at: stage) }
+        let local = stage.appendingPathComponent("payload")
+        try fm.moveItem(at: source, to: local)
+
+        // A failed cross-volume copy leaves the destination untouched. Swapping two existing
+        // items is atomic and also preserves a nonempty directory until replacement succeeds.
+        let oldKind = try existingKind()
+        try ArchiveExtractionDestination.protectSources(protectedSources, from: destination)
+        let status = local.withUnsafeFileSystemRepresentation { stagedPath in
+            destination.withUnsafeFileSystemRepresentation { target in
+                guard let stagedPath, let target else { return EINVAL }
+                if let oldKind, oldKind != .typeDirectory {
+                    return Darwin.rename(stagedPath, target) == 0 ? 0 : errno
+                }
+                let flags = oldKind == nil ? RENAME_EXCL : RENAME_SWAP
+                return renamex_np(stagedPath, target, UInt32(flags)) == 0 ? 0 : errno
+            }
+        }
+        guard status == 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(status), userInfo: [NSFilePathErrorKey: destination.path])
+        }
+    }
+
     /// Publishes a regular file extracted by a caller, using the same collision and atomic replacement rules.
     @discardableResult
     public static func publishExtractedFile(from source: URL, to destination: URL,
-                                            under root: URL, policy: OverwritePolicy) throws -> URL? {
+                                            under root: URL, policy: OverwritePolicy,
+                                            protectedSources: [URL] = []) throws -> URL? {
         guard let target = try ArchiveExtractionDestination.prepareExtractTargetURL(initialURL: destination, under: root, policy: policy) else { return nil }
+        if policy == .overwrite { try ArchiveExtractionDestination.protectSources(protectedSources, from: target) }
         let stage = try ArchiveExtractionDestination.makeExtractionStage(near: target, under: root)
         defer { try? FileManager.default.removeItem(at: stage) }
         let staged = stage.appendingPathComponent("payload")
         try FileManager.default.moveItem(at: source, to: staged)
-        try ArchiveExtractionDestination.commitExtractedItem(staged, to: target, under: root, policy: policy)
+        try ArchiveExtractionDestination.commitExtractedItem(
+            staged, to: target, under: root, policy: policy,
+            protectedSourcePaths: Set(protectedSources.map(ArchiveExtractionDestination.pathKey))
+        )
         return target
     }
 }

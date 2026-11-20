@@ -10,6 +10,12 @@ All notable changes to **BoltZip** will be documented in this file.
 
 ### Fixed
 - Report missing RAR volumes by name and preserve existing files when a split archive is incomplete.
+- Protect source archives and their volumes during extraction. Preserve both outputs when a Finder batch produces the same name, and publish dragged folders only after staging them on the destination volume.
+- Resolve RAR5 hard-link payloads and skip already existing files before decoding.
+- Detect renamed archives by content in the Finder and drop workflows, including stand-alone ZIP files named like split volumes.
+- Return a nonzero status when encrypted ZIP entries could not be verified.
+- Use the configured workers for LZMA2 and Bzip2 in ordinary 7z creation, report intermediate progress for encrypted 7z, and reject ambiguous paths before publication.
+- Verify the application version and run packaged CLI regressions from the mounted delivery DMG.
 
 ## [1.0.4] - 2026-11-20
 

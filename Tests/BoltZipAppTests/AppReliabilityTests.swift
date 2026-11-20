@@ -15,9 +15,24 @@ final class AppReliabilityTests: XCTestCase {
         XCTAssertEqual(l.archiveFormatDisplayName(.tarGz, fileURL: URL(fileURLWithPath: "sample.TGZ")), "TAR + Gzip (.TGZ)")
     }
 
+    func testBatchExtractionPreservesEarlierOutputsEvenWhenOverwriteWasApproved() throws {
+        let destination = FileManager.default.temporaryDirectory.appendingPathComponent("BoltZipBatch-\(UUID().uuidString)")
+        let options = ExtractOptions(destinationURL: destination, mode: .here)
+        let shared = ExtractConflictSummary(destinationRoot: destination, conflictingNames: ["report.txt"],
+                                            outputLocations: [destination.appendingPathComponent("report.txt")])
+        let other = ExtractConflictSummary(destinationRoot: destination, conflictingNames: ["notes.txt"],
+                                           outputLocations: [destination.appendingPathComponent("notes.txt")])
+        let jobs = [(options, shared), (options, shared), (options, other)]
+        XCTAssertEqual(WorkspaceViewModel.batchExtractionPolicies(for: jobs, requestedPolicy: .overwrite),
+                       [.overwrite, .rename, .overwrite])
+        XCTAssertEqual(WorkspaceViewModel.batchExtractionPolicies(for: [(options, nil), (options, shared)], requestedPolicy: .overwrite),
+                       [.rename, .rename])
+    }
+
     func testOperationErrorsUseTheSelectedInterfaceLanguage() {
         let errors: [any Error] = [
             ArchiveOperationError.outputIsInput, ArchiveOperationError.outputIsDirectory("keep"),
+            ArchiveOperationError.extractionWouldReplaceSource("test.zip"),
             ArchiveOperationError.inputChanged("data"), ArchiveOperationError.encryptionRequiresZIP,
             ArchiveOperationError.filenameEncryptionRequires7z, ArchiveOperationError.sevenZipEncryptionRequiresAES256,
             ArchiveOperationError.invalidSevenZipPassword, ArchiveOperationError.sevenZipEngineUnavailable,

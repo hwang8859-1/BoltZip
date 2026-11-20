@@ -27,7 +27,7 @@ final class ArchiveReliabilityTests: XCTestCase {
         for format in ArchiveFormat.creatableFormats {
             let archive = root.appendingPathComponent("original.\(format.fileExtension)")
             try BoltArchiveEngine.createArchive(from: [file], to: archive, options: CreateArchiveOptions(format: format, algorithm: format.defaultAlgorithm))
-            for ext in ["arbitrary", "", "jar", "apk"] {
+            for ext in ["arbitrary", "", "jar", "apk", "r00", "z01"] {
                 let renamed = root.appendingPathComponent("renamed-\(format.rawValue)-\(ext)" + (ext.isEmpty ? "" : ".\(ext)"))
                 try FileManager.default.copyItem(at: archive, to: renamed)
                 XCTAssertEqual(try ArchiveFormat.detectForReading(from: renamed), format)
@@ -48,6 +48,56 @@ final class ArchiveReliabilityTests: XCTestCase {
         let symlink = root.appendingPathComponent("archive-link.unknown")
         try FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: root.appendingPathComponent("original.zip"))
         XCTAssertEqual(try ArchiveFormat.detectForReading(from: symlink), .zip)
+    }
+
+    func testExtractWillNotOverwriteSourceArchiveOrSplitVolume() throws {
+        for format in [ArchiveFormat.zip, .sevenZip] {
+            let name = "self.\(format.fileExtension)"
+            let entry = try source("inputs/\(name)")
+            let output = root.appendingPathComponent(name)
+            let password = format == .sevenZip ? "test" : nil
+            try BoltArchiveEngine.createArchive(from: [entry], to: output, options: CreateArchiveOptions(
+                format: format, algorithm: .store, encryption: password == nil ? .none : .aes256, password: password
+            ))
+            let before = try Data(contentsOf: output)
+            XCTAssertThrowsError(try BoltArchiveEngine.extract(archiveURL: output, options: ExtractOptions(
+                destinationURL: root, password: password
+            ))) { error in
+                guard case ArchiveOperationError.extractionWouldReplaceSource = error else { return XCTFail("\(error)") }
+            }
+            XCTAssertThrowsError(try BoltArchiveEngine.extractSingleEntryToFile(
+                archiveURL: output, entryPath: name, destinationFileURL: output, password: password
+            ))
+            try BoltArchiveEngine.extract(archiveURL: output, options: ExtractOptions(
+                destinationURL: root, overwritePolicy: .rename, password: password
+            ))
+            XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("self (1).\(format.fileExtension)")), Data("payload".utf8))
+            XCTAssertEqual(try Data(contentsOf: output), before)
+        }
+
+        let volumeEntry = try source("inputs/volumes.z01", data: Data(repeating: 42, count: 190_000))
+        let archive = root.appendingPathComponent("volumes.zip")
+        let volumes = try BoltArchiveEngine.createArchive(from: [volumeEntry], to: archive, options: CreateArchiveOptions(
+            algorithm: .store, splitVolumeSizeBytes: 65_536
+        ))
+        let original = try volumes.map { try Data(contentsOf: $0) }
+        XCTAssertThrowsError(try BoltArchiveEngine.extract(archiveURL: archive, options: ExtractOptions(destinationURL: root)))
+        XCTAssertEqual(try volumes.map { try Data(contentsOf: $0) }, original)
+    }
+
+    func testPromisedDirectoryPreservesOriginalUntilReplacementIsReady() throws {
+        let fm = FileManager.default
+        let original = try source("finder/folder/original.txt")
+        let destination = original.deletingLastPathComponent()
+        XCTAssertThrowsError(try BoltArchiveEngine.publishPromisedItem(
+            from: root.appendingPathComponent("missing"), to: destination, protectedSources: []
+        ))
+        let file = try source("mismatched.txt")
+        XCTAssertThrowsError(try BoltArchiveEngine.publishPromisedItem(from: file, to: destination, protectedSources: []))
+        XCTAssertEqual(try Data(contentsOf: original), Data("payload".utf8))
+        let replacement = try source("temporary/replacement/new.txt", data: Data("new contents".utf8))
+        try BoltArchiveEngine.publishPromisedItem(from: replacement.deletingLastPathComponent(), to: destination, protectedSources: [])
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: destination.path), ["new.txt"])
     }
 
     func testSingleCompressedStreamsAreRecognizedWithoutExtensions() throws {

@@ -2,6 +2,21 @@ import Foundation
 import os
 
 extension BoltArchiveEngine {
+    public static func extractionSourceURLs(archiveURL: URL, password: String? = nil) throws -> [URL] {
+        switch try ArchiveFormat.requireForReading(from: archiveURL) {
+        case .zip:
+            let parsed = try ZipReader(url: archiveURL).parseArchive()
+            let accessor = try ZipVolumeAccessor(archiveURL: archiveURL)
+            try accessor.configureVolumes(totalDisks: parsed.totalDisks)
+            return accessor.volumeURLs + [archiveURL]
+        case .rar:
+            let volumes = try ExtendedArchiveDriver.rarVolumes(at: archiveURL, password: password)
+            return volumes.paths.map { URL(fileURLWithPath: $0) } + [archiveURL]
+        default:
+            return [archiveURL]
+        }
+    }
+
     /// Streams a single regular entry directly onto disk without loading its full payload into memory.
     public static func extractSingleEntryToFile(
         archiveURL: URL,
@@ -24,6 +39,7 @@ extension BoltArchiveEngine {
             let accessor = try ZipVolumeAccessor(archiveURL: archiveURL)
             try accessor.configureVolumes(totalDisks: parsed.totalDisks)
             defer { accessor.closeAll() }
+            try ArchiveExtractionDestination.protectSources(accessor.volumeURLs + [archiveURL], from: destinationFileURL)
 
             let targetNorm = ArchiveEntry.normalizePath(entryPath, isDirectory: entryPath.hasSuffix("/"))
             guard let record = parsed.records.first(where: { ZipReader.makeEntry(from: $0, encoding: encoding).path == targetNorm }) else {
@@ -43,6 +59,7 @@ extension BoltArchiveEngine {
             )
 
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
+            try ArchiveExtractionDestination.protectSources([archiveURL], from: destinationFileURL)
             try TarCodec.extractSingleEntryToFile(
                 at: archiveURL,
                 format: format,
@@ -52,6 +69,9 @@ extension BoltArchiveEngine {
             )
 
         case .rar, .sevenZip, .iso, .cab, .xar:
+            let protected = Set(try extractionSourceURLs(archiveURL: archiveURL, password: password)
+                .map(ArchiveExtractionDestination.pathKey))
+            try ArchiveExtractionDestination.protectSourcePaths(protected, from: destinationFileURL)
             let stageDir = try ArchiveExtractionDestination.makeExtractionStage(near: destinationFileURL, under: destParent)
             defer { try? fm.removeItem(at: stageDir) }
             try ExtendedArchiveDriver.extract(
@@ -71,7 +91,8 @@ extension BoltArchiveEngine {
             guard fm.fileExists(atPath: stagedFile.path) else {
                 throw BoltZipError.entryNotFound(entryPath)
             }
-            try ArchiveExtractionDestination.commitExtractedItem(stagedFile, to: destinationFileURL, under: destParent, policy: .overwrite, controller: controller)
+            try ArchiveExtractionDestination.commitExtractedItem(stagedFile, to: destinationFileURL, under: destParent,
+                                                                 policy: .overwrite, protectedSourcePaths: protected, controller: controller)
         }
     }
 
@@ -113,14 +134,13 @@ extension BoltArchiveEngine {
             hasZIPOuterData: parsedInfo.parsed.hasOuterData
         )
         try controller?.checkpoint()
-        let plan = try ArchiveExtractionPlan.prepare(listing: listing, options: options)
-        let targetRoot = plan.targetRoot
-        let totalBytes = plan.totalBytes
-
         let parsed = parsedInfo.parsed
         let accessor = try ZipVolumeAccessor(archiveURL: archiveURL)
         try accessor.configureVolumes(totalDisks: parsed.totalDisks)
         defer { accessor.closeAll() }
+        let plan = try ArchiveExtractionPlan.prepare(listing: listing, options: options, sourceURLs: accessor.volumeURLs + [archiveURL])
+        let targetRoot = plan.targetRoot
+        let totalBytes = plan.totalBytes
 
         let selectedPaths = Set(plan.entries.map(\.path))
 
@@ -153,7 +173,8 @@ extension BoltArchiveEngine {
                         at: destURL,
                         target: linkTarget,
                         under: targetRoot,
-                        overwritePolicy: options.overwritePolicy
+                        overwritePolicy: options.overwritePolicy,
+                        protectedSourcePaths: plan.protectedSourcePaths
                     )
                 }
                 continue
@@ -185,6 +206,7 @@ extension BoltArchiveEngine {
                     entry: job.entry,
                     overwritePolicy: options.overwritePolicy,
                     password: options.password,
+                    protectedSourcePaths: plan.protectedSourcePaths,
                     controller: controller
                 ) { itemRead, _ in
                     let cur = min(totalBytes, itemRead)
@@ -219,6 +241,7 @@ extension BoltArchiveEngine {
                         entry: job.entry,
                         overwritePolicy: policy,
                         password: pw,
+                        protectedSourcePaths: plan.protectedSourcePaths,
                         controller: controller
                     )
                 }
@@ -261,7 +284,7 @@ extension BoltArchiveEngine {
             let entries = try TarCodec.streamScanTar(at: tarURL, methodLabel: format.defaultAlgorithm.shortName, computeCRC: false)
             let listing = try makeListing(archiveURL: archiveURL, format: format, entries: entries)
             try controller?.checkpoint()
-            let plan = try ArchiveExtractionPlan.prepare(listing: listing, options: options)
+            let plan = try ArchiveExtractionPlan.prepare(listing: listing, options: options, sourceURLs: [archiveURL])
             resolvedRoot = plan.targetRoot
 
             try TarCodec.streamExtractTarFile(
@@ -274,6 +297,7 @@ extension BoltArchiveEngine {
                 topLevelDirRenameMap: plan.topLevelDirRenameMap,
                 baseFrac: format == .tar ? 0.0 : 0.35,
                 totalExpectedBytes: plan.totalBytes,
+                protectedSourcePaths: plan.protectedSourcePaths,
                 controller: controller,
                 progress: progress
             )
@@ -295,7 +319,8 @@ extension BoltArchiveEngine {
     ) throws -> URL {
         let listing = try inspect(archiveURL: archiveURL, encoding: options.encoding, password: options.password)
         try controller?.checkpoint()
-        let plan = try ArchiveExtractionPlan.prepare(listing: listing, options: options)
+        let sources = try extractionSourceURLs(archiveURL: archiveURL, password: options.password)
+        let plan = try ArchiveExtractionPlan.prepare(listing: listing, options: options, sourceURLs: sources)
         let targetRoot = plan.targetRoot
 
         let selectedSet = selectedPaths(for: options.mode)
@@ -314,6 +339,7 @@ extension BoltArchiveEngine {
                 restoreSymlinks: options.restoreSymlinks,
                 expectedTotalBytes: estBytes,
                 topLevelDirRenameMap: plan.topLevelDirRenameMap,
+                protectedSourcePaths: plan.protectedSourcePaths,
                 controller: controller,
                 progress: progress
             )
@@ -331,6 +357,7 @@ extension BoltArchiveEngine {
             restoreSymlinks: options.restoreSymlinks,
             topLevelDirRenameMap: plan.topLevelDirRenameMap,
             totalExpectedBytes: plan.totalBytes,
+            protectedSourcePaths: plan.protectedSourcePaths,
             controller: controller,
             progress: progress
         )

@@ -4,6 +4,7 @@ enum SevenZipArchiveListing {
     struct Catalog {
         let entries: [ArchiveEntry]
         let linkTargets: [String: String]
+        let hardLinkTargets: [String: String]
     }
 
     static func typeArguments(for format: ArchiveFormat) -> [String] {
@@ -101,6 +102,7 @@ enum SevenZipArchiveListing {
         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         var entries: [ArchiveEntry] = []
         var linkTargets: [String: String] = [:]
+        var hardLinkTargets: [String: String] = [:]
         var seen: Set<String> = []
         var fields: [String: String] = [:]
         var allowsPrompt = true
@@ -116,6 +118,10 @@ enum SevenZipArchiveListing {
             if let target = fields["Symbolic Link"], !target.isEmpty, entry.isSymbolicLink {
                 guard !hasUnsupportedPathCharacter(target) else { throw BoltZipError.invalidArchive(name) }
                 linkTargets[entry.path] = target
+            }
+            if let target = fields["Hard Link"], !target.isEmpty {
+                guard !hasUnsupportedPathCharacter(target) else { throw BoltZipError.invalidArchive(name) }
+                hardLinkTargets[entry.path] = ArchiveEntry.normalizePath(target, isDirectory: false)
             }
             fields.removeAll(keepingCapacity: true)
         }
@@ -138,7 +144,7 @@ enum SevenZipArchiveListing {
             fields[field] = String(line[delimiter.upperBound...])
         }
         try endRecord()
-        return Catalog(entries: entries, linkTargets: linkTargets)
+        return Catalog(entries: entries, linkTargets: linkTargets, hardLinkTargets: hardLinkTargets)
     }
 
     private static func parseEntry(_ fields: [String: String], archive: String, format: ArchiveFormat,

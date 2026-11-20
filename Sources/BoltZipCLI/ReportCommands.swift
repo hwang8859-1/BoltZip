@@ -130,9 +130,9 @@ enum ReportCommands {
                 "elapsedSeconds": (report.elapsedSeconds * 1000).rounded() / 1000,
                 "results": resDicts
             ])
-            return report.failedCount == 0 ? 0 : 2
+            return report.isHealthy ? 0 : 2
         }
         print("Integrity Test: \(report.archiveName) -> passed \(report.passedCount)/\(report.totalEntries), failed \(report.failedCount), missingPassword \(report.skippedEncryptedCount) (\(String(format: "%.2fs", report.elapsedSeconds)))")
-        return report.failedCount == 0 ? 0 : 2
+        return report.isHealthy ? 0 : 2
     }
 }
