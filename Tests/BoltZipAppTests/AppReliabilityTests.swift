@@ -4,6 +4,17 @@ import XCTest
 @testable import BoltZipApp
 
 final class AppReliabilityTests: XCTestCase {
+    func testArchiveBadgeKeepsTheOriginalFilenameSuffix() {
+        let l = L10n(language: .zhHans)
+        for (filename, expected) in [("sample.jar", "ZIP (.jar)"), ("sample.apk", "ZIP (.apk)"),
+                                     ("sample.JAR", "ZIP (.JAR)"), ("sample.unrecognized", "ZIP (.unrecognized)"),
+                                     ("sample", "ZIP")] {
+            XCTAssertEqual(l.archiveFormatDisplayName(.zip, fileURL: URL(fileURLWithPath: filename)), expected)
+        }
+        XCTAssertEqual(l.archiveFormatDisplayName(.tarGz, fileURL: URL(fileURLWithPath: "sample.tar.gz")), "TAR + Gzip (.tar.gz)")
+        XCTAssertEqual(l.archiveFormatDisplayName(.tarGz, fileURL: URL(fileURLWithPath: "sample.TGZ")), "TAR + Gzip (.TGZ)")
+    }
+
     func testOperationErrorsUseTheSelectedInterfaceLanguage() {
         let errors: [ArchiveOperationError] = [.outputIsInput, .outputIsDirectory("keep"), .inputChanged("data"), .encryptionRequiresZIP, .splitVolumesRequireZIP, .applicationNotFound]
         for error in errors {

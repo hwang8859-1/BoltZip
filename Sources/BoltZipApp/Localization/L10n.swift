@@ -56,6 +56,16 @@ struct L10n: Sendable {
         L10n(language: AppLanguage(rawValue: UserDefaults.standard.string(forKey: "BoltZip.AppLanguage") ?? "system") ?? .system)
     }
 
+    func archiveFormatDisplayName(_ format: ArchiveFormat, fileURL: URL) -> String {
+        let title = format.displayName.components(separatedBy: " (.").first ?? format.displayName
+        let filename = fileURL.lastPathComponent
+        let compound = ArchiveFormat.allCases.map(\.fileExtension)
+            .filter { $0.contains(".") && filename.lowercased().hasSuffix("." + $0) }
+            .max { $0.count < $1.count }
+        let suffix = compound.map { String(filename.suffix($0.count)) } ?? fileURL.pathExtension
+        return suffix.isEmpty ? title : "\(title) (.\(suffix))"
+    }
+
     func operationErrorMessage(_ error: any Error) -> String {
         if let updateError = error as? UpdateError { return updateErrorMessage(updateError) }
         if let error = error as? ArchiveOperationError {

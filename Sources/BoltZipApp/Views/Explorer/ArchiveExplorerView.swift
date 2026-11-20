@@ -169,7 +169,7 @@ struct ArchiveExplorerView: View {
     @ViewBuilder
     private func archiveOverviewInspectorSection(l: L10n, glassEnabled: Bool) -> some View {
         HStack {
-            BoltReadOnlyBadge(text: listing.format.displayName, isEmphasized: true)
+            BoltReadOnlyBadge(text: l.archiveFormatDisplayName(listing.format, fileURL: listing.archiveURL), isEmphasized: true)
             Spacer()
             if listing.hasEncryptedEntries {
                 Label(l.encryptedBadge, systemImage: "lock.fill")

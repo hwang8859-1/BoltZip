@@ -8,6 +8,7 @@ All notable changes to **BoltZip** will be documented in this file.
 - Refresh document icons after association changes and version bundled document icon resources by content.
 - Stream 7z creation with real byte progress and cancellation instead of time-based estimates and subprocess staging.
 - Detect archive contents independently of filename extensions when opening, extracting, or testing archives.
+- Keep the original filename suffix in the archive format badge and preserve non-TAR outer compression streams.
 - Preserve existing directories and archives during output collisions, cancellation, and split-volume publication failures.
 - Preserve same-named input files and decode duplicate ZIP records using their own payloads.
 - Reject unsupported encryption and split-volume options instead of silently ignoring them.
