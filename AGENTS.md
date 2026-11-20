@@ -51,7 +51,8 @@ BoltZip/
 │   │   ├── Formats/
 │   │   │   ├── ZipBinary.swift          # Little-endian binary readers/writers, DOS dates, extra fields
 │   │   │   ├── ZipReader.swift          # ZIP/ZIP64/split-volume reader, decryption, integrity check
-│   │   │   ├── ZipWriter.swift          # ZIP/ZIP64 writer, split volumes (.z01/.zip), zero-recompress editing
+│   │   │   ├── ZipWriter.swift          # ZIP/ZIP64 writer, split volumes, zero-recompress editing and replacement
+│   │   │   ├── ZipEntryStoragePolicy.swift # Original per-entry codec, level and encryption reuse
 │   │   │   ├── TarCodec.swift           # Pure Swift USTAR/PAX tar + .tar.{gz,zst,xz,bz2,lz4} + single-stream
 │   │   │   ├── SevenZipWriter.swift       # Streaming libarchive 7z writer with byte progress and cancellation
 │   │   │   ├── ArchiveFormatDetection.swift # Content-based read format detection, independent of filename
@@ -128,6 +129,8 @@ open dist/BoltZip.app
    - `ZipVolumeAccessor.readSpanning` handles payloads or headers spanning across `.z01`, `.z02`, ..., `.zip`.
 4. **In-Place ZIP Editing (`ZipWriter.editArchive`)**:
    - Untouched entries are copied as raw compressed/encrypted payloads without recompression. Keep it zero-recompress!
+   - Replacements retain the original entry position, codec, Store state and supported encryption mode. Unknown levels use disclosed codec defaults; unsupported modes must not silently change the source format.
+   - ZIP containers including JAR/APK can be edited regardless of suffix. APK signing, SDK setup and installability validation are outside the basic editing workflow.
 5. **Path Traversal Guard (`BoltArchiveEngine.safeDestinationURL`)**:
    - Never allow archive entries containing `..` or absolute paths to write outside the extraction root.
 6. **FinderSync Extension Signing & IPC**:

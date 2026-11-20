@@ -4,6 +4,11 @@ All notable changes to **BoltZip** will be documented in this file.
 
 ## [Unreleased] - dev-1.0.4
 
+### Added
+- Edit UTF-8/UTF-16 text and replace files inside ZIP containers, including JAR and APK, while keeping the original suffix, entry order, compression methods, Store status, and unchanged compressed payloads.
+- Offer an explicit new standard ZIP when an edited entry cannot be saved with its original method. Unknown levels use disclosed codec defaults.
+- APK editing and saving require no signing configuration or external SDK. Signing and installability validation are outside this workflow.
+
 ### Fixed
 - Refresh document icons after association changes and version bundled document icon resources by content.
 - Stream 7z creation with real byte progress and cancellation instead of time-based estimates and subprocess staging.
