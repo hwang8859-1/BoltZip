@@ -112,6 +112,7 @@
             <key>CFBundleTypeExtensions</key>
             <array>
                 <string>7z</string>
+                <string>7z.001</string>
                 <string>cb7</string>
             </array>
         </dict>
@@ -418,6 +419,7 @@
                 <key>public.filename-extension</key>
                 <array>
                     <string>7z</string>
+                    <string>7z.001</string>
                     <string>cb7</string>
                 </array>
             </dict>

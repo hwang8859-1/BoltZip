@@ -3,7 +3,7 @@ import Foundation
 enum SevenZipArchiveReader {
     static func readEntry(at url: URL, path: String, entries: [ArchiveEntry],
                           password: String?, exactOutputSize: UInt64?, format: ArchiveFormat = .sevenZip,
-                          hardLinkTargets: [String: String] = [:]) throws -> Data {
+                          allowSplitVolumes: Bool = false, hardLinkTargets: [String: String] = [:]) throws -> Data {
         let normalized = ArchiveEntry.normalizePath(path, isDirectory: false)
         guard let entry = entries.first(where: { $0.path == normalized && !$0.isDirectory }) else {
             throw BoltZipError.entryNotFound(path)
@@ -11,7 +11,8 @@ enum SevenZipArchiveReader {
         try verifyDeclaredSize(entry, exactSize: exactOutputSize)
         let source = try payloadEntry(for: entry, in: entriesByPath(entries), hardLinks: hardLinkTargets)
         var data = Data()
-        try streamEntries(at: url, entries: [source], password: password, format: format, controller: nil) { _, chunk in
+        try streamEntries(at: url, entries: [source], password: password, format: format,
+                          allowSplitVolumes: allowSplitVolumes, controller: nil) { _, chunk in
             data.append(chunk)
         }
         return data
@@ -22,7 +23,7 @@ enum SevenZipArchiveReader {
         overwritePolicy: OverwritePolicy, password: String?, stripMacJunk: Bool, restoreSymlinks: Bool, exactEntrySize: UInt64?,
         topLevelDirRenameMap: [String: String], controller: ArchiveTaskController?,
         progress: (@Sendable (OperationProgress) -> Void)?, format: ArchiveFormat = .sevenZip,
-        linkTargets: [String: String] = [:], hardLinkTargets: [String: String] = [:],
+        allowSplitVolumes: Bool = false, linkTargets: [String: String] = [:], hardLinkTargets: [String: String] = [:],
         protectedSourcePaths: Set<String> = []
     ) throws {
         let selected = entries.filter { entry in
@@ -129,7 +130,8 @@ enum SevenZipArchiveReader {
         func writeBatch() throws {
             guard !batch.isEmpty else { return }
             let offset = nextIndex
-            try streamEntries(at: url, entries: batch, password: password, format: format, controller: controller) { index, chunk in
+            try streamEntries(at: url, entries: batch, password: password, format: format,
+                              allowSplitVolumes: allowSplitVolumes, controller: controller) { index, chunk in
                 if handle == nil || nextIndex != offset + index {
                     try handle?.close()
                     nextIndex = offset + index
@@ -149,13 +151,14 @@ enum SevenZipArchiveReader {
     }
 
     static func testIntegrity(at url: URL, entries: [ArchiveEntry], password: String?,
-                              format: ArchiveFormat = .sevenZip, archiveName: String? = nil) throws -> IntegrityReport {
+                              format: ArchiveFormat = .sevenZip, allowSplitVolumes: Bool = false,
+                              archiveName: String? = nil) throws -> IntegrityReport {
         let start = Date()
         if password?.isEmpty != false && entries.contains(where: \.isEncrypted) {
             throw BoltZipError.passwordRequired(url.lastPathComponent)
         }
         let result = try SevenZipCommand.run(
-            ["t"] + SevenZipArchiveListing.typeArguments(for: format)
+            ["t"] + SevenZipArchiveListing.typeArguments(for: format, allowSplitVolumes: allowSplitVolumes)
                 + ["-bso0", "-bse2", "-bsp0", "-spd", "-ssc", "--", url.standardizedFileURL.path],
             password: password
         )
@@ -199,7 +202,8 @@ enum SevenZipArchiveReader {
     }
 
     private static func streamEntries(
-        at url: URL, entries: [ArchiveEntry], password: String?, format: ArchiveFormat, controller: ArchiveTaskController?,
+        at url: URL, entries: [ArchiveEntry], password: String?, format: ArchiveFormat,
+        allowSplitVolumes: Bool, controller: ArchiveTaskController?,
         write: @escaping (Int, Data) throws -> Void
     ) throws {
         if password?.isEmpty != false && entries.contains(where: \.isEncrypted) {
@@ -210,6 +214,7 @@ enum SevenZipArchiveReader {
         let emptyEntries = entries.filter { $0.uncompressedSize == 0 }
         if !emptyEntries.isEmpty {
             let matched = try SevenZipArchiveListing.list(archiveURL: url, password: password, format: format,
+                                                         allowSplitVolumes: allowSplitVolumes,
                                                          matching: emptyEntries.map(selector(for:)), controller: controller)
             let matchedPaths = Set(matched.map(\.rawPathBytes))
             if let missing = emptyEntries.first(where: { !matchedPaths.contains($0.rawPathBytes) }) {
@@ -218,7 +223,7 @@ enum SevenZipArchiveReader {
         }
         var mismatch: String?
         let result = try SevenZipCommand.run(
-            ["x"] + SevenZipArchiveListing.typeArguments(for: format)
+            ["x"] + SevenZipArchiveListing.typeArguments(for: format, allowSplitVolumes: allowSplitVolumes)
                 + ["-so", "-bso0", "-bse2", "-bsp0", "-spd", "-ssc", "--", url.standardizedFileURL.path]
                 + entries.map(selector(for:)),
             password: password, controller: controller, consumeOutput: { reader in

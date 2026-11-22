@@ -12,6 +12,9 @@ extension BoltArchiveEngine {
         case .rar:
             let volumes = try ExtendedArchiveDriver.rarVolumes(at: archiveURL, password: password)
             return volumes.paths.map { URL(fileURLWithPath: $0) } + [archiveURL]
+        case .sevenZip:
+            let volumes = try SevenZipVolumeDiscovery.resolve(archiveURL)
+            return volumes.paths.map { URL(fileURLWithPath: $0) } + [archiveURL]
         default:
             return [archiveURL]
         }

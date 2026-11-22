@@ -55,12 +55,13 @@ extension BoltArchiveEngine {
     }
 
     public static func archiveBaseStem(_ url: URL) -> String {
-        let name = url.lastPathComponent
+        let target = SevenZipVolumeDiscovery.stripSplitSuffix(from: url)
+        let name = target.lastPathComponent
         let lower = name.lowercased()
         for compound in [".tar.gz", ".tar.zst", ".tar.xz", ".tar.bz2", ".tar.lz4"] where lower.hasSuffix(compound) {
             return String(name.dropLast(compound.count))
         }
-        return url.deletingPathExtension().lastPathComponent
+        return target.deletingPathExtension().lastPathComponent
     }
 }
 

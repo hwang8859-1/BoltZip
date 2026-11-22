@@ -2,13 +2,14 @@ import Darwin
 import Foundation
 
 enum SevenZipArchiveWriter {
+    @discardableResult
     static func create(
         from inputs: [URL],
         to output: URL,
         options: CreateArchiveOptions,
         controller: ArchiveTaskController?,
         progress: (@Sendable (OperationProgress) -> Void)?
-    ) throws {
+    ) throws -> [URL] {
         let password: String?
         if options.encryption == .aes256 {
             guard let supplied = options.password else { throw ArchiveOperationError.invalidSevenZipPassword }
@@ -18,16 +19,23 @@ enum SevenZipArchiveWriter {
             password = nil
         }
         try controller?.checkpoint()
+        let splitSize = (options.splitVolumeSizeBytes ?? 0) >= 65536 ? options.splitVolumeSizeBytes : nil
+        let baseOutput = splitSize != nil ? SevenZipVolumeDiscovery.stripSplitSuffix(from: output) : output
         try ArchiveOutputTransaction.validate(output)
+        try ArchiveOutputTransaction.validate(baseOutput)
         let canonicalOutput = output.deletingLastPathComponent().resolvingSymlinksInPath()
             .appendingPathComponent(output.lastPathComponent)
+        let canonicalBase = baseOutput.deletingLastPathComponent().resolvingSymlinksInPath()
+            .appendingPathComponent(baseOutput.lastPathComponent)
         let items = try ArchiveInputCollector.collect(from: inputs, excludeMacJunk: options.excludeMacJunk,
-                                                      preserveSymlinks: options.preserveSymlinks, excluding: [output, canonicalOutput],
+                                                      preserveSymlinks: options.preserveSymlinks,
+                                                      excludePatterns: options.excludePatterns,
+                                                      excluding: [output, canonicalOutput, baseOutput, canonicalBase],
                                                       controller: controller)
         try validatePaths(items)
         let total = try items.reduce(UInt64(0)) { try ArchiveByteCount.checkedSum($0, $1.fileSize) }
         let command = try createArguments(options)
-        let stage = try ArchiveOutputTransaction.makeStage(for: output)
+        let stage = try ArchiveOutputTransaction.makeStage(for: baseOutput)
         let fm = FileManager.default
         var directories: [(URL, ArchiveInputItem)] = []
         defer {
@@ -82,10 +90,16 @@ enum SevenZipArchiveWriter {
             try validateSize(of: file, for: item, followsSymbolicLink: followsSymbolicLink)
         }
 
+        let needsTwoPassSymlinks = followStagedLinks && !symbolicLinks.isEmpty
+        var pass1Command = command
+        if let splitSize, !needsTwoPassSymlinks {
+            pass1Command.append("-v\(splitSize)b")
+        }
+
         progress?(OperationProgress(fractionCompleted: 0.05, currentItem: output.lastPathComponent, totalBytes: total))
         var progressParser = SevenZipWriteProgress()
         let result = try SevenZipCommand.run(
-            command + [followStagedLinks ? "-snl-" : "-snl", "--", archive.path],
+            pass1Command + [followStagedLinks ? "-snl-" : "-snl", "--", archive.path],
             password: password, directory: inputStage, controller: controller, observeOutput: { chunk in
                 for percent in progressParser.receive(chunk) {
                     progress?(OperationProgress(
@@ -103,7 +117,7 @@ enum SevenZipArchiveWriter {
             try validateSize(of: file, for: item, followsSymbolicLink: followsSymbolicLink)
         }
 
-        if followStagedLinks && !symbolicLinks.isEmpty {
+        if needsTwoPassSymlinks {
             // When staging spans volumes, preserve original symlinks in a separate pass so they are never followed.
             let linkStage = stage.appendingPathComponent("links", isDirectory: true)
             var names: [String] = []
@@ -121,12 +135,97 @@ enum SevenZipArchiveWriter {
                 password: password, passwordPromptCount: 2, directory: linkStage, controller: controller
             )
             try SevenZipArchiveListing.check(result, archive: output, password: password)
+            if let splitSize {
+                try splitFile(archive, in: stage, baseName: archive.lastPathComponent, partSize: splitSize, controller: controller)
+                try? fm.removeItem(at: archive)
+            }
         }
 
         try controller?.checkpoint()
-        try ArchiveOutputTransaction.publish([archive], to: [output])
-        progress?(OperationProgress(fractionCompleted: 1, currentItem: output.lastPathComponent,
+        let published: [URL]
+        if splitSize != nil {
+            var stagedVolumes: [URL] = []
+            var volumeIndex = 1
+            while true {
+                let part = stage.appendingPathComponent("archive.7z.\(SevenZipVolumeDiscovery.formatVolumeExtension(volumeIndex))")
+                guard fm.fileExists(atPath: part.path) else { break }
+                stagedVolumes.append(part)
+                volumeIndex += 1
+            }
+            guard !stagedVolumes.isEmpty else {
+                throw BoltZipError.compressionFailed("Missing generated split 7z volume")
+            }
+            let destinations = (1...stagedVolumes.count).map {
+                baseOutput.appendingPathExtension(SevenZipVolumeDiscovery.formatVolumeExtension($0))
+            }
+            let inputKeys = Set(inputs.map(ArchiveExtractionDestination.pathKey))
+            for destination in destinations {
+                try ArchiveOutputTransaction.validate(destination)
+                if inputKeys.contains(ArchiveExtractionDestination.pathKey(destination)) {
+                    throw ArchiveOperationError.outputIsInput
+                }
+            }
+            try ArchiveOutputTransaction.publish(stagedVolumes, to: destinations)
+            published = destinations
+        } else {
+            try ArchiveOutputTransaction.publish([archive], to: [output])
+            published = [output]
+        }
+        progress?(OperationProgress(fractionCompleted: 1, currentItem: published.first?.lastPathComponent ?? output.lastPathComponent,
                                     processedBytes: total, totalBytes: total))
+        return published
+    }
+
+    static func splitFile(
+        _ sourceFile: URL,
+        in directory: URL,
+        baseName: String,
+        partSize: UInt64,
+        controller: ArchiveTaskController? = nil
+    ) throws {
+        precondition(partSize > 0)
+        let reader = try FileHandle(forReadingFrom: sourceFile)
+        defer { try? reader.close() }
+        let fm = FileManager.default
+        var index = 1
+        var currentHandle: FileHandle?
+        var writtenInPart: UInt64 = 0
+        defer { try? currentHandle?.close() }
+
+        func openNextPart() throws -> FileHandle {
+            try currentHandle?.close()
+            let partURL = directory.appendingPathComponent("\(baseName).\(SevenZipVolumeDiscovery.formatVolumeExtension(index))")
+            guard fm.createFile(atPath: partURL.path, contents: nil, attributes: [.posixPermissions: 0o644]) else {
+                throw BoltZipError.ioError("Unable to create split volume \(partURL.lastPathComponent)")
+            }
+            let handle = try FileHandle(forWritingTo: partURL)
+            currentHandle = handle
+            writtenInPart = 0
+            index += 1
+            return handle
+        }
+
+        while true {
+            try controller?.checkpoint()
+            let chunk = try reader.read(upToCount: BoltConcurrency.streamChunkSize) ?? Data()
+            if chunk.isEmpty { break }
+            var offset = 0
+            while offset < chunk.count {
+                if currentHandle == nil || writtenInPart >= partSize {
+                    _ = try openNextPart()
+                }
+                let room = Int(min(UInt64(chunk.count - offset), partSize - writtenInPart))
+                let slice = chunk.subdata(in: offset..<(offset + room))
+                try currentHandle?.write(contentsOf: slice)
+                writtenInPart += UInt64(room)
+                offset += room
+            }
+        }
+        if index == 1 {
+            _ = try openNextPart()
+        }
+        try currentHandle?.close()
+        currentHandle = nil
     }
 
     static func validatePaths(_ items: [ArchiveInputItem]) throws {
@@ -166,7 +265,7 @@ enum SevenZipArchiveWriter {
         return args
     }
 
-    private static func stagedItemURL(_ item: ArchiveInputItem, in stage: URL) throws -> URL {
+    static func stagedItemURL(_ item: ArchiveInputItem, in stage: URL) throws -> URL {
         let path = item.isDirectory ? String(item.archivePath.dropLast()) : item.archivePath
         guard !path.isEmpty, !SevenZipArchiveListing.hasUnsupportedPathCharacter(path), path.split(separator: "/", omittingEmptySubsequences: false)
             .allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {
@@ -175,7 +274,7 @@ enum SevenZipArchiveWriter {
         return stage.appendingPathComponent(path, isDirectory: item.isDirectory)
     }
 
-    private static func stageSymbolicLink(_ item: ArchiveInputItem, in stage: URL, createParent: Bool) throws {
+    static func stageSymbolicLink(_ item: ArchiveInputItem, in stage: URL, createParent: Bool) throws {
         let target = try stagedItemURL(item, in: stage)
         guard let link = item.symlinkTarget else { throw ArchiveOperationError.inputChanged(item.archivePath) }
         if createParent {
@@ -194,7 +293,7 @@ enum SevenZipArchiveWriter {
         guard status == 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
     }
 
-    private static func validateSize(of url: URL, for item: ArchiveInputItem, followsSymbolicLink: Bool) throws {
+    static func validateSize(of url: URL, for item: ArchiveInputItem, followsSymbolicLink: Bool) throws {
         var info = stat()
         let status = url.withUnsafeFileSystemRepresentation { path in
             guard let path else { return Int32(-1) }

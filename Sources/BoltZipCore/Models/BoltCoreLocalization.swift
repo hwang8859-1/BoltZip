@@ -97,8 +97,29 @@ public enum BoltCoreLocalization: Sendable {
     }
 
     static var splitVolumesRequireZIP: String {
-        t("该格式不支持分卷，请使用 ZIP", "此格式不支援分卷，請使用 ZIP",
-          "This format does not support split volumes. Use ZIP.", "この形式は分割に対応していません。ZIP を使用してください。")
+        t("该格式不支持分卷，请使用 ZIP 或 7z", "此格式不支援分卷，請使用 ZIP 或 7z",
+          "This format does not support split volumes. Use ZIP or 7z.", "この形式は分割に対応していません。ZIP または 7z を使用してください。")
+    }
+
+    static func singleStreamRequiresSingleRegularFile(_ formatName: String) -> String {
+        t("\(formatName) 仅支持压缩单个常规文件；多个项目或文件夹请改用 TAR 归档。",
+          "\(formatName) 僅支援壓縮單一常規檔案；多個項目或資料夾請改用 TAR 封存檔。",
+          "\(formatName) compresses a single regular file only. Use a TAR archive for multiple items or folders.",
+          "\(formatName) は単一の通常ファイルのみ圧縮できます。複数項目やフォルダには TAR 書庫を使用してください。")
+    }
+
+    static var noRecoverableZipEntries: String {
+        t("未在该损坏的 ZIP 中扫描到可校验恢复的有效条目。",
+          "未在此損毀的 ZIP 中掃描到可校驗復原的有效項目。",
+          "No verifiable entries were found to recover from this damaged ZIP archive.",
+          "この破損した ZIP から検証および復元可能な有効項目は見つかりませんでした。")
+    }
+
+    static var sevenZipSplitArchiveReadOnly: String {
+        t("7z 分卷归档仅支持只读浏览与解压，不支持原地增删改。",
+          "7z 分卷封存檔僅支援唯讀瀏覽與解壓縮，不支援原地增刪改。",
+          "Split 7z archives are read-only and cannot be edited in place.",
+          "分割された 7z 書庫は読み取り専用のため、書庫内の直接編集には対応していません。")
     }
 
     static func cannotReplaceDirectoryWithArchive(_ name: String) -> String {

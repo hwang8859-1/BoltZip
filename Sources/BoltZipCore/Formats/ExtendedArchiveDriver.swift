@@ -3,8 +3,16 @@ import Foundation
 
 public enum ExtendedArchiveDriver {
     public static func resolveVolumePaths(for url: URL, format: ArchiveFormat) -> [String] {
-        guard format == .rar, let volumes = try? RARVolumeDiscovery.resolve(url) else { return [url.path] }
-        return volumes.paths
+        switch format {
+        case .rar:
+            guard let volumes = try? RARVolumeDiscovery.resolve(url) else { return [url.path] }
+            return volumes.paths
+        case .sevenZip:
+            guard let volumes = try? SevenZipVolumeDiscovery.resolve(url) else { return [url.path] }
+            return volumes.paths
+        default:
+            return [url.path]
+        }
     }
 
     public static func listEntries(
@@ -15,7 +23,7 @@ public enum ExtendedArchiveDriver {
     ) throws -> [ArchiveEntry] {
         switch format {
         case .rar: return try openRAR(at: url, encoding: encoding, password: password).entries
-        case .sevenZip: return try sevenZipEntries(at: url, encoding: encoding, password: password).entries
+        case .sevenZip: return try openSevenZip(at: url, encoding: encoding, password: password).entries
         default:
             return try listNativeEntries(at: url, format: format, encoding: encoding, password: password)
         }
@@ -71,18 +79,62 @@ public enum ExtendedArchiveDriver {
         return volumes
     }
 
-    private static func sevenZipEntries(at url: URL, encoding: FilenameEncodingOption, password: String?) throws
-        -> (entries: [ArchiveEntry], needsDecryption: Bool) {
+    struct SevenZipContents {
+        let entries: [ArchiveEntry]
+        let sourceURL: URL
+        let isSplitVolume: Bool
+        let needsSevenZip: Bool
+        let linkTargets: [String: String]
+        let hardLinkTargets: [String: String]
+        let volumeURLs: [URL]
+    }
+
+    static func openSevenZip(at url: URL, encoding: FilenameEncodingOption, password: String?,
+                             controller: ArchiveTaskController? = nil) throws -> SevenZipContents {
+        try controller?.checkpoint()
+        let volumes = try SevenZipVolumeDiscovery.resolve(url)
+        let volumeURLs = volumes.paths.map { URL(fileURLWithPath: $0) } + [url]
+        if volumes.isSplitVolume {
+            let catalog = try SevenZipArchiveListing.catalog(
+                archiveURL: volumes.first, password: password, format: .sevenZip,
+                allowSplitVolumes: true, controller: controller
+            )
+            return SevenZipContents(
+                entries: catalog.entries, sourceURL: volumes.first, isSplitVolume: true,
+                needsSevenZip: true, linkTargets: catalog.linkTargets,
+                hardLinkTargets: catalog.hardLinkTargets, volumeURLs: volumeURLs
+            )
+        }
+
         let entries: [ArchiveEntry]
         do {
-            entries = try listNativeEntries(at: url, format: .sevenZip, encoding: encoding, password: nil)
+            entries = try listNativeEntries(at: volumes.first, format: .sevenZip, encoding: encoding, password: nil)
         } catch BoltZipError.passwordRequired {
-            return (try SevenZipArchiveListing.list(archiveURL: url, password: password), true)
+            let catalog = try SevenZipArchiveListing.catalog(
+                archiveURL: volumes.first, password: password, format: .sevenZip,
+                allowSplitVolumes: false, controller: controller
+            )
+            return SevenZipContents(
+                entries: catalog.entries, sourceURL: volumes.first, isSplitVolume: false,
+                needsSevenZip: true, linkTargets: catalog.linkTargets,
+                hardLinkTargets: catalog.hardLinkTargets, volumeURLs: volumeURLs
+            )
         }
         if entries.contains(where: \.isEncrypted) {
-            return (try SevenZipArchiveListing.list(archiveURL: url, password: nil), true)
+            let catalog = try SevenZipArchiveListing.catalog(
+                archiveURL: volumes.first, password: nil, format: .sevenZip,
+                allowSplitVolumes: false, controller: controller
+            )
+            return SevenZipContents(
+                entries: catalog.entries, sourceURL: volumes.first, isSplitVolume: false,
+                needsSevenZip: true, linkTargets: catalog.linkTargets,
+                hardLinkTargets: catalog.hardLinkTargets, volumeURLs: volumeURLs
+            )
         }
-        return (entries, false)
+        return SevenZipContents(
+            entries: entries, sourceURL: volumes.first, isSplitVolume: false,
+            needsSevenZip: false, linkTargets: [:], hardLinkTargets: [:], volumeURLs: volumeURLs
+        )
     }
 
     private static func listNativeEntries(
@@ -193,10 +245,13 @@ public enum ExtendedArchiveDriver {
             }
         }
         if resolvedFormat == .sevenZip {
-            let listing = try sevenZipEntries(at: url, encoding: encoding, password: password)
-            if listing.needsDecryption {
-                return try SevenZipArchiveReader.readEntry(at: url, path: path, entries: listing.entries,
-                                                             password: password, exactOutputSize: exactOutputSize)
+            let sevenZip = try openSevenZip(at: url, encoding: encoding, password: password)
+            if sevenZip.needsSevenZip {
+                return try SevenZipArchiveReader.readEntry(
+                    at: sevenZip.sourceURL, path: path, entries: sevenZip.entries,
+                    password: password, exactOutputSize: exactOutputSize, format: .sevenZip,
+                    allowSplitVolumes: sevenZip.isSplitVolume, hardLinkTargets: sevenZip.hardLinkTargets
+                )
             }
         }
         final class ReadState {
@@ -309,13 +364,16 @@ public enum ExtendedArchiveDriver {
                 return
             }
         } else if resolvedFormat == .sevenZip {
-            let listing = try sevenZipEntries(at: url, encoding: encoding, password: password)
-            if listing.needsDecryption {
+            let sevenZip = try openSevenZip(at: url, encoding: encoding, password: password, controller: controller)
+            if sevenZip.needsSevenZip {
                 try SevenZipArchiveReader.extract(
-                    at: url, entries: listing.entries, to: destinationURL, selectedPaths: selectedPaths,
+                    at: sevenZip.sourceURL, entries: sevenZip.entries, to: destinationURL, selectedPaths: selectedPaths,
                     overwritePolicy: overwritePolicy, password: password, stripMacJunk: stripMacJunk,
                     restoreSymlinks: restoreSymlinks, exactEntrySize: exactEntrySize, topLevelDirRenameMap: topLevelDirRenameMap,
-                    controller: controller, progress: progress, protectedSourcePaths: protected
+                    controller: controller, progress: progress, format: .sevenZip,
+                    allowSplitVolumes: sevenZip.isSplitVolume, linkTargets: sevenZip.linkTargets,
+                    hardLinkTargets: sevenZip.hardLinkTargets,
+                    protectedSourcePaths: protected.union(sevenZip.volumeURLs.map(ArchiveExtractionDestination.pathKey))
                 )
                 return
             }
@@ -600,9 +658,24 @@ public enum ExtendedArchiveDriver {
                 }
             }
         } else if format == .sevenZip {
-            let listing = try sevenZipEntries(at: url, encoding: .auto, password: password)
-            if listing.needsDecryption {
-                return try SevenZipArchiveReader.testIntegrity(at: url, entries: listing.entries, password: password)
+            let start = Date()
+            do {
+                let sevenZip = try openSevenZip(at: url, encoding: .auto, password: password)
+                if sevenZip.needsSevenZip {
+                    return try SevenZipArchiveReader.testIntegrity(
+                        at: sevenZip.sourceURL, entries: sevenZip.entries, password: password,
+                        format: .sevenZip, allowSplitVolumes: sevenZip.isSplitVolume,
+                        archiveName: url.lastPathComponent
+                    )
+                }
+            } catch let error as BoltZipError {
+                switch error {
+                case .invalidArchive, .externalToolFailed, .unsupportedFormat:
+                    let failure = IntegrityEntryResult(path: url.lastPathComponent, status: .failed, detail: error.localizedDescription)
+                    return IntegrityReport(archiveName: url.lastPathComponent, totalEntries: 1, passedCount: 0, failedCount: 1,
+                                           skippedEncryptedCount: 0, elapsedSeconds: -start.timeIntervalSinceNow, results: [failure])
+                default: throw error
+                }
             }
         }
         final class TestState {
@@ -736,11 +809,13 @@ public enum ExtendedArchiveDriver {
         level: Int? = nil,
         excludeMacJunk: Bool,
         preserveSymlinks: Bool = true,
+        excludePatterns: [String] = [],
         controller: ArchiveTaskController? = nil,
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
         try SevenZipWriter.create(from: inputURLs, to: outputURL, algorithm: algorithm, level: level,
                                   excludeMacJunk: excludeMacJunk, preserveSymlinks: preserveSymlinks,
+                                  excludePatterns: excludePatterns,
                                   controller: controller, progress: progress)
     }
 

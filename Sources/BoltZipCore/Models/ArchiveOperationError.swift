@@ -11,6 +11,9 @@ public enum ArchiveOperationError: LocalizedError, Sendable {
     case invalidSevenZipPassword
     case sevenZipEngineUnavailable
     case splitVolumesRequireZIP
+    case singleStreamRequiresSingleRegularFile(String)
+    case noRecoverableZipEntries
+    case sevenZipSplitArchiveReadOnly
     case applicationNotFound
 
     // CLI fallback. The desktop app renders these structured errors through L10n.swift.
@@ -26,6 +29,9 @@ public enum ArchiveOperationError: LocalizedError, Sendable {
         case .invalidSevenZipPassword: return BoltCoreLocalization.invalidSevenZipPassword
         case .sevenZipEngineUnavailable: return BoltCoreLocalization.sevenZipEngineUnavailable
         case .splitVolumesRequireZIP: return BoltCoreLocalization.splitVolumesRequireZIP
+        case .singleStreamRequiresSingleRegularFile(let formatName): return BoltCoreLocalization.singleStreamRequiresSingleRegularFile(formatName)
+        case .noRecoverableZipEntries: return BoltCoreLocalization.noRecoverableZipEntries
+        case .sevenZipSplitArchiveReadOnly: return BoltCoreLocalization.sevenZipSplitArchiveReadOnly
         case .applicationNotFound: return BoltCoreLocalization.applicationNotFoundForAssociation
         }
     }

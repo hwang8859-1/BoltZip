@@ -20,7 +20,7 @@ public enum ArchiveAssociationGroup: String, CaseIterable, Identifiable, Sendabl
         switch self {
         case .zip: return ".zip / .zipx / .z01 / .cbz"
         case .rar: return ".rar / .r00 / .cbr"
-        case .sevenZip: return ".7z / .cb7"
+        case .sevenZip: return ".7z / .7z.001 / .cb7"
         case .tar: return ".tar / .tgz / .tar.zst / .txz / .tbz2"
         case .singleStreams: return ".gz / .zst / .xz / .bz2 / .lz4"
         case .cabXar: return ".cab / .xar"

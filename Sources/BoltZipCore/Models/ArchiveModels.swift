@@ -46,13 +46,20 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
     public var fileExtension: String { rawValue }
 
     public static var creatableFormats: [ArchiveFormat] {
-        [.zip, .tarZst, .tarGz, .tarXz, .tarBz2, .tarLz4, .tar, .sevenZip]
+        [.zip, .tarZst, .tarGz, .tarXz, .tarBz2, .tarLz4, .tar, .sevenZip, .gz, .xz]
     }
 
-    public var supportsInPlaceEditing: Bool { self == .zip }
+    public var supportsInPlaceEditing: Bool { self == .zip || self == .sevenZip }
+    public var supportsArchiveComment: Bool { self == .zip }
+    public var isSingleFileStream: Bool {
+        switch self {
+        case .gz, .zst, .xz, .bz2, .lz4: return true
+        default: return false
+        }
+    }
     public var supportsEncryption: Bool { self == .zip || self == .sevenZip }
     public var supportsFilenameEncryption: Bool { self == .sevenZip }
-    public var supportsSplitVolumes: Bool { self == .zip }
+    public var supportsSplitVolumes: Bool { self == .zip || self == .sevenZip }
 
     public var supportedAlgorithms: [CompressionAlgorithm] {
         switch self {
@@ -118,6 +125,10 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
             // Detect legacy split rar volume like archive.r00, archive.r01
             if ext.count == 3, ext.hasPrefix("r"), Int(ext.dropFirst()) != nil {
                 return .rar
+            }
+            // Detect split 7z volume like archive.7z.001, archive.7z.002, comic.cb7.001
+            if SevenZipVolumeDiscovery.isSevenZipSplitFilename(url) {
+                return .sevenZip
             }
             return nil
         }
@@ -448,6 +459,7 @@ public struct CreateArchiveOptions: Sendable {
     public var password: String?
     public var splitVolumeSizeBytes: UInt64?
     public var excludeMacJunk: Bool
+    public var excludePatterns: [String]
     public var encoding: FilenameEncodingOption
     public var archiveComment: String
     /// `nil` = follow global `BoltConcurrency.preference`; `0` = auto; `>= 1` = explicit core cap.
@@ -463,6 +475,7 @@ public struct CreateArchiveOptions: Sendable {
         password: String? = nil,
         splitVolumeSizeBytes: UInt64? = nil,
         excludeMacJunk: Bool = true,
+        excludePatterns: [String] = [],
         encoding: FilenameEncodingOption = .utf8,
         archiveComment: String = "",
         workerCount: Int? = nil,
@@ -476,6 +489,7 @@ public struct CreateArchiveOptions: Sendable {
         self.password = password
         self.splitVolumeSizeBytes = splitVolumeSizeBytes
         self.excludeMacJunk = excludeMacJunk
+        self.excludePatterns = excludePatterns
         self.encoding = encoding
         self.archiveComment = archiveComment
         self.workerCount = workerCount

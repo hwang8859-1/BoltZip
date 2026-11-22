@@ -7,19 +7,22 @@ enum SevenZipArchiveListing {
         let hardLinkTargets: [String: String]
     }
 
-    static func typeArguments(for format: ArchiveFormat) -> [String] {
-        format == .sevenZip ? ["-t7z"] : []
+    static func typeArguments(for format: ArchiveFormat, allowSplitVolumes: Bool = false) -> [String] {
+        (format == .sevenZip && !allowSplitVolumes) ? ["-t7z"] : []
     }
 
-    static func list(archiveURL: URL, password: String?, format: ArchiveFormat = .sevenZip, matching selectors: [String] = [],
+    static func list(archiveURL: URL, password: String?, format: ArchiveFormat = .sevenZip,
+                     allowSplitVolumes: Bool = false, matching selectors: [String] = [],
                      controller: ArchiveTaskController? = nil) throws -> [ArchiveEntry] {
-        try catalog(archiveURL: archiveURL, password: password, format: format, matching: selectors, controller: controller).entries
+        try catalog(archiveURL: archiveURL, password: password, format: format,
+                    allowSplitVolumes: allowSplitVolumes, matching: selectors, controller: controller).entries
     }
 
-    static func catalog(archiveURL: URL, password: String?, format: ArchiveFormat, matching selectors: [String] = [],
+    static func catalog(archiveURL: URL, password: String?, format: ArchiveFormat,
+                        allowSplitVolumes: Bool = false, matching selectors: [String] = [],
                         controller: ArchiveTaskController? = nil) throws -> Catalog {
         let result = try SevenZipCommand.run(
-            ["l"] + typeArguments(for: format)
+            ["l"] + typeArguments(for: format, allowSplitVolumes: allowSplitVolumes)
                 + ["-slt", "-ba", "-sccUTF-8", "-bsp0", "-spd", "-ssc", "--", archiveURL.standardizedFileURL.path] + selectors,
             password: password, controller: controller
         )
@@ -57,8 +60,10 @@ enum SevenZipArchiveListing {
         guard result.status != 0 else { return }
         let name = archive.lastPathComponent
         let errors = String(decoding: result.stderr, as: UTF8.self).components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         let wrongPassword = errors.contains {
-            ($0.hasPrefix("ERROR: ") && $0.hasSuffix(" : Cannot open encrypted archive. Wrong password?"))
+            $0 == "Cannot open encrypted archive. Wrong password?"
+                || ($0.hasPrefix("ERROR: ") && $0.hasSuffix(" : Cannot open encrypted archive. Wrong password?"))
                 || $0.hasPrefix("ERROR: Data Error in encrypted file. Wrong password? : ")
                 || $0.hasPrefix("ERROR: CRC Failed in encrypted file. Wrong password? : ")
                 || $0.hasPrefix("ERROR: Wrong password : ")
