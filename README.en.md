@@ -10,11 +10,11 @@
 
 ![macOS 26.0+](https://img.shields.io/badge/macOS-26.0%2B%20(Apple%20Silicon)-0ea5e9?style=flat-square)
 ![Swift 6.2](https://img.shields.io/badge/Swift-6.2-6366f1?style=flat-square)
-[![Release v1.0.4](https://img.shields.io/badge/release-v1.0.4-facc15?style=flat-square)](https://github.com/hwang8859-1/BoltZip/releases/latest)
+[![Release v1.0.5](https://img.shields.io/badge/release-v1.0.5-facc15?style=flat-square)](https://github.com/hwang8859-1/BoltZip/releases/latest)
 ![License MIT](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)
 
 <p>
-  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.4/BoltZip-1.0.4-macOS-arm64.dmg"><strong>⬇️ Download Latest v1.0.4 (.dmg · Apple Silicon)</strong></a>
+  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.5/BoltZip-1.0.5-macOS-arm64.dmg"><strong>⬇️ Download Latest v1.0.5 (.dmg · Apple Silicon)</strong></a>
   &nbsp;·&nbsp;
   <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg">🛡 Compatible v0.9.3 (.dmg · Intel / macOS 12–26)</a>
   &nbsp;·&nbsp;
@@ -38,7 +38,7 @@
 
 | Mac & macOS Compatibility | Recommended Release | Direct Download | Release Page |
 | :--- | :--- | :--- | :--- |
-| **Apple Silicon (`arm64`) · macOS 26.0+** | **`v1.0.4`** (Latest) | [Download `.dmg` Installer](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.4/BoltZip-1.0.4-macOS-arm64.dmg) · [Portable `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.4/BoltZip-1.0.4-macOS-arm64.zip) | [Release v1.0.4 ↗](https://github.com/hwang8859-1/BoltZip/releases/latest) |
+| **Apple Silicon (`arm64`) · macOS 26.0+** | **`v1.0.5`** (Latest) | [Download `.dmg` Installer](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.5/BoltZip-1.0.5-macOS-arm64.dmg) · [Portable `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.5/BoltZip-1.0.5-macOS-arm64.zip) | [Release v1.0.5 ↗](https://github.com/hwang8859-1/BoltZip/releases/latest) |
 | **Intel (`x86_64`) or macOS 12.0–15 / 26+** | **`v0.9.3`** (Universal LTS) | [Download `.dmg` Installer](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg) · [Portable `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.zip) | [Release v0.9.3 ↗](https://github.com/hwang8859-1/BoltZip/releases/tag/v0.9.3) |
 
 - **3-Step Install**: Open the downloaded `.dmg` → drag `BoltZip.app` into `Applications` → launch BoltZip and enable the **Finder `Bolt ›` Context Menu** & **Default File Associations** in Settings with one click.
@@ -49,9 +49,10 @@
 
 - **Auto-Remove `.DS_Store` & macOS Junk**: Automatically strips `.DS_Store`, `__MACOSX`, `._*`, `.Spotlight-V100`, and `.Trashes` during archive creation and extraction—keeping archives clean for Windows/Linux recipients and preventing `__MACOSX` from breaking Smart Extract (opt out via `--keep-junk` in CLI or the toggle in UI).
 - **Top-Level Finder Context Menu `Bolt ›`**: Powered by a sandboxed native `FinderSync` extension (`BoltZipFinderSync.appex`), quick actions appear directly at the top level of Finder’s right-click menu—never buried under Services:
-  - Smart Extract / Extract to Subfolder / Extract to… / Browse in BoltZip / Verify Integrity
-  - Instant Compress to `ZIP`, `TAR.ZST (Zstd)`, `7z`, Individual ZIPs on Multi-Select, or Encrypted & Split Archive Wizard
-- **Browse, Drag Out & Edit Inside Archives**: Double-click or press `Space` for macOS Quick Look without full extraction, drill into **nested archives with breadcrumb back navigation**, drag items straight out to Finder (`NSFilePromiseProvider`), view/edit ZIP comments, and **add, rename, or delete inside ZIP files** with zero recompression of untouched entries.
+  - Smart Extract / Extract to Subfolder / Extract to… / Browse in BoltZip / Verify Integrity / Batch Convert / Recover Damaged ZIP
+  - Quick Compress with Default Preset / Instant Compress to `ZIP`, `TAR.ZST (Zstd)`, `7z`, Individual ZIPs on Multi-Select, or Encrypted & Split Archive Wizard
+- **Browse, Drag Out & Edit Inside Archives**: Double-click or press `Space` for macOS Quick Look without full extraction, drill into **nested archives with breadcrumb back navigation**, drag items straight out to Finder (`NSFilePromiseProvider`), view/edit ZIP comments, and **add, rename, replace, or delete inside ZIP and non-split `.7z` archives** (with zero recompression of untouched ZIP entries).
+- **Compression Presets, Batch Conversion & Damaged ZIP Recovery**: Save reusable format, codec, split-volume, naming template, and exclude-glob presets (without saving plaintext passwords) across the GUI, Finder default quick preset, and CLI `preset` / `convert` / `recover` commands; scan damaged ZIPs via Local File Header fallback recovery, and opt in to per-archive Apple Keychain password storage.
 - **Edit and Save JAR / APK Containers**: Use the entry context menu to edit UTF-8/UTF-16 text or replace a file. Saves retain the filename suffix, entry order, compression methods, Store status, and unchanged compressed payloads. Unknown levels use the disclosed defaults. Unsupported modes offer cancel or a new standard ZIP. APK saves need no keys or SDK; signing and installability validation are not provided.
 - **Chunked Streaming I/O, Safe Symlinks & In-App Updater**: Streams entries `>= 64 MB` in `1 MB` chunks across ZIP, WinZip AE-2, ZipCrypto, and TAR.*, safely preserves/restores symlinks with traversal guards, writes `.7z` directly with byte-based progress, ships 17 per-format document icons, and checks GitHub Releases updates with `SHA256SUMS.txt` verification.
 - **Native Liquid Glass Experience**:
@@ -64,7 +65,7 @@
   - **WinZip AE-2 AES-256** encryption (`PBKDF2-HMAC-SHA1` + `AES-256-CTR` + 10-byte `HMAC-SHA1`) and legacy `ZipCrypto`;
   - **7z AES-256** can encrypt both contents and file names. Select “Encrypt file names” when creating a password-protected 7z to hide its file and folder list;
   - Automatic detection of `GB18030 / GBK`, `Big5`, `Shift-JIS`, and `EUC-KR` filenames in Windows-created ZIPs;
-  - Supports `.z01/.z02/.../.zip` split volumes and Smart Extract (avoids nested duplicate folders).
+  - Supports `.z01/.z02/.../.zip` and `.7z.001/.7z.002/...` split volumes, standalone `.gz`/`.xz` streams, and Smart Extract (avoids nested duplicate folders).
 
 ## 🚀 Quick Start
 

@@ -10,11 +10,11 @@
 
 ![macOS 26.0+](https://img.shields.io/badge/macOS-26.0%2B%20(Apple%20Silicon)-0ea5e9?style=flat-square)
 ![Swift 6.2](https://img.shields.io/badge/Swift-6.2-6366f1?style=flat-square)
-[![Release v1.0.4](https://img.shields.io/badge/release-v1.0.4-facc15?style=flat-square)](https://github.com/hwang8859-1/BoltZip/releases/latest)
+[![Release v1.0.5](https://img.shields.io/badge/release-v1.0.5-facc15?style=flat-square)](https://github.com/hwang8859-1/BoltZip/releases/latest)
 ![License MIT](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)
 
 <p>
-  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.4/BoltZip-1.0.4-macOS-arm64.dmg"><strong>⬇️ 直接下载最新版 v1.0.4 (.dmg · Apple Silicon)</strong></a>
+  <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.5/BoltZip-1.0.5-macOS-arm64.dmg"><strong>⬇️ 直接下载最新版 v1.0.5 (.dmg · Apple Silicon)</strong></a>
   &nbsp;·&nbsp;
   <a href="https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg">🛡 下载兼容版 v0.9.3 (.dmg · Intel / macOS 12–26)</a>
   &nbsp;·&nbsp;
@@ -38,7 +38,7 @@
 
 | 适用机型与系统 | 推荐版本 | 直接下载链接 | 发布页 |
 | :--- | :--- | :--- | :--- |
-| **Apple Silicon (M 系列 `arm64`) · macOS 26.0+** | **`v1.0.4`**（最新正式版） | [下载 `.dmg` 安装镜像](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.4/BoltZip-1.0.4-macOS-arm64.dmg) · [便携包 `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.4/BoltZip-1.0.4-macOS-arm64.zip) | [Release v1.0.4 ↗](https://github.com/hwang8859-1/BoltZip/releases/latest) |
+| **Apple Silicon (M 系列 `arm64`) · macOS 26.0+** | **`v1.0.5`**（最新正式版） | [下载 `.dmg` 安装镜像](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.5/BoltZip-1.0.5-macOS-arm64.dmg) · [便携包 `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v1.0.5/BoltZip-1.0.5-macOS-arm64.zip) | [Release v1.0.5 ↗](https://github.com/hwang8859-1/BoltZip/releases/latest) |
 | **Intel (`x86_64`) 或 macOS 12.0–15 / 26+** | **`v0.9.3`**（Universal 全兼容版） | [下载 `.dmg` 兼容镜像](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.dmg) · [便携包 `.zip`](https://github.com/hwang8859-1/BoltZip/releases/download/v0.9.3/BoltZip-0.9.3-macOS-universal.zip) | [Release v0.9.3 ↗](https://github.com/hwang8859-1/BoltZip/releases/tag/v0.9.3) |
 
 - **安装步骤**：打开下载的 `.dmg` 镜像 → 将 `BoltZip.app` 拖入右侧 `Applications` 文件夹 → 启动后可在应用内「设置」一键开启 **访达右键一级菜单 `Bolt ›`** 与 **默认归档文件关联**。
@@ -49,9 +49,10 @@
 
 - **自动删除 `.DS_Store` 等 Mac 隐藏垃圾文件**：打包创建和解压提取时默认自动剔除 `.DS_Store`、`__MACOSX`、`._*`、`.Spotlight-V100`、`.Trashes` 等系统元文件，发给 Windows/Linux 用户不再污染目录，Smart 解压也不受 `__MACOSX` 干扰（CLI 可用 `--keep-junk` 按需保留）。
 - **访达右键一级目录 `Bolt >`**：通过原生沙盒 `FinderSync` 扩展（`BoltZipFinderSync.appex`），无需钻进「服务」子菜单，直接在访达右键最顶层一键完成：
-  - 智能解压到当前位置 / 解压到同名文件夹 / 自定义解压目录 / 打开浏览 / 完整性校验
-  - 一键压缩为 `ZIP` / `TAR.ZST (Zstd)` / `7z` / 多选分别打包为 ZIP / 加密与分卷高级压缩
-- **Windows Zip 级包内工作台**：双击或空格调用 macOS Quick Look 直接预览包内文件，支持目录树与**嵌套压缩包层级钻取回退**、拖拽直接导出到访达、单独导出选中项为新 ZIP、归档注释查看与编辑，以及 **ZIP 包内原地增删改**（未改动条目零重压缩）。
+  - 智能解压到当前位置 / 解压到同名文件夹 / 自定义解压目录 / 打开浏览 / 完整性校验 / 批量转换格式 / 损坏 ZIP 恢复
+  - 一键按默认方案快速压缩 / `ZIP` / `TAR.ZST (Zstd)` / `7z` / 多选分别打包为 ZIP / 加密与分卷高级压缩
+- **Windows Zip 级包内工作台**：双击或空格调用 macOS Quick Look 直接预览包内文件，支持目录树与**嵌套压缩包层级钻取回退**、拖拽直接导出到访达、单独导出选中项为新 ZIP、归档注释查看与编辑，以及 **ZIP 与非分卷 `.7z` 包内原地增删改**（ZIP 未改动条目零重压缩）。
+- **压缩方案预设、批量转换与损坏 ZIP 恢复**：可保存常用格式/算法/分卷/命名模板与排除规则（不存明文密码），并在向导、批量套用、访达默认快捷菜单与 CLI `preset` / `convert` / `recover` 复用；支持中央目录损坏时自动扫描本地文件头无损恢复可读 ZIP 条目，并提供按需勾选写入 Apple Keychain 密码记忆。
 - **JAR / APK 等包内编辑与保存**：右键条目可编辑 UTF-8／UTF-16 文本或替换文件，保存保留原后缀、条目顺序、原算法和 Store 状态；未知压缩级别使用界面说明的默认值，其他条目直接复制压缩数据。无法沿用原方式时可取消或另存为新的普通 ZIP。APK 无需配置密钥或 SDK；当前不处理签名，保存后不保证可安装或运行。
 - **大文件真流式 I/O、安全符号链接与内建更新**：`>= 64 MB` 条目全链路分块流式读写（ZIP / WinZip AE-2 / ZipCrypto / TAR.*），支持 Symlink 安全保留还原与越界拦截、按实际字节报告进度的流式 `.7z` 打包、17 套分格式文件专属图标，以及应用内 GitHub Releases 更新检查（含 SHA-256 校验）。
 - **液态玻璃原生体验**：
@@ -64,7 +65,7 @@
   - **WinZip AE-2 AES-256** 双向加密（PBKDF2-HMAC-SHA1 + AES-256-CTR + 10B HMAC-SHA1）及传统 ZipCrypto 兼容；
   - **7z AES-256** 支持同时加密内容和文件名。新建 7z 并设置密码后，可用「加密文件名」隐藏包内的文件和目录列表；
   - **GB18030 / GBK / Big5 / Shift-JIS / EUC-KR** 文件名编码自动识别，告别 Windows 中文压缩包乱码；
-  - 支持 `.z01 / .z02 / ... / .zip` 分卷压缩与 Smart 智能解压（单目录不套娃）。
+  - 支持 `.z01 / .z02 / ... / .zip` 与 `.7z.001 / .7z.002 / ...` 分卷压缩、独立 `.gz` / `.xz` 单文件流及 Smart 智能解压（单目录不套娃）。
 
 ## 🚀 快速开始
 
