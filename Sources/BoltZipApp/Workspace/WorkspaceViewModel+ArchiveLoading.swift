@@ -35,11 +35,15 @@ extension WorkspaceViewModel {
             return openedArchiveFromHome
         }()
 
+        let keychainCandidate = (password == nil && !isNestedOpening) ? keychainPassword(for: url) : nil
+        let effectivePassword = password ?? keychainCandidate
+        let usedKeychain = (password == nil && keychainCandidate != nil)
+
         isBusy = true
         statusMessage = "\(url.lastPathComponent)..."
         Task.detached(priority: .userInitiated) {
             do {
-                let (result, detectedAlgo, navIndex) = try Self.loadArchiveContents(at: url, encoding: encoding, password: password)
+                let (result, detectedAlgo, navIndex) = try Self.loadArchiveContents(at: url, encoding: encoding, password: effectivePassword)
                 await MainActor.run {
                     self.isBusy = false
                     if let parentFrame, self.archiveBackStack.last?.id != parentFrame.id { return }
@@ -66,8 +70,9 @@ extension WorkspaceViewModel {
                         }
                     }
                     self.preferredZipEditAlgorithm = detectedAlgo
-                    if let password, !password.isEmpty {
-                        self.savedPassword = password
+                    if let effectivePassword, !effectivePassword.isEmpty {
+                        self.savedPassword = effectivePassword
+                        self.commitPendingKeychainSaveIfMatching(password: effectivePassword, for: url)
                     } else {
                         self.savedPassword = nil
                     }
@@ -79,6 +84,18 @@ extension WorkspaceViewModel {
             } catch {
                 await MainActor.run {
                     self.isBusy = false
+                    if usedKeychain, case BoltZipError.wrongPassword = error {
+                        _ = self.invalidateStaleKeychainPasswordIfNeeded(for: url, attemptedPassword: effectivePassword)
+                        let freshPromptError = BoltZipError.passwordRequired(url.lastPathComponent)
+                        let purpose: PasswordPurpose = parentFrame != nil
+                            ? .returnToParent(frameID: parentFrame!.id)
+                            : .openArchive(url: url, fromExternalFinder: fromExternalFinder,
+                                           isNestedOpening: isNestedOpening, initialFolder: initialFolder, encoding: encoding)
+                        if let prompt = purpose.prompt(for: freshPromptError) {
+                            self.activeSheet = prompt
+                            return
+                        }
+                    }
                     let purpose: PasswordPurpose
                     if let parentFrame {
                         guard self.archiveBackStack.last?.id == parentFrame.id else { return }
@@ -91,11 +108,22 @@ extension WorkspaceViewModel {
                     }
                     if let prompt = purpose.prompt(for: error) {
                         self.activeSheet = prompt
+                    } else if !isNestedOpening, ArchiveFormat.detect(from: url) == .zip, Self.isRecoverableZipOpenFailure(error) {
+                        self.pendingRecoverZipURL = url
                     } else {
                         self.alertMessage = self.l10n.operationErrorMessage(error)
                     }
                 }
             }
+        }
+    }
+
+    private nonisolated static func isRecoverableZipOpenFailure(_ error: any Error) -> Bool {
+        switch error {
+        case BoltZipError.invalidArchive, BoltZipError.corruptedEntry:
+            return true
+        default:
+            return false
         }
     }
 
@@ -117,6 +145,7 @@ extension WorkspaceViewModel {
             case "DEFLATE": algo = .deflate
             case "Zstandard": algo = .zstd
             case "Bzip2": algo = .bzip2
+            case "LZMA2": algo = .xz
             case "Store": algo = .store
             default: algo = nil
             }
@@ -124,7 +153,7 @@ extension WorkspaceViewModel {
                 counts[algo, default: 0] += 1
             }
         }
-        return counts.max(by: { $0.value < $1.value })?.key ?? .deflate
+        return counts.max(by: { $0.value < $1.value })?.key ?? listing.format.defaultAlgorithm
     }
 
     func reloadWithEncoding(_ newEncoding: FilenameEncodingOption) {

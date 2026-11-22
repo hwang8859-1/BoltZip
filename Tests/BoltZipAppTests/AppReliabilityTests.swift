@@ -37,6 +37,9 @@ final class AppReliabilityTests: XCTestCase {
             ArchiveOperationError.filenameEncryptionRequires7z, ArchiveOperationError.sevenZipEncryptionRequiresAES256,
             ArchiveOperationError.invalidSevenZipPassword, ArchiveOperationError.sevenZipEngineUnavailable,
             ArchiveOperationError.splitVolumesRequireZIP, ArchiveOperationError.applicationNotFound,
+            ArchiveOperationError.singleStreamRequiresSingleRegularFile("XZ (.xz)"),
+            ArchiveOperationError.noRecoverableZipEntries,
+            ArchiveOperationError.sevenZipSplitArchiveReadOnly,
             BoltZipError.missingSplitVolume("archive.part02.rar")
         ]
         for error in errors {
@@ -96,5 +99,26 @@ final class AppReliabilityTests: XCTestCase {
         let next = UpdateCheckerService.availableDownloadURL(original)
         XCTAssertEqual(next.lastPathComponent, "installer (1).dmg")
         XCTAssertTrue(FileManager.default.fileExists(atPath: sentinel.path))
+    }
+
+    func testArchiveEditPasswordRetryAndCommentSupportGating() {
+        let editAdd = PasswordPurpose.unlockForEdit(urls: [URL(fileURLWithPath: "extra.txt")], targetFolder: "docs/")
+        let editOps = PasswordPurpose.unlockEditOperations([.deletePaths(["old.txt"])])
+        for purpose in [editAdd, editOps] {
+            guard case .passwordPrompt(_, let wrong1)? = purpose.prompt(for: BoltZipError.passwordRequired("a.7z")) else {
+                return XCTFail("Expected password required prompt")
+            }
+            XCTAssertFalse(wrong1)
+            guard case .passwordPrompt(_, let wrong2)? = purpose.prompt(for: BoltZipError.wrongPassword("a.7z")) else {
+                return XCTFail("Expected wrong password retry prompt")
+            }
+            XCTAssertTrue(wrong2)
+        }
+
+        XCTAssertTrue(ArchiveFormat.zip.supportsArchiveComment)
+        XCTAssertFalse(ArchiveFormat.sevenZip.supportsArchiveComment)
+        XCTAssertTrue(ArchiveFormat.sevenZip.supportsInPlaceEditing)
+        XCTAssertTrue(ArchiveFormat.creatableFormats.contains(.gz))
+        XCTAssertTrue(ArchiveFormat.creatableFormats.contains(.xz))
     }
 }

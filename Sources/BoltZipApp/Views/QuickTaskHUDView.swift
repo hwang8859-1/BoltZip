@@ -191,6 +191,10 @@ struct QuickTaskHUDView: View {
                     }
                 }
             }
+
+            Toggle(l10n.rememberPasswordKeychainToggle, isOn: $hud.rememberPasswordInKeychain)
+                .toggleStyle(.checkbox)
+                .font(BoltType.caption)
         }
     }
 

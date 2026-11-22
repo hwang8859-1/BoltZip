@@ -93,7 +93,13 @@ struct L10n: Sendable {
             case .sevenZipEngineUnavailable:
                 return t("归档处理组件不可用，请重新安装 BoltZip", "封存檔處理元件無法使用，請重新安裝 BoltZip", "The archive processing component is unavailable. Reinstall BoltZip.", "書庫処理用のコンポーネントを使用できません。BoltZip を再インストールしてください。")
             case .splitVolumesRequireZIP:
-                return t("该格式不支持分卷，请使用 ZIP", "此格式不支援分卷，請使用 ZIP", "This format does not support split volumes. Use ZIP.", "この形式は分割に対応していません。ZIP を使用してください。")
+                return t("该格式不支持分卷，请使用 ZIP 或 7z", "此格式不支援分卷，請使用 ZIP 或 7z", "This format does not support split volumes. Use ZIP or 7z.", "この形式は分割に対応していません。ZIP または 7z を使用してください。")
+            case .singleStreamRequiresSingleRegularFile(let formatName):
+                return t("\(formatName) 仅支持压缩单个常规文件；多个项目或文件夹请改用 TAR 归档。", "\(formatName) 僅支援壓縮單一常規檔案；多個項目或資料夾請改用 TAR 封存檔。", "\(formatName) compresses a single regular file only. Use a TAR archive for multiple items or folders.", "\(formatName) は単一の通常ファイルのみ圧縮できます。複数項目やフォルダには TAR 書庫を使用してください。")
+            case .noRecoverableZipEntries:
+                return t("未在该损坏的 ZIP 中扫描到可校验恢复的有效条目。", "未在此損毀的 ZIP 中掃描到可校驗復原的有效項目。", "No verifiable entries were found to recover from this damaged ZIP archive.", "この破損した ZIP から検証および復元可能な有効項目は見つかりませんでした。")
+            case .sevenZipSplitArchiveReadOnly:
+                return t("7z 分卷归档仅支持只读浏览与解压，不支持原地增删改。", "7z 分卷封存檔僅支援唯讀瀏覽與解壓縮，不支援原地增刪改。", "Split 7z archives are read-only and cannot be edited in place.", "分割された 7z 書庫は読み取り専用のため、書庫内の直接編集には対応していません。")
             case .applicationNotFound:
                 return t("找不到 BoltZip.app，请先安装应用", "找不到 BoltZip.app，請先安裝應用程式", "BoltZip.app was not found. Install the app first.", "BoltZip.app が見つかりません。先にアプリをインストールしてください。")
             }
@@ -713,11 +719,112 @@ struct L10n: Sendable {
 
     var confirmDeleteTitle: String { t("确认从压缩包中删除", "確認從封存檔中刪除", "Delete From Archive?", "書庫から削除しますか？") }
     func confirmDeleteMessage(_ count: Int) -> String {
-        t("将直接从当前 ZIP 中移除选中的 \(count) 个条目（此操作不可撤销）。", "將直接從目前 ZIP 中移除選取的 \(count) 個項目（此操作無法復原）。", "Remove \(count) selected item(s) permanently from this ZIP archive?", "選択した \(count) 件の項目を ZIP から完全に削除しますか？")
+        t("将直接从当前压缩包中移除选中的 \(count) 个条目（此操作不可撤销）。", "將直接從目前封存檔中移除選取的 \(count) 個項目（此操作無法復原）。", "Remove \(count) selected item(s) permanently from this archive?", "選択した \(count) 件の項目を書庫から完全に削除しますか？")
     }
     var confirmDeleteBtn: String { delete }
     var saveBtn: String { t("保存", "儲存", "Save", "保存") }
     func quickLookTooLargeStatus(_ name: String) -> String {
         t("预览已跳过（超过 50 MB）：\(name)", "預覽已跳過（超過 50 MB）：\(name)", "Quick Look skipped (> 50 MB): \(name)", "プレビューをスキップ (50 MB 超): \(name)")
     }
+
+    // MARK: - Presets, Recovery, Conversion, Keychain & Standalone Streams
+    var rememberPasswordKeychainToggle: String {
+        t("记住密码到系统钥匙串", "將密碼記住到系統鑰匙圈", "Remember in macOS Keychain", "macOS キーチェーンに保存")
+    }
+    var savedPasswordsSection: String {
+        t("安全与密码", "安全性與密碼", "Security & Passwords", "セキュリティとパスワード")
+    }
+    func savedPasswordsCountLabel(_ count: Int) -> String {
+        t("钥匙串中已保存 \(count) 个压缩包密码", "鑰匙圈中已儲存 \(count) 個封存檔密碼", "\(count) archive password(s) saved in Keychain", "キーチェーンに \(count) 件の書庫パスワードを保存中")
+    }
+    var savedPasswordsSubtitle: String {
+        t("仅在解锁时主动勾选保存；绝不在预设方案或日志中存储明文密码", "僅在解鎖時主動勾選儲存；絕不在預設方案或紀錄中儲存明文密碼", "Only saved when opted in; presets never store plaintext passwords", "手動で許可した場合のみ保存し、プリセットには平文パスワードを残しません")
+    }
+    var clearSavedPasswordsBtn: String {
+        t("清除已保存密码", "清除已儲存密碼", "Clear Saved Passwords", "保存済みパスワードを消去")
+    }
+    func savedPasswordsClearedStatus(_ count: Int) -> String {
+        t("已清除 \(count) 个保存的压缩包密码", "已清除 \(count) 個已儲存的封存檔密碼", "Cleared \(count) saved password(s)", "\(count) 件の保存済みパスワードを消去しました")
+    }
+
+    var presetMenuTitle: String { t("压缩方案", "壓縮方案", "Preset", "プリセット") }
+    var presetManageSubtitle: String {
+        t("保存常用压缩参数与排除规则（不存储明文密码），支持访达一键默认压缩",
+          "儲存常用壓縮參數與排除規則（不儲存明文密碼），支援 Finder 一鍵預設壓縮",
+          "Save compression parameters & exclude rules cleanly (never stores passwords)",
+          "よく使う圧縮設定や除外ルールを保存（パスワードは保存されません）")
+    }
+    var presetSaveCurrentBtn: String { t("保存当前为方案…", "將目前設定另存為方案…", "Save Current as Preset…", "現在の設定をプリセット保存…") }
+    var presetManageBtn: String { t("管理方案与批量压缩…", "管理方案與批次壓縮…", "Manage Presets & Batch…", "プリセット管理・一括圧縮…") }
+    var presetNoneLabel: String { t("未选择方案", "未選擇方案", "Custom Settings", "カスタム設定") }
+    var presetNamePromptPlaceholder: String { t("方案名称（例如：工作归档）", "方案名稱（例如：工作封存）", "Preset name (e.g. Work Backup)", "プリセット名 (例: 仕事バックアップ)") }
+    var presetQuickDefaultTitle: String { t("设为访达“默认方案快速压缩”", "設為 Finder「預設方案快速壓縮」", "Default Quick Preset for Finder", "Finder クイック圧縮の既定にする") }
+    var presetStarterBtn: String { t("导入推荐方案", "匯入推薦方案", "Add Starter Presets", "おすすめを追加") }
+    var presetApplyBatchBtn: String { t("选择文件并按此方案批量压缩…", "選擇檔案並套用此方案批次壓縮…", "Batch Compress Files with Preset…", "ファイルを選んでこのプリセットで一括圧縮…") }
+    var presetEmptyState: String { t("尚未保存压缩方案。可点击上方导入推荐模板或新建方案。", "尚未儲存壓縮方案。可點擊上方匯入推薦範本或新增方案。", "No saved presets yet. Add starter templates or create one.", "保存済みプリセットはありません。テンプレートを追加するか新規作成してください。") }
+    var presetNewBtn: String { t("新建方案", "新增方案", "New Preset", "新規プリセット") }
+    var presetQuickBadge: String { t("访达默认", "Finder 預設", "Finder Default", "Finder 既定") }
+
+    var namingTemplateLabel: String { t("命名模板", "命名範本", "Naming Rule", "命名テンプレート") }
+    var namingTemplatePlaceholder: String { "{name} / {name}_{date}" }
+    var namingTokensHint: String {
+        t("可用变量：{name} 原名 · {date} 日期 · {datetime} 时间戳", "可用變數：{name} 原名 · {date} 日期 · {datetime} 時間戳", "Tokens: {name} · {date} · {datetime}", "変数: {name} · {date} · {datetime}")
+    }
+    var excludePatternsLabel: String { t("排除规则", "排除規則", "Exclude Rules", "除外ルール") }
+    var excludePatternsPlaceholder: String { "*.tmp, *.log, .git, node_modules" }
+    func compressIndividuallyLabel(_ count: Int) -> String {
+        t("分别压缩为 \(count) 个独立归档", "分別壓縮為 \(count) 個獨立封存檔", "Compress Individually (\(count) archives)", "個別に \(count) 個の書庫へ圧縮")
+    }
+    var singleStreamFileOnlyNote: String {
+        t("独立 .gz / .xz 仅支持单次压缩 1 个常规文件；多文件请勾选“分别压缩”或改用 .tar.gz / .tar.xz。",
+          "獨立 .gz / .xz 僅支援單次壓縮 1 個常規檔案；多檔案請勾選「分別壓縮」或改用 .tar.gz / .tar.xz。",
+          "Standalone .gz / .xz compresses 1 regular file. Use “Compress Individually” or .tar.gz / .tar.xz for folders or multiple items.",
+          "単体 .gz / .xz は1つの通常ファイル専用です。複数やフォルダには個別圧縮か .tar.gz / .tar.xz を選択してください。")
+    }
+
+    var recoverZipBtn: String { t("修复 ZIP…", "修復 ZIP…", "Recover ZIP…", "ZIP 修復…") }
+    var recoverZipTitle: String { t("损坏 ZIP 可读条目恢复", "損毀 ZIP 可讀項目復原", "Recover Damaged ZIP", "破損 ZIP の復元") }
+    var recoverZipSubtitle: String {
+        t("逐条扫描并校验可读取内容，无损写入新归档，原损坏文件保持不变。",
+          "逐項掃描並校驗可讀取內容，無損寫入新封存檔，原損毀檔案保持不變。",
+          "Scan & verify readable entries into a clean new ZIP while keeping the original intact.",
+          "検証可能な項目をスキャンし、元の破損ファイルを残したまま新しい ZIP に復元します。")
+    }
+    var recoverZipSourceLabel: String { t("损坏的 ZIP", "損毀的 ZIP", "Damaged ZIP", "破損した ZIP") }
+    var recoverZipOutputLabel: String { t("恢复输出文件", "復原輸出檔案", "Recovered Output", "復元先のファイル") }
+    var recoverZipStartBtn: String { t("开始扫描与恢复", "開始掃描與復原", "Scan & Recover", "スキャンして復元") }
+    var recoverZipFallbackUsed: String {
+        t("中央目录已损坏，已自动启用本地文件头深度扫描", "中央目錄已損毀，已自動啟用本機檔案標頭深度掃描", "Central directory damaged; Local File Header fallback scan used", "セントラルディレクトリ破損のためローカルヘッダスキャンを実行")
+    }
+    func recoverZipSummary(scanned: Int, recovered: Int, failed: Int) -> String {
+        t("已扫描 \(scanned) 个 · 成功恢复 \(recovered) 个 · 无法恢复 \(failed) 个", "已掃描 \(scanned) 個 · 成功復原 \(recovered) 個 · 無法復原 \(failed) 個", "Scanned \(scanned) · Recovered \(recovered) · Unrecoverable \(failed)", "スキャン \(scanned) 件 · 復元 \(recovered) 件 · 復元不可 \(failed) 件")
+    }
+    var recoverZipUnrecoverableSection: String { t("无法恢复的条目及原因", "無法復原的項目與原因", "Unrecoverable Entries & Reasons", "復元できない項目と理由") }
+    var recoverZipOfferBtn: String { t("提取完好条目恢复…", "擷取完好項目復原…", "Recover Readable Entries…", "正常項目を復元…") }
+    func recoverZipInspectFailedOffer(_ name: String) -> String {
+        t("“\(name)”的 ZIP 目录或数据可能已损坏，是否打开损坏恢复工具扫描可抢救的条目？",
+          "「\(name)」的 ZIP 目錄或資料可能已損毀，是否開啟損毀復原工具掃描可搶救的項目？",
+          "“\(name)” appears damaged. Scan for recoverable entries into a new ZIP?",
+          "「\(name)」は破損しているようです。復元可能な項目をスキャンして別の ZIP に救出しますか？")
+    }
+
+    var convertArchivesBtn: String { t("批量转换…", "批次轉換…", "Batch Convert…", "一括変換…") }
+    var convertArchivesTitle: String { t("归档批量格式转换", "封存檔批次格式轉換", "Batch Convert Archives", "書庫フォーマットの一括変換") }
+    var convertArchivesSubtitle: String {
+        t("保持目录结构批量转换格式并生成新归档，不删除原文件。",
+          "保持目錄結構批次轉換格式並產生新封存檔，不刪除原檔案。",
+          "Convert archives to a target format into new files without altering originals.",
+          "元のファイルを保持したまま、指定の形式へ一括変換します。")
+    }
+    var convertTargetFormatLabel: String { t("目标格式", "目標格式", "Target Format", "変換後の形式") }
+    var convertDestDirLabel: String { t("输出目录", "輸出目錄", "Destination Folder", "出力先フォルダ") }
+    var convertSourceCountLabel: String { t("源压缩包", "來源封存檔", "Source Archives", "変換元の書庫") }
+    var convertStartBtn: String { t("开始批量转换", "開始批次轉換", "Start Conversion", "一括変換を開始") }
+    var convertOptionalPasswordPlaceholder: String { t("可选密码（用于加密或解密）", "選填密碼（用於加密或解密）", "Optional password (source/target)", "任意のパスワード（復号・暗号化）") }
+    func convertSummaryLine(_ ok: Int, _ total: Int) -> String {
+        t("成功转换 \(ok)/\(total) 个压缩包", "成功轉換 \(ok)/\(total) 個封存檔", "Converted \(ok)/\(total) archive(s)", "\(ok)/\(total) 件の書庫を変換しました")
+    }
+    var batchOverwriteRename: String { t("自动重命名避免覆盖", "自動重新命名避免覆蓋", "Rename to Keep Both", "自動リネーム（上書きしない）") }
+    var batchOverwriteSkip: String { t("跳过已存在目标", "略過已存在目標", "Skip Existing", "既存ファイルをスキップ") }
+    var batchOverwriteReplace: String { t("覆盖同目标（保护源文件）", "覆蓋同目標（保護來源檔案）", "Overwrite (Protect Source)", "上書き（元書庫は保護）") }
 }

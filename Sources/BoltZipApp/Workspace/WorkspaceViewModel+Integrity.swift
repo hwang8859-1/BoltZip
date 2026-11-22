@@ -4,7 +4,10 @@ import Foundation
 extension WorkspaceViewModel {
     func testIntegrity(password: String? = nil, archiveURL overrideURL: URL? = nil) {
         guard let archiveURL = overrideURL ?? listing?.archiveURL else { return }
-        let pw = password ?? (archiveURL == listing?.archiveURL ? savedPassword : nil)
+        let explicitOrSessionPW = password ?? (archiveURL == listing?.archiveURL ? savedPassword : nil)
+        let keychainCandidate = (explicitOrSessionPW == nil) ? keychainPassword(for: archiveURL) : nil
+        let pw = explicitOrSessionPW ?? keychainCandidate
+        let usedKeychain = (explicitOrSessionPW == nil && keychainCandidate != nil)
         let enc = encodingOption
         isBusy = true
         progress = OperationProgress(fractionCompleted: 0, currentItem: "CRC32 / HMAC...")
@@ -22,7 +25,10 @@ extension WorkspaceViewModel {
                     if report.skippedEncryptedCount > 0 && pw == nil {
                         self.activeSheet = .passwordPrompt(.testIntegrity(archiveURL: archiveURL))
                     } else {
-                        if archiveURL == self.listing?.archiveURL, let pw, !pw.isEmpty { self.savedPassword = pw }
+                        if let pw, !pw.isEmpty {
+                            if archiveURL == self.listing?.archiveURL { self.savedPassword = pw }
+                            self.commitPendingKeychainSaveIfMatching(password: pw, for: archiveURL)
+                        }
                         self.activeSheet = .integrityReport(report)
                         self.statusMessage = "\(report.passedCount)/\(report.totalEntries)"
                     }
@@ -31,7 +37,12 @@ extension WorkspaceViewModel {
                 await MainActor.run {
                     self.isBusy = false
                     self.progress = nil
-                    if let prompt = PasswordPurpose.testIntegrity(archiveURL: archiveURL).prompt(for: error) {
+                    var promptError: any Error = error
+                    if usedKeychain, case BoltZipError.wrongPassword = error {
+                        _ = self.invalidateStaleKeychainPasswordIfNeeded(for: archiveURL, attemptedPassword: pw)
+                        promptError = BoltZipError.passwordRequired(archiveURL.lastPathComponent)
+                    }
+                    if let prompt = PasswordPurpose.testIntegrity(archiveURL: archiveURL).prompt(for: promptError) {
                         self.activeSheet = prompt
                     } else {
                         self.alertMessage = self.l10n.operationErrorMessage(error)
@@ -59,6 +70,7 @@ extension WorkspaceViewModel {
             let report = BoltArchiveEngine.testIntegrityBatch(
                 archiveURLs: archives,
                 password: pw,
+                passwordProvider: { url in ArchiveKeychainService.shared.password(for: url) },
                 encoding: enc,
                 batchTitle: title
             ) { prog in

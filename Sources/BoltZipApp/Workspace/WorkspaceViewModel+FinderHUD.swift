@@ -76,7 +76,9 @@ extension WorkspaceViewModel {
             self?.onHUDDidHide?()
         }
         hudModel.onOperationSucceeded = { [weak self] operation, _ in
-            self?.applyTrashCleanupIfScheduled(for: operation.id)
+            guard let self else { return }
+            self.applyTrashCleanupIfScheduled(for: operation.id)
+            self.refreshKeychainPasswordCount()
         }
     }
 
@@ -88,13 +90,18 @@ extension WorkspaceViewModel {
         inAppTaskHUD.onOperationSucceeded = { [weak self] operation, resultURL in
             guard let self else { return }
             self.applyTrashCleanupIfScheduled(for: operation.id)
+            self.refreshKeychainPasswordCount()
             switch operation {
             case .compress(_, _, _, let options):
-                self.openArchive(
-                    url: resultURL,
-                    password: options.encryption == .none ? nil : options.password,
-                    encoding: options.encoding
-                )
+                if self.inAppTaskHUD.pendingQueue.isEmpty {
+                    self.openArchive(
+                        url: resultURL,
+                        password: options.encryption == .none ? nil : options.password,
+                        encoding: options.encoding
+                    )
+                } else {
+                    self.statusMessage = "-> \(resultURL.lastPathComponent)"
+                }
             case .extract(_, let archiveURL, let options):
                 if archiveURL == self.listing?.archiveURL, let pw = options.password, !pw.isEmpty {
                     self.savedPassword = pw
@@ -112,7 +119,7 @@ extension WorkspaceViewModel {
               let op = comps.queryItems?.first(where: { $0.name == "op" })?.value else {
             return false
         }
-        return ["smartExtract", "extractSubfolder", "compressZip", "compressEachZip", "compressTarZst", "compress7z"].contains(op)
+        return ["smartExtract", "extractSubfolder", "compressZip", "compressEachZip", "compressTarZst", "compress7z", "compressQuickPreset"].contains(op)
     }
 
     static func isStandaloneCompressURL(_ url: URL) -> Bool {
@@ -191,6 +198,28 @@ extension WorkspaceViewModel {
             if !paths.isEmpty { quickCompressInHUD(inputs: paths, format: .tarZst, algorithm: .zstd) }
         case "compress7z":
             if !paths.isEmpty { quickCompressInHUD(inputs: paths, format: .sevenZip, algorithm: .xz) }
+        case "compressQuickPreset":
+            if !paths.isEmpty {
+                if let preset = CompressionProfileStore.shared.defaultQuickPreset() {
+                    batchCompressWithProfile(preset, inputs: paths, useFloatingHUD: true)
+                } else {
+                    quickCompressInHUD(inputs: paths, format: .zip, algorithm: .deflate)
+                }
+            }
+        case "convertArchives":
+            let archives = BoltArchiveEngine.filterArchiveURLs(paths)
+            if !archives.isEmpty {
+                onRequestShowMainWindow?()
+                boltActivateAppToForeground()
+                openConvertArchivesPanel(prefilled: archives)
+            }
+        case "recoverZip":
+            let archives = BoltArchiveEngine.filterArchiveURLs(paths)
+            if let first = archives.first ?? paths.first {
+                onRequestShowMainWindow?()
+                boltActivateAppToForeground()
+                openRecoverZipPanel(sourceURL: first)
+            }
         case "compressWizard":
             if !paths.isEmpty {
                 presentStandaloneCompressWizard(inputs: paths)

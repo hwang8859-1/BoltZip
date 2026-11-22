@@ -298,6 +298,35 @@ struct SettingsView: View {
         }
 
         defaultAssociationsCard(l: l, glassEnabled: glassEnabled)
+
+        BoltGlassSectionCard(
+            l.savedPasswordsSection,
+            icon: "key.fill",
+            iconColor: .orange,
+            glassEnabled: glassEnabled,
+            contentSpacing: 6
+        ) {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(l.savedPasswordsCountLabel(vm.savedKeychainPasswordCount))
+                        .font(BoltType.subbodyMedium)
+                    Text(l.savedPasswordsSubtitle)
+                        .font(BoltType.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Button(l.clearSavedPasswordsBtn, role: .destructive) {
+                    vm.clearAllSavedKeychainPasswords()
+                }
+                .controlSize(.small)
+                .boltGlassButton()
+                .disabled(vm.savedKeychainPasswordCount == 0)
+            }
+        }
+        .onAppear {
+            vm.refreshKeychainPasswordCount()
+        }
     }
 
     @ViewBuilder

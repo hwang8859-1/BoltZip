@@ -187,22 +187,29 @@ struct ArchiveExplorerView: View {
             valueColor: .green
         )
 
-        if !listing.comment.isEmpty || listing.canEditInPlace {
+        if !listing.comment.isEmpty || (listing.canEditInPlace && listing.format.supportsArchiveComment) {
             HStack(spacing: 6) {
                 Text(l.archiveCommentTitle)
                     .font(BoltType.caption)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 4)
-                Button {
-                    vm.activeSheet = .editArchiveComment(current: listing.comment)
-                } label: {
-                    Text(listing.comment.isEmpty ? l.archiveCommentEditBtn : listing.comment)
+                if listing.format.supportsArchiveComment {
+                    Button {
+                        vm.activeSheet = .editArchiveComment(current: listing.comment)
+                    } label: {
+                        Text(listing.comment.isEmpty ? l.archiveCommentEditBtn : listing.comment)
+                            .font(BoltType.caption)
+                            .foregroundStyle(listing.comment.isEmpty ? Color.accentColor : Color.primary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(listing.comment)
                         .font(BoltType.caption)
-                        .foregroundStyle(listing.comment.isEmpty ? Color.accentColor : Color.primary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                .buttonStyle(.plain)
             }
         }
     }
