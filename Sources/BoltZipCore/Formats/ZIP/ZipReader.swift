@@ -15,7 +15,7 @@ public final class ZipReader: @unchecked Sendable {
         self.url = url
     }
 
-    func parseArchive(resolveNumberedVolume: Bool = true) throws -> ParsedArchive {
+    func parseArchive(resolveNumberedVolume: Bool = true, allowMissingParts: Bool = false) throws -> ParsedArchive {
         let accessor = try ZipVolumeAccessor(archiveURL: url, resolveNumberedVolume: resolveNumberedVolume)
         defer { accessor.closeAll() }
 
@@ -52,7 +52,7 @@ public final class ZipReader: @unchecked Sendable {
                         let candCDStartDisk = Int(ZipBinary.readUInt16LE(tail, at: j + 6))
                         let candCDSize = UInt64(ZipBinary.readUInt32LE(tail, at: j + 12))
                         let candCDOffset = UInt64(ZipBinary.readUInt32LE(tail, at: j + 16))
-                        if (try? accessor.configureVolumes(totalDisks: candDiskNum + 1)) != nil {
+                        if (try? accessor.configureVolumes(totalDisks: candDiskNum + 1, allowMissingParts: allowMissingParts)) != nil {
                             if candCDSize == 0 {
                                 eocdPosInTail = j
                                 break
@@ -84,7 +84,7 @@ public final class ZipReader: @unchecked Sendable {
         let comment = String(data: commentData, encoding: .utf8) ?? ""
 
         let totalDisks = diskNumber + 1
-        try accessor.configureVolumes(totalDisks: totalDisks)
+        try accessor.configureVolumes(totalDisks: totalDisks, allowMissingParts: allowMissingParts)
 
         // Check ZIP64 EOCD Locator immediately preceding EOCD
         let eocdGlobalPos = tailStartOffset + UInt64(eocdPos)
@@ -106,7 +106,7 @@ public final class ZipReader: @unchecked Sendable {
         }
 
         let maxCentralDirectoryBytes: UInt64 = 512 * 1024 * 1024
-        let availableBytes = try accessor.totalAvailableBytes()
+        let availableBytes = try accessor.totalAvailableBytes(allowMissingParts: allowMissingParts)
         guard cdSize <= availableBytes && cdSize <= maxCentralDirectoryBytes && cdSize <= UInt64(Int.max) else {
             throw BoltZipError.invalidArchive(BoltCoreLocalization.t("ZIP 中央目录声明大小越界或损坏", "ZIP 中央目錄宣告大小越界或損毀", "ZIP central directory size is corrupted or exceeds archive bounds", "ZIP セントラルディレクトリサイズが不正またはアーカイブ範囲外です"))
         }

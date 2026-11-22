@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-public enum ZipEditOperation: Sendable {
+public enum ArchiveEditOperation: Sendable {
     case addItems(urls: [URL], targetFolder: String)
     case createFolder(path: String)
     case deletePaths(Set<String>)
@@ -9,6 +9,8 @@ public enum ZipEditOperation: Sendable {
     case setComment(String)
     case replaceEntry(path: String, fileURL: URL)
 }
+
+public typealias ZipEditOperation = ArchiveEditOperation
 
 public enum ZipWriter {
 
@@ -73,6 +75,7 @@ public enum ZipWriter {
             from: inputURLs,
             excludeMacJunk: options.excludeMacJunk,
             preserveSymlinks: options.preserveSymlinks,
+            excludePatterns: options.excludePatterns,
             excluding: [outputURL], controller: controller
         )
         let sink = try ZipVolumeSink(outputURL: outputURL, splitLimit: options.splitVolumeSizeBytes)
@@ -227,7 +230,8 @@ public enum ZipWriter {
             let collected = try ArchiveInputCollector.collect(
                 from: [pair.url],
                 excludeMacJunk: options.excludeMacJunk,
-                preserveSymlinks: options.preserveSymlinks
+                preserveSymlinks: options.preserveSymlinks,
+                excludePatterns: options.excludePatterns
             )
             for var item in collected {
                 let prefixed = pair.targetFolder.isEmpty ? item.archivePath : (pair.targetFolder + item.archivePath)
@@ -286,38 +290,14 @@ public enum ZipWriter {
                 let pathEncoded = ex.decodedPath == originalPath
                     ? (data: ex.record.rawPathBytes, isUTF8: ex.record.flags & 0x0800 != 0)
                     : FilenameEncoding.encode(ex.decodedPath, option: .utf8)
-                let flags = ex.record.flags | (pathEncoded.isUTF8 ? 0x0800 : 0)
-                // Preserve bit 3 for untouched legacy ZipCrypto entries encrypted with the data-descriptor header byte
-                // so 7-Zip/WinRAR continue validating (dosTime >> 8) properly; emit a compliant Data Descriptor below.
-                let isLegacyDataDescCrypto = (ex.record.flags & 0x0001 != 0)
-                    && (ex.record.compressionMethod != 99)
-                    && (ex.record.flags & 0x0008 != 0)
-                let cleanFlags = isLegacyDataDescCrypto ? flags : (flags & ~UInt16(0x0008))
-
-                let entry = try writeRawEntry(
+                let entry = try copyRawRecord(
+                    ex.record,
                     rawPathBytes: pathEncoded.data,
-                    flags: cleanFlags,
-                    method: ex.record.compressionMethod,
-                    dosTime: ex.record.dosTime,
-                    dosDate: ex.record.dosDate,
-                    crc32: ex.record.crc32,
-                    compressedSize: ex.record.compressedSize,
-                    uncompressedSize: ex.record.uncompressedSize,
-                    externalAttrs: ex.record.externalAttributes,
-                    extraWithoutZip64: stripZip64Extra(ex.record.extraData),
-                    commentData: ex.record.commentData,
-                    emitDataDescriptor: isLegacyDataDescCrypto,
+                    hasUTF8Flag: pathEncoded.isUTF8,
+                    reader: reader,
+                    accessor: accessor,
                     sink: sink
-                ) { outSink in
-                    if ex.record.compressedSize < BoltConcurrency.streamingThresholdBytes {
-                        let rawPayload = try reader.readRawPayload(for: ex.record, accessor: accessor)
-                        try outSink.writeData(rawPayload)
-                    } else {
-                        try reader.streamRawPayload(for: ex.record, accessor: accessor) { chunk in
-                            try outSink.writeData(chunk)
-                        }
-                    }
-                }
+                )
                 cdEntries.append(entry)
                 idx += 1
             }
@@ -718,7 +698,49 @@ public enum ZipWriter {
         )
     }
 
-    private static func writeRawEntry(
+    static func copyRawRecord(
+        _ record: ZipRecord,
+        rawPathBytes: Data,
+        hasUTF8Flag: Bool,
+        reader: ZipReader,
+        accessor: ZipVolumeAccessor,
+        sink: ZipVolumeSink
+    ) throws -> CentralDirEntry {
+        let flags = record.flags | (hasUTF8Flag ? 0x0800 : 0)
+        // Preserve bit 3 for untouched legacy ZipCrypto entries encrypted with the data-descriptor header byte
+        // so 7-Zip/WinRAR continue validating (dosTime >> 8) properly; emit a compliant Data Descriptor below.
+        let isLegacyDataDescCrypto = (record.flags & 0x0001 != 0)
+            && (record.compressionMethod != 99)
+            && (record.flags & 0x0008 != 0)
+        let cleanFlags = isLegacyDataDescCrypto ? flags : (flags & ~UInt16(0x0008))
+
+        return try writeRawEntry(
+            rawPathBytes: rawPathBytes,
+            flags: cleanFlags,
+            method: record.compressionMethod,
+            dosTime: record.dosTime,
+            dosDate: record.dosDate,
+            crc32: record.crc32,
+            compressedSize: record.compressedSize,
+            uncompressedSize: record.uncompressedSize,
+            externalAttrs: record.externalAttributes,
+            extraWithoutZip64: stripZip64Extra(record.extraData),
+            commentData: record.commentData,
+            emitDataDescriptor: isLegacyDataDescCrypto,
+            sink: sink
+        ) { outSink in
+            if record.compressedSize < BoltConcurrency.streamingThresholdBytes {
+                let rawPayload = try reader.readRawPayload(for: record, accessor: accessor)
+                try outSink.writeData(rawPayload)
+            } else {
+                try reader.streamRawPayload(for: record, accessor: accessor) { chunk in
+                    try outSink.writeData(chunk)
+                }
+            }
+        }
+    }
+
+    static func writeRawEntry(
         rawPathBytes: Data,
         flags: UInt16,
         method: UInt16,
@@ -821,7 +843,7 @@ public enum ZipWriter {
         )
     }
 
-    private static func finishCentralDirectory(
+    static func finishCentralDirectory(
         entries: [CentralDirEntry],
         comment: String,
         sink: ZipVolumeSink
@@ -959,7 +981,7 @@ public enum ZipWriter {
         return output
     }
 
-    private static func stripZip64Extra(_ extra: Data) -> Data {
+    static func stripZip64Extra(_ extra: Data) -> Data {
         var cleaned = Data()
         var pos = 0
         while pos + 4 <= extra.count {

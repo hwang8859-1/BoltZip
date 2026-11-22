@@ -110,10 +110,29 @@ typedef struct {
     uint64_t output_limit; /* 0 means unspecified unless exact_size is set */
     int exact_size;
     int size_exceeded;
+    int stop_on_limit;
+    int limit_reached;
 } bolt_sink_t;
 
 static int sink_write(bolt_sink_t *sink, const uint8_t *data, size_t len) {
     if (len == 0) return 0;
+    if (sink->stop_on_limit) {
+        if (sink->bytes_written >= sink->output_limit) {
+            sink->limit_reached = 1;
+            return -1;
+        }
+        uint64_t room = sink->output_limit - sink->bytes_written;
+        size_t keep = (uint64_t)len < room ? len : (size_t)room;
+        if (dyn_buf_append(&sink->buf, data, keep) != 0) {
+            return -1;
+        }
+        sink->bytes_written += (uint64_t)keep;
+        if (sink->bytes_written >= sink->output_limit) {
+            sink->limit_reached = 1;
+            return -1;
+        }
+        return 0;
+    }
     if (sink->exact_size && (uint64_t)len > sink->output_limit - sink->bytes_written) {
         sink->size_exceeded = 1;
         return -1;
@@ -212,7 +231,9 @@ static bolt_status_t run_compress_deflate(
     bolt_source_t *src,
     bolt_sink_t *sink,
     bolt_container_t container,
-    int32_t level
+    int32_t level,
+    const char *gzip_name,
+    uint32_t gzip_mtime
 ) {
     int lvl = clamp_i32(level, 0, 9);
     int window_bits = (container == BOLT_CONTAINER_GZIP) ? (MAX_WBITS + 16) : (-MAX_WBITS);
@@ -222,6 +243,15 @@ static bolt_status_t run_compress_deflate(
     int zret = deflateInit2(&strm, lvl, Z_DEFLATED, window_bits, 8, Z_DEFAULT_STRATEGY);
     if (zret != Z_OK) {
         return status_err(zret, "zlib deflateInit2 failed", strm.msg);
+    }
+
+    gz_header gz_hdr;
+    if (container == BOLT_CONTAINER_GZIP && gzip_name && gzip_name[0] != '\0') {
+        memset(&gz_hdr, 0, sizeof(gz_hdr));
+        gz_hdr.name = (Bytef *)gzip_name;
+        gz_hdr.time = (uLong)gzip_mtime;
+        gz_hdr.os = 3; /* Unix */
+        deflateSetHeader(&strm, &gz_hdr);
     }
 
     uint8_t *in_buf = (uint8_t *)malloc(BOLT_CHUNK_SIZE);
@@ -834,13 +864,15 @@ static bolt_status_t dispatch_compress(
     int32_t level,
     bolt_source_t *src,
     bolt_sink_t *sink,
-    int32_t max_workers
+    int32_t max_workers,
+    const char *gzip_name,
+    uint32_t gzip_mtime
 ) {
     switch (algo) {
         case BOLT_ALGO_STORE:
             return run_compress_store(src, sink);
         case BOLT_ALGO_DEFLATE:
-            return run_compress_deflate(src, sink, container, level);
+            return run_compress_deflate(src, sink, container, level, gzip_name, gzip_mtime);
         case BOLT_ALGO_BZIP2:
             return run_compress_bzip2(src, sink, level);
         case BOLT_ALGO_ZSTD:
@@ -968,7 +1000,7 @@ bolt_status_t bolt_compress_buffer_workers(
     }
 
     int32_t sanitized_workers = max_workers < 0 ? 0 : max_workers;
-    bolt_status_t status = dispatch_compress(algo, container, level, &src, &sink, sanitized_workers);
+    bolt_status_t status = dispatch_compress(algo, container, level, &src, &sink, sanitized_workers, NULL, 0);
     if (status.code != 0) {
         dyn_buf_free(&sink.buf);
         return status;
@@ -1059,6 +1091,8 @@ static bolt_status_t run_compress_file_internal(
     const char *src_path,
     const char *dst_path,
     int32_t max_workers,
+    const char *gzip_name,
+    uint32_t gzip_mtime,
     bolt_progress_cb progress_cb,
     bolt_control_cb control_cb,
     void *ctx
@@ -1095,7 +1129,7 @@ static bolt_status_t run_compress_file_internal(
     bolt_sink_t sink = { .is_file = 1, .fp = out_fp };
 
     int32_t sanitized_workers = max_workers < 0 ? 0 : max_workers;
-    bolt_status_t status = dispatch_compress(algo, container, level, &src, &sink, sanitized_workers);
+    bolt_status_t status = dispatch_compress(algo, container, level, &src, &sink, sanitized_workers, gzip_name, gzip_mtime);
     fclose(in_fp);
     if (fclose(out_fp) != 0 && status.code == 0) {
         status = status_err(errno, "Failed closing output file", strerror(errno));
@@ -1115,7 +1149,7 @@ bolt_status_t bolt_compress_file(
     bolt_progress_cb progress_cb,
     void *ctx
 ) {
-    return run_compress_file_internal(algo, container, level, src_path, dst_path, 0, progress_cb, NULL, ctx);
+    return run_compress_file_internal(algo, container, level, src_path, dst_path, 0, NULL, 0, progress_cb, NULL, ctx);
 }
 
 bolt_status_t bolt_compress_file_workers(
@@ -1128,7 +1162,20 @@ bolt_status_t bolt_compress_file_workers(
     bolt_control_cb control_cb,
     void *ctx
 ) {
-    return run_compress_file_internal(algo, container, level, src_path, dst_path, max_workers, NULL, control_cb, ctx);
+    return run_compress_file_internal(algo, container, level, src_path, dst_path, max_workers, NULL, 0, NULL, control_cb, ctx);
+}
+
+bolt_status_t bolt_compress_gzip_file_named(
+    int32_t level,
+    const char *src_path,
+    const char *dst_path,
+    const char *gzip_name,
+    uint32_t gzip_mtime,
+    int32_t max_workers,
+    bolt_control_cb control_cb,
+    void *ctx
+) {
+    return run_compress_file_internal(BOLT_ALGO_DEFLATE, BOLT_CONTAINER_GZIP, level, src_path, dst_path, max_workers, gzip_name, gzip_mtime, NULL, control_cb, ctx);
 }
 
 static bolt_status_t run_decompress_file_internal(
@@ -1227,6 +1274,63 @@ bolt_status_t bolt_decompress_file_ex(
     void *ctx
 ) {
     return run_decompress_file_internal(algo, container, src_path, dst_path, 0, NULL, NULL, exact_output_len, NULL, control_cb, ctx);
+}
+
+bolt_status_t bolt_decompress_file_prefix(
+    bolt_algo_t algo,
+    bolt_container_t container,
+    const char *src_path,
+    size_t max_output_len,
+    bolt_buffer_t *output
+) {
+    if (!src_path || !output) return status_err(EINVAL, "Invalid arguments", NULL);
+    output->data = NULL;
+    output->size = 0;
+
+    struct stat st;
+    if (stat(src_path, &st) != 0) {
+        return status_err(errno, "Cannot stat input file", strerror(errno));
+    }
+
+    FILE *in_fp = fopen(src_path, "rb");
+    if (!in_fp) return status_err(errno, "Cannot open input file", strerror(errno));
+
+    bolt_source_t src = {
+        .is_file = 1,
+        .fp = in_fp,
+        .buf = NULL,
+        .buf_len = 0,
+        .buf_pos = 0,
+        .total_bytes = (uint64_t)st.st_size,
+        .bytes_read = 0,
+        .progress_cb = NULL,
+        .progress_ctx = NULL,
+        .control_cb = NULL,
+        .control_ctx = NULL
+    };
+
+    bolt_sink_t sink = {0};
+    sink.output_limit = (uint64_t)max_output_len;
+    sink.stop_on_limit = 1;
+    size_t initial = max_output_len > 0 ? max_output_len : 1;
+    if (dyn_buf_init(&sink.buf, initial) != 0) {
+        fclose(in_fp);
+        return status_err(ENOMEM, "Out of memory", NULL);
+    }
+
+    bolt_status_t status = dispatch_decompress(algo, container, &src, &sink);
+    fclose(in_fp);
+    if (sink.limit_reached) {
+        status = status_ok();
+    }
+    if (status.code != 0) {
+        dyn_buf_free(&sink.buf);
+        return status;
+    }
+
+    output->data = sink.buf.data;
+    output->size = sink.buf.size;
+    return status;
 }
 
 bolt_status_t bolt_verify_file(

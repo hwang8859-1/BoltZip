@@ -1,4 +1,70 @@
+import Darwin
 import Foundation
+
+public struct ArchiveExcludeMatcher: Sendable {
+    private let patterns: [String]
+
+    public init(patterns: [String]) {
+        self.patterns = Self.normalize(patterns)
+    }
+
+    public var isEmpty: Bool { patterns.isEmpty }
+
+    public static func parse(_ rawText: String) -> [String] {
+        rawText
+            .components(separatedBy: CharacterSet(charactersIn: ",;\r\n"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    public static func normalize(_ rawPatterns: [String]) -> [String] {
+        rawPatterns.compactMap { raw in
+            var p = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            while p.hasPrefix("./") { p.removeFirst(2) }
+            while p.hasPrefix("/") { p.removeFirst() }
+            while p.hasSuffix("/") { p.removeLast() }
+            return p.isEmpty ? nil : p
+        }
+    }
+
+    public func matches(archivePath: String, relativeWithinRoot: String? = nil, itemName: String) -> Bool {
+        guard !patterns.isEmpty else { return false }
+        let cleanArchive = Self.stripSlashes(archivePath)
+        let cleanRel = relativeWithinRoot.map(Self.stripSlashes)
+        for pattern in patterns {
+            if pattern.contains("/") {
+                if Self.globMatches(pattern: pattern, candidate: cleanArchive, pathname: true) {
+                    return true
+                }
+                if let cleanRel, !cleanRel.isEmpty,
+                   Self.globMatches(pattern: pattern, candidate: cleanRel, pathname: true) {
+                    return true
+                }
+            } else {
+                if Self.globMatches(pattern: pattern, candidate: itemName, pathname: false) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    private static func stripSlashes(_ path: String) -> String {
+        var out = path
+        while out.hasPrefix("/") { out.removeFirst() }
+        while out.hasSuffix("/") { out.removeLast() }
+        return out
+    }
+
+    private static func globMatches(pattern: String, candidate: String, pathname: Bool) -> Bool {
+        let flags = FNM_CASEFOLD | (pathname ? FNM_PATHNAME : 0)
+        return pattern.withCString { patPtr in
+            candidate.withCString { candPtr in
+                fnmatch(patPtr, candPtr, flags) == 0
+            }
+        }
+    }
+}
 
 struct ArchiveInputItem: Sendable {
     let archivePath: String
@@ -16,10 +82,12 @@ enum ArchiveInputCollector {
         from inputURLs: [URL],
         excludeMacJunk: Bool,
         preserveSymlinks: Bool = true,
+        excludePatterns: [String] = [],
         excluding excludedURLs: [URL] = [],
         controller: ArchiveTaskController? = nil
     ) throws -> [ArchiveInputItem] {
         let fm = FileManager.default
+        let matcher = ArchiveExcludeMatcher(patterns: excludePatterns)
         var items: [ArchiveInputItem] = []
         let excluded = Set(excludedURLs.map { $0.standardizedFileURL.path })
         var seenInputs: Set<String> = []
@@ -55,6 +123,9 @@ enum ArchiveInputCollector {
                 suffix += 1
             }
             if excludeMacJunk && MacJunkFilter.isJunk(path: originalName) {
+                continue
+            }
+            if matcher.matches(archivePath: originalName, relativeWithinRoot: originalName, itemName: originalName) {
                 continue
             }
 
@@ -137,6 +208,12 @@ enum ArchiveInputCollector {
                 let archiveRel = "\(rootName)/\(rel)"
 
                 if excludeMacJunk && MacJunkFilter.isJunk(path: archiveRel) {
+                    if (try? childURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+                        enumerator.skipDescendants()
+                    }
+                    continue
+                }
+                if matcher.matches(archivePath: archiveRel, relativeWithinRoot: rel, itemName: childURL.lastPathComponent) {
                     if (try? childURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
                         enumerator.skipDescendants()
                     }

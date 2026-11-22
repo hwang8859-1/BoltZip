@@ -67,6 +67,13 @@ enum ZipEntryStoragePolicy {
 extension BoltArchiveEngine {
     public static func entryCompressionProfile(at archive: URL, path: String,
                                                encoding: FilenameEncodingOption = .auto) throws -> ArchiveEntryCompressionProfile {
+        let format = try ArchiveFormat.requireForReading(from: archive)
+        if format == .sevenZip {
+            return ArchiveEntryCompressionProfile(method: 14, algorithm: .xz, recordedLevel: nil)
+        }
+        guard format == .zip else {
+            return ArchiveEntryCompressionProfile(method: 0, algorithm: nil, recordedLevel: nil)
+        }
         let reader = ZipReader(url: archive)
         let parsed = try reader.parseArchive()
         let records = parsed.records.filter { ZipReader.makeEntry(from: $0, encoding: encoding).path == path }

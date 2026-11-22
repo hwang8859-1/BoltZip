@@ -211,9 +211,12 @@ final class ArchiveReliabilityTests: XCTestCase {
 
     func testUnsupportedEncryptionAndSplitOptionsFailWithoutReplacingOutput() throws {
         let file = try source()
-        for format in ArchiveFormat.creatableFormats where format != .zip {
+        for format in ArchiveFormat.creatableFormats {
             let output = try source("preserved.\(format.fileExtension)", data: Data("existing archive".utf8))
-            var unsupportedOptions = [CreateArchiveOptions(format: format, splitVolumeSizeBytes: 65536)]
+            var unsupportedOptions: [CreateArchiveOptions] = []
+            if !format.supportsSplitVolumes {
+                unsupportedOptions.append(CreateArchiveOptions(format: format, splitVolumeSizeBytes: 65536))
+            }
             if !format.supportsEncryption {
                 unsupportedOptions.append(CreateArchiveOptions(format: format, encryption: .aes256, password: "secret"))
             }
