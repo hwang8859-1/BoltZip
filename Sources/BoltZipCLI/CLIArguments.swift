@@ -4,17 +4,31 @@ import Foundation
 struct CLIArguments {
     let positional: [String]
     let options: [String: String]
+    let multiOptions: [String: [String]]
     let flags: Set<String>
 
     var useJSON: Bool { flags.contains("json") }
     var password: String? { options["password"] }
+    var allowInteractivePasswordPrompt: Bool {
+        guard password == nil && !flags.contains("password-stdin") else { return false }
+        return flags.contains("ask-password") || CLIPasswordInput.isInteractiveTTY
+    }
     var encoding: FilenameEncodingOption {
         options["encoding"].flatMap(FilenameEncodingOption.init(rawValue:)) ?? .auto
     }
     var stripMacJunk: Bool { !flags.contains("keep-junk") }
     var restoreSymlinks: Bool { !flags.contains("no-symlinks") }
-    var encryption: EncryptionMethod {
-        password == nil ? .none : (flags.contains("zipcrypto") ? .zipCrypto : .aes256)
+    var excludePatterns: [String] {
+        (multiOptions["exclude"] ?? []).flatMap { ArchiveExcludeMatcher.parse($0) }
+    }
+    var presetName: String? { options["preset"] }
+    var namePattern: String? { options["name-pattern"] }
+
+    func resolvedEncryption(password: String?, defaultEncryption: EncryptionMethod = .none) -> EncryptionMethod {
+        guard let password, !password.isEmpty else { return .none }
+        if flags.contains("zipcrypto") { return .zipCrypto }
+        if flags.contains("aes256") { return .aes256 }
+        return defaultEncryption == .none ? .aes256 : defaultEncryption
     }
 
     var extractionPaths: (archive: URL, destination: URL)? {
@@ -28,11 +42,13 @@ struct CLIArguments {
     init(_ args: [String]) {
         let booleanFlags: Set<String> = [
             "aes256", "zipcrypto", "encrypt-filenames", "keep-junk", "no-symlinks",
-            "status", "restore", "include-iso", "json", "quiet"
+            "status", "restore", "include-iso", "json", "quiet",
+            "password-stdin", "ask-password", "quick"
         ]
 
         var positional: [String] = []
         var options: [String: String] = [:]
+        var multiOptions: [String: [String]] = [:]
         var flags: Set<String> = []
         var i = 0
         while i < args.count {
@@ -43,7 +59,9 @@ struct CLIArguments {
                     flags.insert(key)
                     i += 1
                 } else if i + 1 < args.count {
-                    options[key] = args[i + 1]
+                    let val = args[i + 1]
+                    options[key] = val
+                    multiOptions[key, default: []].append(val)
                     i += 2
                 } else {
                     i += 1
@@ -56,6 +74,7 @@ struct CLIArguments {
 
         self.positional = positional
         self.options = options
+        self.multiOptions = multiOptions
         self.flags = flags
     }
 
