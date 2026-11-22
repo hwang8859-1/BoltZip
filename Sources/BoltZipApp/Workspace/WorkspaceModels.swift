@@ -25,13 +25,16 @@ enum ActiveSheet: Identifiable {
     case extractOptions(ExtractMode)
     case integrityReport(IntegrityReport)
     case benchmark
-    case passwordPrompt(PasswordPurpose)
+    case passwordPrompt(PasswordPurpose, wrongAttempt: Bool = false)
     case createFolder(parentFolder: String)
     case renamePath(oldPath: String, currentName: String)
     case entryProperties(ArchiveEntry)
     case editArchiveComment(current: String)
     case updateAvailable(UpdateReleaseInfo)
     case editEntryText(ArchiveTextDocument)
+    case managePresets(initialProfileID: UUID? = nil)
+    case recoverZip(initialSource: URL? = nil)
+    case convertArchives([URL])
 
     var id: String {
         switch self {
@@ -46,18 +49,47 @@ enum ActiveSheet: Identifiable {
         case .editArchiveComment: return "editArchiveComment"
         case .updateAvailable(let info): return "update-\(info.version)"
         case .editEntryText(let document): return "edit-entry-\(document.entryPath)"
+        case .managePresets: return "managePresets"
+        case .recoverZip(let src): return "recoverZip-\(src?.path ?? "picker")"
+        case .convertArchives: return "convertArchives"
         }
     }
 }
 
-enum PasswordPurpose {
-    case openArchive(url: URL, fromExternalFinder: Bool)
+enum PasswordPurpose: Sendable {
+    case openArchive(
+        url: URL,
+        fromExternalFinder: Bool,
+        isNestedOpening: Bool,
+        initialFolder: String,
+        encoding: FilenameEncodingOption
+    )
+    case returnToParent(frameID: UUID)
     case openNested(ArchiveEntry)
+    case openNestedContents(ArchiveEntry, parentPassword: String?)
     case preview(ArchiveEntry)
-    case extract(archiveURL: URL, options: ExtractOptions)
+    case extract(archiveURL: URL, options: ExtractOptions, trashArchiveOnCompletion: Bool)
+    case exportSelectedZip(SelectedZipExport)
     case testIntegrity(archiveURL: URL)
     case unlockForEdit(urls: [URL], targetFolder: String)
+    case unlockEditOperations([ArchiveEditOperation])
     case editText(ArchiveEntry)
+
+    func prompt(for error: any Error) -> ActiveSheet? {
+        switch error {
+        case BoltZipError.passwordRequired: return .passwordPrompt(self)
+        case BoltZipError.wrongPassword: return .passwordPrompt(self, wrongAttempt: true)
+        default: return nil
+        }
+    }
+}
+
+struct SelectedZipExport: Sendable {
+    let source: URL
+    let destination: URL
+    let entryPaths: Set<String>
+    let encoding: FilenameEncodingOption
+    let stripMacJunk: Bool
 }
 
 struct ArchiveNavigationFrame: Identifiable, Sendable {

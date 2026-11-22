@@ -127,6 +127,24 @@ struct MainWindowView: View {
         } message: { req in
             Text(l.confirmDeleteMessage(req.paths.count))
         }
+        .alert(
+            l.recoverZipTitle,
+            isPresented: Binding(
+                get: { vm.pendingRecoverZipURL != nil },
+                set: { if !$0 { vm.pendingRecoverZipURL = nil } }
+            ),
+            presenting: vm.pendingRecoverZipURL
+        ) { url in
+            Button(l.recoverZipOfferBtn) {
+                vm.pendingRecoverZipURL = nil
+                vm.activeSheet = .recoverZip(initialSource: url)
+            }
+            Button(l.cancel, role: .cancel) {
+                vm.pendingRecoverZipURL = nil
+            }
+        } message: { url in
+            Text(l.recoverZipInspectFailedOffer(url.lastPathComponent))
+        }
     }
 
     @ToolbarContentBuilder
@@ -272,13 +290,15 @@ struct MainWindowView: View {
                                 vm.activeSheet = .createFolder(parentFolder: vm.currentFolder)
                             }
 
-                            ToolbarPillIconButton(
-                                systemImage: "text.bubble",
-                                label: l.archiveCommentEditBtn,
-                                helpText: l.archiveCommentTitle,
-                                isActive: !listing.comment.isEmpty
-                            ) {
-                                vm.activeSheet = .editArchiveComment(current: listing.comment)
+                            if listing.format.supportsArchiveComment {
+                                ToolbarPillIconButton(
+                                    systemImage: "text.bubble",
+                                    label: l.archiveCommentEditBtn,
+                                    helpText: l.archiveCommentTitle,
+                                    isActive: !listing.comment.isEmpty
+                                ) {
+                                    vm.activeSheet = .editArchiveComment(current: listing.comment)
+                                }
                             }
                         }
 
@@ -413,8 +433,8 @@ struct MainWindowView: View {
             IntegrityReportSheet(vm: vm, report: report)
         case .benchmark:
             BenchmarkSheet(vm: vm)
-        case .passwordPrompt(let purpose):
-            PasswordPromptSheet(vm: vm, purpose: purpose)
+        case .passwordPrompt(let purpose, let wrongAttempt):
+            PasswordPromptSheet(vm: vm, purpose: purpose, wrongAttempt: wrongAttempt)
         case .createFolder(let parentFolder):
             SimpleNamePromptSheet(
                 vm: vm,
@@ -442,6 +462,12 @@ struct MainWindowView: View {
             UpdateAvailableSheet(vm: vm, release: info)
         case .editEntryText(let document):
             ArchiveTextEditorSheet(vm: vm, document: document)
+        case .managePresets(let profileID):
+            CompressionProfilesSheet(vm: vm, initialProfileID: profileID)
+        case .recoverZip(let initialSource):
+            ZipRecoverySheet(vm: vm, initialSource: initialSource)
+        case .convertArchives(let sources):
+            ConvertArchivesSheet(vm: vm, initialSources: sources)
         }
     }
 }

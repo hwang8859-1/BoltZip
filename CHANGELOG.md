@@ -2,6 +2,37 @@
 
 All notable changes to **BoltZip** will be documented in this file.
 
+## [1.0.5] - 2026-11-22
+
+### Added
+- Create, open, preview, extract, and verify split-volume 7z archives (`.7z.001`, `.7z.002`, ...) including AES-256 data and filename encryption, missing-volume detection, source-volume protection, and 7-Zip interoperability.
+- Save and reuse compression presets (`CompressionProfileStore`: format, codec/level, split volume size, `{name}/{date}/{datetime}` naming templates, glob exclude rules, optional encryption method without saving plaintext passwords) across the compression wizard, batch preset workflows, Finder default-preset action, and CLI `preset` subcommands.
+- Scan and recover readable, verifiable entries from damaged ZIP archives (with automatic Local File Header fallback scan when EOCD/Central Directory is damaged, Data Descriptor recovery, and surviving-disk split recovery) into a new ZIP while leaving the original damaged file untouched and reporting per-entry failure reasons in both the App and `boltzip recover`.
+- Edit existing non-split `.7z` archives (including plain solid and AES-256 / encrypted-header archives) with `add`, `mkdir`, `rename`, `replace`, text editing, and `delete`, while keeping split `.7z.001` read-only and restricting archive comments to ZIP.
+- Batch format conversion (`BoltArchiveEngine.convertArchives`, UI sheet, Finder menu, and `boltzip convert`) preserving directory structures, symbolic links, encryption/password prompts, and source archive protection.
+- Create standalone single-file `.gz` (preserving RFC 1952 `FNAME`) and `.xz` compressed streams in both the desktop UI and CLI.
+- Opt-in macOS Keychain password storage (`ArchiveKeychainService`) across unlock prompts and HUD with Settings management and clear action, plus `--password-stdin` and echoed-disabled TTY password prompts in `boltzip`.
+- Create AES-256 encrypted 7z archives with an option to require the password before showing file and folder names. Open, preview, extract and test encrypted 7z archives in BoltZip.
+- Open, preview, extract and test encrypted RAR4/5 and legacy solid RAR archives using the bundled 7-Zip reader.
+
+### Fixed
+- Recover surviving split-volume ZIP entries when an intermediate `.z01` part is missing, skip spurious inner Local File Headers inside uncompressed stored nested ZIP payloads during fallback scan, and reject `..` traversal paths during recovery.
+- Enforce ancestor regular-file collision checks in 7z in-place editing (`rename`, `mkdir`, `add`), sanitize RFC 1952 gzip `FNAME` headers to basename-only safe filenames, and protect all source volumes during batch conversion overwrite checks.
+- Fix Keychain lookup/stale-invalidation across in-place archive edits and batch integrity verification, sync preset store IDs on name upsert, show selected preset metadata in batch conversion, and fix CLI `--preset --encrypt-filenames` precedence and `--ask-password` on `recover`.
+- Retry password prompts properly during Explorer drag-out promises (`ArchiveDragOutProvider`), archive unlock-for-edit flows, and per-operation Keychain stale-entry invalidation without falling back to generic failure alerts.
+- Enforce `ArchiveFormat.supportsArchiveComment` across Explorer toolbar, inspector, and context menus so 7z archives do not expose ZIP-only comment actions.
+- Detect Zstandard and LZ4 TAR wrappers (`.tar.zst`, `.tar.lz4`) via the bundled codecs without depending on external CLI tools in `PATH`.
+- Report missing RAR volumes by name and preserve existing files when a split archive is incomplete.
+- Protect source archives and their volumes during extraction. Preserve both outputs when a Finder batch produces the same name, and publish dragged folders only after staging them on the destination volume.
+- Resolve RAR5 hard-link payloads and skip already existing files before decoding.
+- Detect renamed archives by content in the Finder and drop workflows, including stand-alone ZIP files named like split volumes.
+- Return a nonzero status when encrypted ZIP entries could not be verified.
+- Use the configured workers for LZMA2 and Bzip2 in ordinary 7z creation, report intermediate progress for encrypted 7z, and reject ambiguous paths before publication.
+- Verify the application version and run packaged CLI regressions from the mounted delivery DMG.
+- Preserve source archives inside Finder replacement folders and reserve original directory names when keeping both extraction outputs.
+- Protect input archives and volumes when exporting selected entries to a new ZIP, and let users enter or retry the password during export.
+- Report out-of-range CLI split sizes as argument errors.
+
 ## [1.0.4] - 2026-11-20
 
 ### Added

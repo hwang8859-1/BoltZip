@@ -1,6 +1,36 @@
 import Foundation
 
 extension BoltArchiveEngine {
+    public static func exportSelectedEntriesAsZip(
+        at source: URL, to destination: URL, entryPaths: Set<String>,
+        password: String? = nil, encoding: FilenameEncodingOption = .auto, stripMacJunk: Bool = true
+    ) throws {
+        guard !entryPaths.isEmpty else { throw BoltZipError.entryNotFound(source.lastPathComponent) }
+
+        let protected = Set(try extractionSourceURLs(archiveURL: source, password: password)
+            .map(ArchiveExtractionDestination.pathKey))
+        guard !protected.contains(ArchiveExtractionDestination.pathKey(destination)) else {
+            throw ArchiveOperationError.outputIsInput
+        }
+
+        let stage = try ArchiveOutputTransaction.makeStage(for: destination)
+        let fm = FileManager.default
+        defer { try? fm.removeItem(at: stage) }
+        let contents = stage.appendingPathComponent("contents", isDirectory: true)
+        try extract(archiveURL: source, options: ExtractOptions(
+            destinationURL: contents, mode: .selected(entryPaths), password: password,
+            encoding: encoding, stripMacJunk: stripMacJunk
+        ))
+        let inputs = try fm.contentsOfDirectory(at: contents, includingPropertiesForKeys: nil)
+        let zip = stage.appendingPathComponent("export.zip")
+        try createArchive(from: inputs, to: zip, options: CreateArchiveOptions(excludeMacJunk: stripMacJunk))
+
+        guard !protected.contains(ArchiveExtractionDestination.pathKey(destination)) else {
+            throw ArchiveOperationError.outputIsInput
+        }
+        try ArchiveOutputTransaction.publish([zip], to: [destination])
+    }
+
     /// Explicit fallback: decode into private staging and produce a real ZIP at a new path.
     public static func exportEditedArchiveAsZip(at source: URL, to destination: URL,
         operations: [ZipEditOperation], password: String? = nil,

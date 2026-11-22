@@ -41,6 +41,12 @@ func runCLI(_ args: [String]) async -> Int32 {
             return try ArchiveCommands.makeDirectory(arguments, progress: progress)
         case "mv":
             return try ArchiveCommands.move(arguments, progress: progress)
+        case "recover":
+            return try ArchiveCommands.recover(arguments, progress: progress)
+        case "convert":
+            return try ArchiveCommands.convert(arguments, progress: progress)
+        case "preset":
+            return try ArchiveCommands.preset(arguments)
         default:
             printUsage()
             return 1

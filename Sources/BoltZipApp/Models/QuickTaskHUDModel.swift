@@ -112,16 +112,9 @@ final class QuickTaskHUDModel {
             switch self {
             case .compress:
                 return self
-            case .extract(let id, let archiveURL, let options):
-                let updated = ExtractOptions(
-                    destinationURL: options.destinationURL,
-                    mode: options.mode,
-                    overwritePolicy: options.overwritePolicy,
-                    password: password,
-                    encoding: options.encoding,
-                    stripMacJunk: options.stripMacJunk
-                )
-                return .extract(id: id, archiveURL: archiveURL, options: updated)
+            case .extract(let id, let archiveURL, var options):
+                options.password = password
+                return .extract(id: id, archiveURL: archiveURL, options: options)
             }
         }
     }
@@ -147,6 +140,7 @@ final class QuickTaskHUDModel {
     private(set) var estimatedRemainingSeconds: Double?
 
     var passwordInput: String = ""
+    var rememberPasswordInKeychain: Bool = false
     private(set) var isHovering: Bool = false
 
     // MARK: - Window Coordination & Completion Hooks
@@ -166,6 +160,8 @@ final class QuickTaskHUDModel {
     private var uiTimerTask: Task<Void, Never>?
     private var autoDismissTask: Task<Void, Never>?
     private var activeGeneration: Int = 0
+    private var keychainAttemptedOpIDs: Set<UUID> = []
+    private var pendingKeychainSaves: [UUID: (url: URL, password: String)] = [:]
 
     private var accumulatedActiveSeconds: Double = 0
     private var segmentStartDate: Date?
@@ -271,15 +267,25 @@ final class QuickTaskHUDModel {
     }
 
     func submitPassword() {
-        guard case .needsPassword = phase, let op = currentOperation else { return }
+        guard case .needsPassword(let archiveURL, _) = phase, let op = currentOperation else { return }
         let entered = passwordInput
         guard !entered.isEmpty else { return }
+        if rememberPasswordInKeychain {
+            pendingKeychainSaves[op.id] = (archiveURL, entered)
+        } else {
+            pendingKeychainSaves.removeValue(forKey: op.id)
+        }
         passwordInput = ""
+        rememberPasswordInKeychain = false
         start(op.withPassword(entered), preserveElapsed: false)
     }
 
     func cancelPasswordPrompt() {
+        if let op = currentOperation {
+            pendingKeychainSaves.removeValue(forKey: op.id)
+        }
         passwordInput = ""
+        rememberPasswordInKeychain = false
         stop()
     }
 
@@ -320,11 +326,20 @@ final class QuickTaskHUDModel {
 
     // MARK: - Private Execution
 
-    private func start(_ operation: Operation, preserveElapsed: Bool = false) {
+    private func start(_ rawOperation: Operation, preserveElapsed: Bool = false) {
         autoDismissTask?.cancel()
         autoDismissTask = nil
         runningTask?.cancel()
         stopUITimer()
+
+        var operation = rawOperation
+        if case .extract(let opID, let archiveURL, let opts) = operation,
+           opts.password == nil,
+           !keychainAttemptedOpIDs.contains(opID),
+           let kc = ArchiveKeychainService.shared.password(for: archiveURL) {
+            keychainAttemptedOpIDs.insert(opID)
+            operation = operation.withPassword(kc)
+        }
 
         activeGeneration &+= 1
         let generation = activeGeneration
@@ -338,6 +353,7 @@ final class QuickTaskHUDModel {
         smoothedBytesPerSec = 0
         estimatedRemainingSeconds = nil
         passwordInput = ""
+        rememberPasswordInKeychain = false
         lastSpeedSampleDate = nil
         lastSpeedSampleBytes = 0
 
@@ -391,7 +407,7 @@ final class QuickTaskHUDModel {
                     controller: controller,
                     progress: progress
                 )
-                return urls.last ?? outputURL
+                return options.format == .sevenZip ? (urls.first ?? outputURL) : (urls.last ?? outputURL)
 
             case .extract(_, let archiveURL, let options):
                 return try BoltArchiveEngine.extract(
@@ -464,6 +480,10 @@ final class QuickTaskHUDModel {
         }
 
         if let completedOp = currentOperation {
+            if let saveEntry = pendingKeychainSaves.removeValue(forKey: completedOp.id) {
+                try? ArchiveKeychainService.shared.savePassword(saveEntry.password, for: saveEntry.url)
+            }
+            keychainAttemptedOpIDs.remove(completedOp.id)
             onOperationSucceeded?(completedOp, resultURL)
         }
 
@@ -498,8 +518,18 @@ final class QuickTaskHUDModel {
                     return
                 }
             case .wrongPassword:
-                if case .extract(_, let archiveURL, _) = operation {
-                    phase = .needsPassword(archiveURL: archiveURL, wrongAttempt: true)
+                if case .extract(let opID, let archiveURL, let opts) = operation {
+                    pendingKeychainSaves.removeValue(forKey: opID)
+                    let usedStaleKC = keychainAttemptedOpIDs.contains(opID) && opts.password != nil
+                    if usedStaleKC {
+                        try? ArchiveKeychainService.shared.removePassword(for: archiveURL)
+                        currentOperation = .extract(id: opID, archiveURL: archiveURL, options: {
+                            var cleared = opts
+                            cleared.password = nil
+                            return cleared
+                        }())
+                    }
+                    phase = .needsPassword(archiveURL: archiveURL, wrongAttempt: !usedStaleKC)
                     onKeyFocusRequested?()
                     return
                 }

@@ -71,6 +71,32 @@ struct WelcomeDropZoneView: View {
                 HStack(spacing: 8) { archiveButtons(l: l) }
                 VStack(spacing: 6) { archiveButtons(l: l) }
             }
+
+            HStack(spacing: 8) {
+                Button {
+                    vm.activeSheet = .managePresets()
+                } label: {
+                    Label(l.presetMenuTitle, systemImage: "slider.horizontal.2.rectangle.and.arrow.trianglehead.2.clockwise")
+                }
+                .controlSize(.small)
+                .boltGlassButton()
+
+                Button {
+                    vm.openConvertArchivesPanel()
+                } label: {
+                    Label(l.convertArchivesBtn, systemImage: "arrow.triangle.2.circlepath")
+                }
+                .controlSize(.small)
+                .boltGlassButton()
+
+                Button {
+                    vm.openRecoverZipPanel()
+                } label: {
+                    Label(l.recoverZipBtn, systemImage: "bandage")
+                }
+                .controlSize(.small)
+                .boltGlassButton()
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, minHeight == nil ? 18 : 14)

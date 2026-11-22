@@ -79,6 +79,15 @@ private enum FinderL10n {
     static var repackEncryptCompress: String {
         tr("finder.repackEncryptCompress", "重新打包 / 加密压缩...", "重新打包 / 加密壓縮...", "Repack / Encrypt Archive...", "再圧縮・暗号化...")
     }
+    static var compressQuickPreset: String {
+        tr("finder.compressQuickPreset", "按默认方案快速压缩", "依預設方案快速壓縮", "Quick Compress with Default Preset", "既定プリセットでクイック圧縮")
+    }
+    static var convertArchives: String {
+        tr("finder.convertArchives", "批量转换格式...", "批次轉換格式...", "Convert Format...", "フォーマット変換...")
+    }
+    static var recoverZip: String {
+        tr("finder.recoverZip", "修复损坏 ZIP...", "修復損毀 ZIP...", "Recover Damaged ZIP...", "破損 ZIP を復元...")
+    }
 }
 
 @objc(FinderSync)
@@ -139,6 +148,7 @@ final class FinderSync: FIFinderSync {
 
             if !onlyArchives {
                 if hasArchives { submenu.addItem(.separator()) }
+                addItem(to: submenu, title: FinderL10n.compressQuickPreset, icon: "bolt.badge.checkmark", action: #selector(compressQuickPresetAction(_:)))
                 addItem(to: submenu, title: FinderL10n.compressZip, icon: "doc.zipper", action: #selector(compressZipAction(_:)))
                 if targets.count > 1 {
                     addItem(to: submenu, title: FinderL10n.compressEachZip, icon: "rectangle.stack.fill", action: #selector(compressEachZipAction(_:)))
@@ -149,6 +159,10 @@ final class FinderSync: FIFinderSync {
                 addItem(to: submenu, title: FinderL10n.encryptSplitCompress, icon: "lock.shield.fill", action: #selector(compressWizardAction(_:)))
             } else {
                 submenu.addItem(.separator())
+                addItem(to: submenu, title: FinderL10n.convertArchives, icon: "arrow.triangle.2.circlepath", action: #selector(convertArchivesAction(_:)))
+                if targets.count == 1, let first = targets.first, first.pathExtension.lowercased() == "zip" {
+                    addItem(to: submenu, title: FinderL10n.recoverZip, icon: "bandage", action: #selector(recoverZipAction(_:)))
+                }
                 addItem(to: submenu, title: FinderL10n.repackEncryptCompress, icon: "lock.shield.fill", action: #selector(compressWizardAction(_:)))
             }
         }
@@ -251,6 +265,12 @@ final class FinderSync: FIFinderSync {
         if ext.count == 3 && ext.hasPrefix("r") && Int(ext.dropFirst()) != nil {
             return true
         }
+        if ext.count >= 3 && ext.utf8.allSatisfy({ $0 >= 48 && $0 <= 57 }) && (Int(ext) ?? 0) >= 1 {
+            let baseExt = url.deletingPathExtension().pathExtension.lowercased()
+            if baseExt == "7z" || baseExt == "cb7" {
+                return true
+            }
+        }
         return false
     }
 
@@ -265,6 +285,9 @@ final class FinderSync: FIFinderSync {
     @objc private func compressEachZipAction(_ sender: Any?) { dispatch(op: "compressEachZip", host: "hud") }
     @objc private func compressTarZstAction(_ sender: Any?) { dispatch(op: "compressTarZst", host: "hud") }
     @objc private func compress7zAction(_ sender: Any?) { dispatch(op: "compress7z", host: "hud") }
+    @objc private func compressQuickPresetAction(_ sender: Any?) { dispatch(op: "compressQuickPreset", host: "hud") }
+    @objc private func convertArchivesAction(_ sender: Any?) { dispatch(op: "convertArchives", host: "finder") }
+    @objc private func recoverZipAction(_ sender: Any?) { dispatch(op: "recoverZip", host: "finder") }
     @objc private func compressWizardAction(_ sender: Any?) { dispatch(op: "compressWizard", host: "finder") }
     @objc private func openWorkspaceAction(_ sender: Any?) { dispatch(op: "openWorkspace", host: "finder", includeTargets: false) }
 

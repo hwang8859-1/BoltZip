@@ -6,20 +6,25 @@ private func splitVolumeURL(for archiveURL: URL, disk: Int) -> URL {
 
 final class ZipVolumeAccessor: @unchecked Sendable {
     let mainURL: URL
-    let volumeURLs: [URL]
+    var volumeURLs: [URL] {
+        ioLock.lock()
+        defer { ioLock.unlock() }
+        return allVolumes.isEmpty ? [mainURL] : allVolumes
+    }
     private var handles: [Int: FileHandle] = [:]
     private var sizes: [Int: UInt64] = [:]
     private let ioLock = NSLock()
 
     static func isNumberedVolume(_ archiveURL: URL) -> Bool {
         let ext = archiveURL.pathExtension.lowercased()
-        return ext.hasPrefix("z") && Int(ext.dropFirst()) != nil
+        guard ext.hasPrefix("z"), Int(ext.dropFirst()) != nil else { return false }
+        return (try? ZipReader(url: archiveURL).parseArchive(resolveNumberedVolume: false).totalDisks) != 1
     }
 
-    init(archiveURL: URL) throws {
+    init(archiveURL: URL, resolveNumberedVolume: Bool = true) throws {
         // If opened via .z01/.z02, locate matching .zip central file
         let resolvedMain: URL
-        if Self.isNumberedVolume(archiveURL) {
+        if resolveNumberedVolume && Self.isNumberedVolume(archiveURL) {
             resolvedMain = archiveURL.deletingPathExtension().appendingPathExtension("zip")
         } else {
             resolvedMain = archiveURL
@@ -28,19 +33,18 @@ final class ZipVolumeAccessor: @unchecked Sendable {
             throw BoltZipError.missingSplitVolume(resolvedMain.lastPathComponent)
         }
         self.mainURL = resolvedMain
-        self.volumeURLs = [resolvedMain]
     }
 
     private var allVolumes: [URL] = []
 
-    func configureVolumes(totalDisks: Int) throws {
+    func configureVolumes(totalDisks: Int, allowMissingParts: Bool = false) throws {
         ioLock.lock()
         defer { ioLock.unlock() }
         var urls: [URL] = []
         if totalDisks > 1 {
             for disk in 0..<(totalDisks - 1) {
                 let part = splitVolumeURL(for: mainURL, disk: disk)
-                guard FileManager.default.fileExists(atPath: part.path) else {
+                if !allowMissingParts && !FileManager.default.fileExists(atPath: part.path) {
                     throw BoltZipError.missingSplitVolume(part.lastPathComponent)
                 }
                 urls.append(part)
@@ -81,6 +85,9 @@ final class ZipVolumeAccessor: @unchecked Sendable {
             return (fh, sz)
         }
         let url = list[disk]
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw BoltZipError.missingSplitVolume(url.lastPathComponent)
+        }
         let fh = try FileHandle(forReadingFrom: url)
         let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
         let sz = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
@@ -96,12 +103,15 @@ final class ZipVolumeAccessor: @unchecked Sendable {
         return sz
     }
 
-    func totalAvailableBytes() throws -> UInt64 {
+    func totalAvailableBytes(allowMissingParts: Bool = false) throws -> UInt64 {
         ioLock.lock()
         defer { ioLock.unlock() }
         let list = allVolumes.isEmpty ? [mainURL] : allVolumes
         var total: UInt64 = 0
         for disk in 0..<list.count {
+            if allowMissingParts && !FileManager.default.fileExists(atPath: list[disk].path) {
+                continue
+            }
             let (_, sz) = try handleLocked(forDisk: disk)
             total = try ArchiveByteCount.checkedSum(total, sz)
         }

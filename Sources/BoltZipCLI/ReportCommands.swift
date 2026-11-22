@@ -53,12 +53,20 @@ enum ReportCommands {
             printUsage()
             return 1
         }
+        let archiveURL = URL(fileURLWithPath: archivePath)
         let enc = arguments.encoding
-        let listing = try BoltArchiveEngine.inspect(
-            archiveURL: URL(fileURLWithPath: archivePath),
-            encoding: enc,
-            password: arguments.password
-        )
+        let initialPassword = try CLIPasswordInput.resolveInitialPassword(arguments: arguments)
+        let listing = try CLIPasswordInput.withPasswordRetry(
+            archiveURL: archiveURL,
+            initialPassword: initialPassword,
+            allowTTYPrompt: arguments.allowInteractivePasswordPrompt
+        ) { password in
+            try BoltArchiveEngine.inspect(
+                archiveURL: archiveURL,
+                encoding: enc,
+                password: password
+            )
+        }
         if arguments.useJSON {
             let fmt = ISO8601DateFormatter()
             let entryDicts: [[String: Any]] = listing.entries.map {
@@ -106,13 +114,26 @@ enum ReportCommands {
             printUsage()
             return 1
         }
+        let archiveURL = URL(fileURLWithPath: archivePath)
         let workers = try arguments.workerCount()
-        let report = try BoltArchiveEngine.testIntegrity(
-            archiveURL: URL(fileURLWithPath: archivePath),
-            password: arguments.password,
-            workerCount: workers,
-            progress: progress
-        )
+        let initialPassword = try CLIPasswordInput.resolveInitialPassword(arguments: arguments)
+        let report = try CLIPasswordInput.withPasswordRetry(
+            archiveURL: archiveURL,
+            initialPassword: initialPassword,
+            allowTTYPrompt: arguments.allowInteractivePasswordPrompt
+        ) { password in
+            let res = try BoltArchiveEngine.testIntegrity(
+                archiveURL: archiveURL,
+                password: password,
+                workerCount: workers,
+                progress: progress
+            )
+            // Surface missing password if archive entries required credentials and user enabled interactive retry
+            if arguments.allowInteractivePasswordPrompt && res.skippedEncryptedCount > 0 && password == nil {
+                throw BoltZipError.passwordRequired(archiveURL.lastPathComponent)
+            }
+            return res
+        }
         if arguments.useJSON {
             let resDicts: [[String: Any]] = report.results.map {
                 [
@@ -130,9 +151,9 @@ enum ReportCommands {
                 "elapsedSeconds": (report.elapsedSeconds * 1000).rounded() / 1000,
                 "results": resDicts
             ])
-            return report.failedCount == 0 ? 0 : 2
+            return report.isHealthy ? 0 : 2
         }
         print("Integrity Test: \(report.archiveName) -> passed \(report.passedCount)/\(report.totalEntries), failed \(report.failedCount), missingPassword \(report.skippedEncryptedCount) (\(String(format: "%.2fs", report.elapsedSeconds)))")
-        return report.failedCount == 0 ? 0 : 2
+        return report.isHealthy ? 0 : 2
     }
 }

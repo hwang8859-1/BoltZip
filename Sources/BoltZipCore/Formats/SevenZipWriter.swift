@@ -3,13 +3,16 @@ import Foundation
 
 enum SevenZipWriter {
     static func create(from inputs: [URL], to output: URL, algorithm: CompressionAlgorithm, level: Int?,
-                       excludeMacJunk: Bool, preserveSymlinks: Bool, controller: ArchiveTaskController?,
+                       excludeMacJunk: Bool, preserveSymlinks: Bool, excludePatterns: [String] = [],
+                       controller: ArchiveTaskController?,
                        progress: (@Sendable (OperationProgress) -> Void)?) throws {
         try controller?.checkpoint()
         try ArchiveOutputTransaction.validate(output)
         let items = try ArchiveInputCollector.collect(from: inputs, excludeMacJunk: excludeMacJunk,
                                                     preserveSymlinks: preserveSymlinks,
+                                                    excludePatterns: excludePatterns,
                                                     excluding: [output], controller: controller)
+        try SevenZipArchiveWriter.validatePaths(items)
         let total = try items.reduce(UInt64(0)) { try ArchiveByteCount.checkedSum($0, $1.fileSize) }
         let stage = try ArchiveOutputTransaction.makeStage(for: output)
         defer { try? FileManager.default.removeItem(at: stage) }

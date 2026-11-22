@@ -27,7 +27,7 @@ final class ArchiveReliabilityTests: XCTestCase {
         for format in ArchiveFormat.creatableFormats {
             let archive = root.appendingPathComponent("original.\(format.fileExtension)")
             try BoltArchiveEngine.createArchive(from: [file], to: archive, options: CreateArchiveOptions(format: format, algorithm: format.defaultAlgorithm))
-            for ext in ["arbitrary", "", "jar", "apk"] {
+            for ext in ["arbitrary", "", "jar", "apk", "r00", "z01"] {
                 let renamed = root.appendingPathComponent("renamed-\(format.rawValue)-\(ext)" + (ext.isEmpty ? "" : ".\(ext)"))
                 try FileManager.default.copyItem(at: archive, to: renamed)
                 XCTAssertEqual(try ArchiveFormat.detectForReading(from: renamed), format)
@@ -48,6 +48,132 @@ final class ArchiveReliabilityTests: XCTestCase {
         let symlink = root.appendingPathComponent("archive-link.unknown")
         try FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: root.appendingPathComponent("original.zip"))
         XCTAssertEqual(try ArchiveFormat.detectForReading(from: symlink), .zip)
+    }
+
+    func testExtractWillNotOverwriteSourceArchiveOrSplitVolume() throws {
+        for format in [ArchiveFormat.zip, .sevenZip] {
+            let name = "self.\(format.fileExtension)"
+            let entry = try source("inputs/\(name)")
+            let output = root.appendingPathComponent(name)
+            let password = format == .sevenZip ? "test" : nil
+            try BoltArchiveEngine.createArchive(from: [entry], to: output, options: CreateArchiveOptions(
+                format: format, algorithm: .store, encryption: password == nil ? .none : .aes256, password: password
+            ))
+            let before = try Data(contentsOf: output)
+            XCTAssertThrowsError(try BoltArchiveEngine.extract(archiveURL: output, options: ExtractOptions(
+                destinationURL: root, password: password
+            ))) { error in
+                guard case ArchiveOperationError.extractionWouldReplaceSource = error else { return XCTFail("\(error)") }
+            }
+            XCTAssertThrowsError(try BoltArchiveEngine.extractSingleEntryToFile(
+                archiveURL: output, entryPath: name, destinationFileURL: output, password: password
+            ))
+            try BoltArchiveEngine.extract(archiveURL: output, options: ExtractOptions(
+                destinationURL: root, overwritePolicy: .rename, password: password
+            ))
+            XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("self (1).\(format.fileExtension)")), Data("payload".utf8))
+            XCTAssertEqual(try Data(contentsOf: output), before)
+        }
+
+        let volumeEntry = try source("inputs/volumes.z01", data: Data(repeating: 42, count: 190_000))
+        let archive = root.appendingPathComponent("volumes.zip")
+        let volumes = try BoltArchiveEngine.createArchive(from: [volumeEntry], to: archive, options: CreateArchiveOptions(
+            algorithm: .store, splitVolumeSizeBytes: 65_536
+        ))
+        let original = try volumes.map { try Data(contentsOf: $0) }
+        XCTAssertThrowsError(try BoltArchiveEngine.extract(archiveURL: archive, options: ExtractOptions(destinationURL: root)))
+        XCTAssertEqual(try volumes.map { try Data(contentsOf: $0) }, original)
+    }
+
+    func testPromisedDirectoryPreservesOriginalUntilReplacementIsReady() throws {
+        let fm = FileManager.default
+        let original = try source("finder/folder/original.txt")
+        let destination = original.deletingLastPathComponent()
+        XCTAssertThrowsError(try BoltArchiveEngine.publishPromisedItem(
+            from: root.appendingPathComponent("missing"), to: destination, protectedSources: []
+        ))
+        let file = try source("mismatched.txt")
+        XCTAssertThrowsError(try BoltArchiveEngine.publishPromisedItem(from: file, to: destination, protectedSources: []))
+        XCTAssertEqual(try Data(contentsOf: original), Data("payload".utf8))
+        let replacement = try source("temporary/replacement/new.txt", data: Data("new contents".utf8))
+        try BoltArchiveEngine.publishPromisedItem(from: replacement.deletingLastPathComponent(), to: destination, protectedSources: [])
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: destination.path), ["new.txt"])
+    }
+
+    func testPromisedDirectoryCannotReplaceAnAncestorOfTheSourceArchive() throws {
+        let fm = FileManager.default
+        let destination = root.appendingPathComponent("existing/report")
+        try fm.createDirectory(at: destination, withIntermediateDirectories: true)
+        let archive = destination.appendingPathComponent("original.zip")
+        try BoltArchiveEngine.createArchive(from: [source()], to: archive, options: CreateArchiveOptions())
+        let original = try Data(contentsOf: archive)
+        let replacement = try source("staged/report/replacement.txt")
+
+        XCTAssertThrowsError(try BoltArchiveEngine.publishPromisedItem(
+            from: replacement.deletingLastPathComponent(), to: destination, protectedSources: [archive]
+        )) { error in
+            guard case ArchiveOperationError.extractionWouldReplaceSource = error else { return XCTFail("\(error)") }
+        }
+        XCTAssertEqual(try Data(contentsOf: archive), original)
+        XCTAssertTrue(fm.fileExists(atPath: replacement.path))
+
+        // A path whose name only starts with the destination name is outside the folder.
+        let nearby = try source("existing/report (1)/nearby.zip")
+        try BoltArchiveEngine.publishPromisedItem(
+            from: replacement.deletingLastPathComponent(), to: destination, protectedSources: [nearby]
+        )
+        XCTAssertEqual(try Data(contentsOf: nearby), Data("payload".utf8))
+    }
+
+    func testKeepBothReservesNumberedDirectoryNamesAlreadyInTheArchive() throws {
+        let original = try source("inputs/report/a.txt", data: Data("first archive directory".utf8))
+        let numbered = try source("inputs/report (1)/b.txt", data: Data("second archive directory".utf8))
+        let preexisting = try source("output/report/existing.txt")
+        let archive = root.appendingPathComponent("reports.zip")
+        try BoltArchiveEngine.createArchive(from: [original.deletingLastPathComponent(), numbered.deletingLastPathComponent()],
+                                             to: archive, options: CreateArchiveOptions())
+        let output = root.appendingPathComponent("output", isDirectory: true)
+        try BoltArchiveEngine.extract(archiveURL: archive, options: ExtractOptions(
+            destinationURL: output, mode: .here, overwritePolicy: .rename
+        ))
+        let fm = FileManager.default
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: output.appendingPathComponent("report (1)").path), ["b.txt"])
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: output.appendingPathComponent("report (2)").path), ["a.txt"])
+        XCTAssertEqual(try Data(contentsOf: preexisting), Data("payload".utf8))
+    }
+
+    func testSelectedZipExportProtectsSourceVolumesAndCanRetryPassword() throws {
+        let data = Data(repeating: 0x61, count: 150_000)
+        let selected = try source("selected.txt", data: data)
+        let excluded = try source("excluded.txt")
+        let archive = root.appendingPathComponent("original.zip")
+        let volumes = try BoltArchiveEngine.createArchive(from: [selected, excluded], to: archive, options: CreateArchiveOptions(
+            algorithm: .store, encryption: .aes256, password: "correct", splitVolumeSizeBytes: 65_536
+        ))
+        XCTAssertGreaterThan(volumes.count, 1)
+        let original = try volumes.map { try Data(contentsOf: $0) }
+        let paths: Set<String> = ["selected.txt"]
+        for volume in volumes {
+            XCTAssertThrowsError(try BoltArchiveEngine.exportSelectedEntriesAsZip(
+                at: archive, to: volume, entryPaths: paths, password: "correct"
+            )) { error in
+                guard case ArchiveOperationError.outputIsInput = error else { return XCTFail("\(error)") }
+            }
+        }
+        let destination = try source("result.zip", data: Data("previous output".utf8))
+        XCTAssertThrowsError(try BoltArchiveEngine.exportSelectedEntriesAsZip(at: archive, to: destination, entryPaths: paths)) { error in
+            guard case BoltZipError.passwordRequired = error else { return XCTFail("\(error)") }
+        }
+        XCTAssertThrowsError(try BoltArchiveEngine.exportSelectedEntriesAsZip(
+            at: archive, to: destination, entryPaths: paths, password: "wrong"
+        )) { error in
+            guard case BoltZipError.wrongPassword = error else { return XCTFail("\(error)") }
+        }
+        XCTAssertEqual(try Data(contentsOf: destination), Data("previous output".utf8))
+        try BoltArchiveEngine.exportSelectedEntriesAsZip(at: archive, to: destination, entryPaths: paths, password: "correct")
+        XCTAssertEqual(try BoltArchiveEngine.inspect(archiveURL: destination).entries.map(\.path), ["selected.txt"])
+        XCTAssertEqual(try BoltArchiveEngine.readEntryData(archiveURL: destination, entryPath: "selected.txt"), data)
+        XCTAssertEqual(try volumes.map { try Data(contentsOf: $0) }, original)
     }
 
     func testSingleCompressedStreamsAreRecognizedWithoutExtensions() throws {
@@ -85,10 +211,16 @@ final class ArchiveReliabilityTests: XCTestCase {
 
     func testUnsupportedEncryptionAndSplitOptionsFailWithoutReplacingOutput() throws {
         let file = try source()
-        for format in ArchiveFormat.creatableFormats where format != .zip {
+        for format in ArchiveFormat.creatableFormats {
             let output = try source("preserved.\(format.fileExtension)", data: Data("existing archive".utf8))
-            for options in [CreateArchiveOptions(format: format, encryption: .aes256, password: "secret"),
-                            CreateArchiveOptions(format: format, splitVolumeSizeBytes: 65536)] {
+            var unsupportedOptions: [CreateArchiveOptions] = []
+            if !format.supportsSplitVolumes {
+                unsupportedOptions.append(CreateArchiveOptions(format: format, splitVolumeSizeBytes: 65536))
+            }
+            if !format.supportsEncryption {
+                unsupportedOptions.append(CreateArchiveOptions(format: format, encryption: .aes256, password: "secret"))
+            }
+            for options in unsupportedOptions {
                 XCTAssertThrowsError(try BoltArchiveEngine.createArchive(from: [file], to: output, options: options))
                 XCTAssertEqual(try Data(contentsOf: output), Data("existing archive".utf8))
             }

@@ -15,12 +15,54 @@ final class AppReliabilityTests: XCTestCase {
         XCTAssertEqual(l.archiveFormatDisplayName(.tarGz, fileURL: URL(fileURLWithPath: "sample.TGZ")), "TAR + Gzip (.TGZ)")
     }
 
+    func testBatchExtractionPreservesEarlierOutputsEvenWhenOverwriteWasApproved() throws {
+        let destination = FileManager.default.temporaryDirectory.appendingPathComponent("BoltZipBatch-\(UUID().uuidString)")
+        let options = ExtractOptions(destinationURL: destination, mode: .here)
+        let shared = ExtractConflictSummary(destinationRoot: destination, conflictingNames: ["report.txt"],
+                                            outputLocations: [destination.appendingPathComponent("report.txt")])
+        let other = ExtractConflictSummary(destinationRoot: destination, conflictingNames: ["notes.txt"],
+                                           outputLocations: [destination.appendingPathComponent("notes.txt")])
+        let jobs = [(options, shared), (options, shared), (options, other)]
+        XCTAssertEqual(WorkspaceViewModel.batchExtractionPolicies(for: jobs, requestedPolicy: .overwrite),
+                       [.overwrite, .rename, .overwrite])
+        XCTAssertEqual(WorkspaceViewModel.batchExtractionPolicies(for: [(options, nil), (options, shared)], requestedPolicy: .overwrite),
+                       [.rename, .rename])
+    }
+
     func testOperationErrorsUseTheSelectedInterfaceLanguage() {
-        let errors: [ArchiveOperationError] = [.outputIsInput, .outputIsDirectory("keep"), .inputChanged("data"), .encryptionRequiresZIP, .splitVolumesRequireZIP, .applicationNotFound]
+        let errors: [any Error] = [
+            ArchiveOperationError.outputIsInput, ArchiveOperationError.outputIsDirectory("keep"),
+            ArchiveOperationError.extractionWouldReplaceSource("test.zip"),
+            ArchiveOperationError.inputChanged("data"), ArchiveOperationError.encryptionRequiresZIP,
+            ArchiveOperationError.filenameEncryptionRequires7z, ArchiveOperationError.sevenZipEncryptionRequiresAES256,
+            ArchiveOperationError.invalidSevenZipPassword, ArchiveOperationError.sevenZipEngineUnavailable,
+            ArchiveOperationError.splitVolumesRequireZIP, ArchiveOperationError.applicationNotFound,
+            ArchiveOperationError.singleStreamRequiresSingleRegularFile("XZ (.xz)"),
+            ArchiveOperationError.noRecoverableZipEntries,
+            ArchiveOperationError.sevenZipSplitArchiveReadOnly,
+            BoltZipError.missingSplitVolume("archive.part02.rar")
+        ]
         for error in errors {
             let messages = [AppLanguage.zhHans, .zhHant, .en, .ja].map { L10n(language: $0).operationErrorMessage(error) }
             XCTAssertEqual(Set(messages).count, 4)
             XCTAssertTrue(messages.allSatisfy { !$0.isEmpty })
+        }
+    }
+
+    func testSelectedZipExportPasswordPromptKeepsTheOriginalRequest() {
+        let request = SelectedZipExport(source: URL(fileURLWithPath: "source.zip"),
+                                        destination: URL(fileURLWithPath: "selected.zip"),
+                                        entryPaths: ["folder/data.txt"], encoding: .auto, stripMacJunk: true)
+        let purpose = PasswordPurpose.exportSelectedZip(request)
+        let errors = [BoltZipError.passwordRequired("source.zip"), .wrongPassword("source.zip")]
+        for (index, error) in errors.enumerated() {
+            guard case .passwordPrompt(.exportSelectedZip(let retry), let wrongAttempt)? = purpose.prompt(for: error) else {
+                return XCTFail("Expected an export password prompt")
+            }
+            XCTAssertEqual(wrongAttempt, index == 1)
+            XCTAssertEqual(retry.source, request.source)
+            XCTAssertEqual(retry.destination, request.destination)
+            XCTAssertEqual(retry.entryPaths, request.entryPaths)
         }
     }
 
@@ -57,5 +99,26 @@ final class AppReliabilityTests: XCTestCase {
         let next = UpdateCheckerService.availableDownloadURL(original)
         XCTAssertEqual(next.lastPathComponent, "installer (1).dmg")
         XCTAssertTrue(FileManager.default.fileExists(atPath: sentinel.path))
+    }
+
+    func testArchiveEditPasswordRetryAndCommentSupportGating() {
+        let editAdd = PasswordPurpose.unlockForEdit(urls: [URL(fileURLWithPath: "extra.txt")], targetFolder: "docs/")
+        let editOps = PasswordPurpose.unlockEditOperations([.deletePaths(["old.txt"])])
+        for purpose in [editAdd, editOps] {
+            guard case .passwordPrompt(_, let wrong1)? = purpose.prompt(for: BoltZipError.passwordRequired("a.7z")) else {
+                return XCTFail("Expected password required prompt")
+            }
+            XCTAssertFalse(wrong1)
+            guard case .passwordPrompt(_, let wrong2)? = purpose.prompt(for: BoltZipError.wrongPassword("a.7z")) else {
+                return XCTFail("Expected wrong password retry prompt")
+            }
+            XCTAssertTrue(wrong2)
+        }
+
+        XCTAssertTrue(ArchiveFormat.zip.supportsArchiveComment)
+        XCTAssertFalse(ArchiveFormat.sevenZip.supportsArchiveComment)
+        XCTAssertTrue(ArchiveFormat.sevenZip.supportsInPlaceEditing)
+        XCTAssertTrue(ArchiveFormat.creatableFormats.contains(.gz))
+        XCTAssertTrue(ArchiveFormat.creatableFormats.contains(.xz))
     }
 }

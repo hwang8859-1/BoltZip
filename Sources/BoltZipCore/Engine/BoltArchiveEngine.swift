@@ -22,11 +22,16 @@ public enum BoltArchiveEngine {
             hasZIPOuterData = res.parsed.hasOuterData
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4, .gz, .zst, .xz, .bz2, .lz4:
             entries = try TarCodec.listEntries(at: archiveURL, format: format)
-        case .rar, .sevenZip, .iso, .cab, .xar:
+        case .rar:
+            let rar = try ExtendedArchiveDriver.openRAR(at: archiveURL, encoding: encoding, password: password)
+            entries = rar.entries
+            isSplitVolume = rar.isSplitVolume
+        case .sevenZip:
+            let sevenZip = try ExtendedArchiveDriver.openSevenZip(at: archiveURL, encoding: encoding, password: password)
+            entries = sevenZip.entries
+            isSplitVolume = sevenZip.isSplitVolume
+        case .iso, .cab, .xar:
             entries = try ExtendedArchiveDriver.listEntries(at: archiveURL, format: format, encoding: encoding, password: password)
-            if format == .rar {
-                isSplitVolume = ExtendedArchiveDriver.resolveVolumePaths(for: archiveURL, format: .rar).count > 1
-            }
         }
 
         return try makeListing(archiveURL: archiveURL, format: format, entries: entries,
@@ -66,7 +71,11 @@ public enum BoltArchiveEngine {
     ) throws -> [URL] {
         try controller?.checkpoint()
         try ArchiveOutputTransaction.validate(outputURL)
-        if !options.format.supportsEncryption && (options.encryption != .none || !(options.password ?? "").isEmpty) {
+        let requestsEncryption = options.encryptFileNames || options.encryption != .none || !(options.password ?? "").isEmpty
+        if options.encryptFileNames && !options.format.supportsFilenameEncryption {
+            throw ArchiveOperationError.filenameEncryptionRequires7z
+        }
+        if requestsEncryption && !options.format.supportsEncryption {
             throw ArchiveOperationError.encryptionRequiresZIP
         }
         if !options.format.supportsSplitVolumes && (options.splitVolumeSizeBytes ?? 0) > 0 {
@@ -78,21 +87,58 @@ public enum BoltArchiveEngine {
         case .tar, .tarGz, .tarZst, .tarXz, .tarBz2, .tarLz4:
             try TarCodec.create(from: inputURLs, to: outputURL, options: options, controller: controller, progress: progress)
             return [outputURL]
+        case .gz, .xz:
+            try TarCodec.createSingleStream(from: inputURLs, to: outputURL, options: options, controller: controller, progress: progress)
+            return [outputURL]
         case .sevenZip:
-            try ExtendedArchiveDriver.create7z(
-                from: inputURLs,
-                to: outputURL,
-                algorithm: options.algorithm,
-                level: options.level,
-                excludeMacJunk: options.excludeMacJunk,
-                preserveSymlinks: options.preserveSymlinks,
-                controller: controller,
-                progress: progress
-            )
+            if requestsEncryption {
+                guard options.encryption == .aes256 else { throw ArchiveOperationError.sevenZipEncryptionRequiresAES256 }
+            }
+            let requestsSplit = (options.splitVolumeSizeBytes ?? 0) >= 65536
+            let parallelCodec = options.algorithm == .xz || options.algorithm == .bzip2
+            if requestsEncryption || requestsSplit || (parallelCodec && BoltConcurrency.resolvedWorkerCount(override: options.workerCount) > 1) {
+                return try SevenZipArchiveWriter.create(from: inputURLs, to: outputURL, options: options,
+                                                        controller: controller, progress: progress)
+            } else {
+                try ExtendedArchiveDriver.create7z(
+                    from: inputURLs,
+                    to: outputURL,
+                    algorithm: options.algorithm,
+                    level: options.level,
+                    excludeMacJunk: options.excludeMacJunk,
+                    preserveSymlinks: options.preserveSymlinks,
+                    excludePatterns: options.excludePatterns,
+                    controller: controller,
+                    progress: progress
+                )
+            }
             progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outputURL.lastPathComponent))
             return [outputURL]
         default:
             throw BoltZipError.unsupportedFormat(options.format.displayName)
+        }
+    }
+
+    public static func editArchive(
+        at archiveURL: URL,
+        operations: [ArchiveEditOperation],
+        options: CreateArchiveOptions = CreateArchiveOptions(),
+        encoding: FilenameEncodingOption = .auto,
+        progress: (@Sendable (OperationProgress) -> Void)? = nil
+    ) throws {
+        let format = try ArchiveFormat.requireForReading(from: archiveURL)
+        switch format {
+        case .zip:
+            try ZipWriter.editArchive(at: archiveURL, operations: operations, options: options, encoding: encoding, progress: progress)
+        case .sevenZip:
+            try SevenZipEditor.editArchive(at: archiveURL, operations: operations, options: options, progress: progress)
+        default:
+            throw BoltZipError.unsupportedFormat(BoltCoreLocalization.t(
+                "仅 ZIP 与非分卷 7z 格式支持包内增删改",
+                "僅 ZIP 與非分卷 7z 格式支援封存檔內編輯",
+                "In-place editing is only supported for ZIP and single-file 7z archives",
+                "書庫内の直接編集は ZIP と非分割 7z 形式のみ対応しています"
+            ))
         }
     }
 

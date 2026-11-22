@@ -91,11 +91,14 @@ extension ArchiveExplorerView {
                 vm.activeSheet = .createFolder(parentFolder: vm.currentFolder)
             }
             Menu(l.zipAddAlgoLabel) {
-                ForEach(ArchiveFormat.zip.supportedAlgorithms) { algo in
+                ForEach(listing.format.supportedAlgorithms) { algo in
                     Button {
                         vm.preferredZipEditAlgorithm = algo
                     } label: {
-                        if vm.preferredZipEditAlgorithm == algo {
+                        let resolvedCurrent = listing.format.supportedAlgorithms.contains(vm.preferredZipEditAlgorithm)
+                            ? vm.preferredZipEditAlgorithm
+                            : listing.format.defaultAlgorithm
+                        if resolvedCurrent == algo {
                             Label(algo.shortName, systemImage: "checkmark")
                         } else {
                             Text(algo.shortName)
@@ -103,8 +106,10 @@ extension ArchiveExplorerView {
                     }
                 }
             }
-            Button(l.archiveCommentEditBtn) {
-                vm.activeSheet = .editArchiveComment(current: listing.comment)
+            if listing.format.supportsArchiveComment {
+                Button(l.archiveCommentEditBtn) {
+                    vm.activeSheet = .editArchiveComment(current: listing.comment)
+                }
             }
         }
 

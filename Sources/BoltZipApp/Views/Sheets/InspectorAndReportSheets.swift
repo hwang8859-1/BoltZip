@@ -158,6 +158,16 @@ struct IntegrityReportSheet: View {
             )
 
             BoltSheetFooterBar(glassEnabled: glassEnabled) {
+                if !report.isHealthy,
+                   let activeListing = vm.listing,
+                   activeListing.format == .zip,
+                   activeListing.archiveURL.lastPathComponent == report.archiveName {
+                    Button(l.recoverZipOfferBtn) {
+                        dismiss()
+                        vm.activeSheet = .recoverZip(initialSource: activeListing.archiveURL)
+                    }
+                    .boltGlassButton()
+                }
                 Spacer()
                 Button(l.close) { dismiss() }
                     .boltGlassProminentButton()

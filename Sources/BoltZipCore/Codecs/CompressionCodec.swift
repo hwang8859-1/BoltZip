@@ -183,6 +183,8 @@ public enum CompressionCodec {
         destinationURL: URL,
         algorithm: CompressionAlgorithm,
         gzipContainer: Bool = false,
+        gzipOriginalFilename: String? = nil,
+        gzipModifiedDate: Date? = nil,
         level: Int? = nil,
         allowMultiThread: Bool = true,
         workerCount: Int? = nil,
@@ -200,6 +202,21 @@ public enum CompressionCodec {
         let status = withExtendedLifetime(controlCtx) {
             let rawCtx = controlCtx.map { Unmanaged.passUnretained($0).toOpaque() }
             let cb: bolt_control_cb? = needsBridge ? boltCodecControlBridge : nil
+            if algorithm == .deflate, gzipContainer, let name = gzipOriginalFilename, !name.isEmpty {
+                let mtime = UInt32(max(0, Int64((gzipModifiedDate ?? Date()).timeIntervalSince1970)))
+                return name.withCString { cname in
+                    bolt_compress_gzip_file_named(
+                        lvl,
+                        sourceURL.path,
+                        destinationURL.path,
+                        cname,
+                        mtime,
+                        maxWorkers,
+                        cb,
+                        rawCtx
+                    )
+                }
+            }
             return bolt_compress_file_workers(
                 mapAlgo(algorithm),
                 container,
@@ -241,6 +258,27 @@ public enum CompressionCodec {
             )
         }
         try throwIfCodecError(status)
+    }
+
+    public static func decompressPrefix(
+        of sourceURL: URL,
+        algorithm: CompressionAlgorithm,
+        gzipContainer: Bool = false,
+        maxBytes: Int = 512
+    ) throws -> Data {
+        let container = gzipContainer ? BOLT_CONTAINER_GZIP : BOLT_CONTAINER_RAW
+        var outBuf = bolt_buffer_t(data: nil, size: 0)
+        defer { bolt_free_buffer(&outBuf) }
+        let status = bolt_decompress_file_prefix(
+            mapAlgo(algorithm),
+            container,
+            sourceURL.path,
+            max(0, maxBytes),
+            &outBuf
+        )
+        try throwIfCodecError(status)
+        guard let ptr = outBuf.data, outBuf.size > 0 else { return Data() }
+        return Data(bytes: ptr, count: outBuf.size)
     }
 
     public static func verifyFile(

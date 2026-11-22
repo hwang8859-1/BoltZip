@@ -566,26 +566,6 @@ final class BoltZipCoreTests: XCTestCase {
         XCTAssertFalse(badReport.isHealthy)
         XCTAssertGreaterThan(badReport.failedCount, 0)
 
-        // Verify multi-volume RAR volume resolution (.part1.rar + .part2.rar and .rar + .r00)
-        let part1 = tempDir.appendingPathComponent("movie.part1.rar")
-        let part2 = tempDir.appendingPathComponent("movie.part2.rar")
-        try Data().write(to: part1)
-        try Data().write(to: part2)
-        XCTAssertEqual(
-            ExtendedArchiveDriver.resolveVolumePaths(for: part2, format: .rar).map { URL(fileURLWithPath: $0).lastPathComponent },
-            ["movie.part1.rar", "movie.part2.rar"]
-        )
-
-        let legacyMain = tempDir.appendingPathComponent("legacy.rar")
-        let legacyR00 = tempDir.appendingPathComponent("legacy.r00")
-        let legacyR01 = tempDir.appendingPathComponent("legacy.r01")
-        try Data().write(to: legacyMain)
-        try Data().write(to: legacyR00)
-        try Data().write(to: legacyR01)
-        XCTAssertEqual(
-            ExtendedArchiveDriver.resolveVolumePaths(for: legacyR00, format: .rar).map { URL(fileURLWithPath: $0).lastPathComponent },
-            ["legacy.rar", "legacy.r00", "legacy.r01"]
-        )
     }
 
     func testMultiCoreParallelZipCreateExtractAndIntegrity() throws {
@@ -803,8 +783,8 @@ final class BoltZipCoreTests: XCTestCase {
     }
 
     func testCentralizedVersionMetadata() {
-        XCTAssertEqual(BoltZipVersion.current, "1.0.4")
-        XCTAssertEqual(BoltZipVersion.build, "19")
+        XCTAssertEqual(BoltZipVersion.current, "1.0.5")
+        XCTAssertEqual(BoltZipVersion.build, "20")
     }
 
     func testMultiCoreConcurrencyControlAutoAndFixedCoreCount() throws {

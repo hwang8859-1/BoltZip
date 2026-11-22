@@ -192,6 +192,12 @@ public enum BoltDocumentIconKind: String, CaseIterable, Sendable {
         case "xar", "pkg": return .xar
         case "iso": return .iso
         default:
+            if ext.count >= 3, ext.utf8.allSatisfy({ $0 >= 48 && $0 <= 57 }), (Int(ext) ?? 0) >= 1 {
+                let baseExt = ((lower as NSString).deletingPathExtension as NSString).pathExtension
+                if baseExt == "7z" || baseExt == "cb7" {
+                    return .sevenZip
+                }
+            }
             if ext.hasPrefix("z"), ext.count == 3, ext.dropFirst().allSatisfy(\.isNumber) {
                 return .zip
             }

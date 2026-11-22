@@ -2,7 +2,7 @@ import CBoltCompression
 import Foundation
 
 extension ArchiveFormat {
-    static func requireForReading(from archiveURL: URL) throws -> ArchiveFormat {
+    public static func requireForReading(from archiveURL: URL) throws -> ArchiveFormat {
         guard let format = try detectForReading(from: archiveURL) else {
             throw BoltZipError.unsupportedFormat(archiveURL.pathExtension)
         }
@@ -16,9 +16,9 @@ extension ArchiveFormat {
             return nil
         }
         let named = detect(from: url)
-        let ext = url.pathExtension.lowercased()
-        if ext.hasPrefix("z"), Int(ext.dropFirst()) != nil { return .zip }
-        if ext.count == 3, ext.hasPrefix("r"), Int(ext.dropFirst()) != nil { return .rar }
+        if named == .sevenZip && SevenZipVolumeDiscovery.hasValidFirstVolumeHeader(forContinuation: url) {
+            return .sevenZip
+        }
 
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
@@ -64,6 +64,52 @@ extension ArchiveFormat {
             default: break
             }
         }
-        return stream ?? named
+        if let stream, let tarFormat = tarWrapper(for: stream, at: url) {
+            return tarFormat
+        }
+        let ext = url.pathExtension.lowercased()
+        let splitZIP = ext.hasPrefix("z") && Int(ext.dropFirst()) != nil
+        return stream ?? (splitZIP ? .zip : named)
+    }
+
+    private static func tarWrapper(for stream: ArchiveFormat, at url: URL) -> ArchiveFormat? {
+        let pair: (algorithm: CompressionAlgorithm, tarFormat: ArchiveFormat)?
+        switch stream {
+        case .gz: pair = (.deflate, .tarGz)
+        case .zst: pair = (.zstd, .tarZst)
+        case .xz: pair = (.xz, .tarXz)
+        case .bz2: pair = (.bzip2, .tarBz2)
+        case .lz4: pair = (.lz4, .tarLz4)
+        default: pair = nil
+        }
+        guard let pair,
+              let prefix = try? CompressionCodec.decompressPrefix(
+                  of: url,
+                  algorithm: pair.algorithm,
+                  gzipContainer: stream == .gz,
+                  maxBytes: 512
+              ),
+              isTARHeaderBlock(prefix) else {
+            return nil
+        }
+        return pair.tarFormat
+    }
+
+    private static func isTARHeaderBlock(_ block: Data) -> Bool {
+        guard block.count >= 512, block[0] != 0 else { return false }
+        let rawChecksum = block.subdata(in: 148..<156)
+            .prefix { $0 != 0 }
+        guard let checksumText = String(data: Data(rawChecksum), encoding: .ascii)?
+            .trimmingCharacters(in: .whitespaces),
+              !checksumText.isEmpty,
+              let expected = UInt64(checksumText, radix: 8) else {
+            return false
+        }
+        var sum: UInt64 = 0
+        for index in 0..<512 {
+            sum += (148..<156).contains(index) ? 32 : UInt64(block[index])
+        }
+        guard sum == expected else { return false }
+        return block.subdata(in: 257..<262) == Data("ustar".utf8)
     }
 }

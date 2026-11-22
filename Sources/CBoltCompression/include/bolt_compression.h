@@ -133,6 +133,17 @@ bolt_status_t bolt_compress_file_workers(
     void *ctx
 );
 
+bolt_status_t bolt_compress_gzip_file_named(
+    int32_t level,
+    const char *src_path,
+    const char *dst_path,
+    const char *gzip_name,
+    uint32_t gzip_mtime,
+    int32_t max_workers,
+    bolt_control_cb control_cb,
+    void *ctx
+);
+
 bolt_status_t bolt_decompress_file(
     bolt_algo_t algo,
     bolt_container_t container,
@@ -150,6 +161,14 @@ bolt_status_t bolt_decompress_file_ex(
     uint64_t exact_output_len, /* UINT64_MAX if unknown */
     bolt_control_cb control_cb,
     void *ctx
+);
+
+bolt_status_t bolt_decompress_file_prefix(
+    bolt_algo_t algo,
+    bolt_container_t container,
+    const char *src_path,
+    size_t max_output_len,
+    bolt_buffer_t *output
 );
 
 bolt_status_t bolt_verify_file(

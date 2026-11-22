@@ -7,7 +7,8 @@ extension WorkspaceViewModel {
     func quickExtract(mode: ExtractMode, archiveURL overrideURL: URL? = nil) {
         guard let targetArchive = overrideURL ?? listing?.archiveURL,
               let destination = selectExtractDestination(for: targetArchive) else { return }
-        let options = makeQuickExtractOptions(destination: destination, mode: mode, password: savedPassword)
+        let password = targetArchive == listing?.archiveURL ? savedPassword : nil
+        let options = makeQuickExtractOptions(destination: destination, mode: mode, password: password)
         runExtract(options: options, archiveURL: targetArchive)
     }
 
@@ -40,34 +41,66 @@ extension WorkspaceViewModel {
     func runExtract(
         options: ExtractOptions,
         archiveURL overrideURL: URL? = nil,
-        skipConflictCheck: Bool = false,
         trashArchiveOnCompletion: Bool = false
     ) {
         guard let archiveURL = overrideURL ?? listing?.archiveURL else { return }
-        if !skipConflictCheck && options.overwritePolicy == .overwrite {
+        var effectiveOptions = options
+        let keychainCandidate = (effectiveOptions.password == nil) ? keychainPassword(for: archiveURL) : nil
+        let usedKeychain = (effectiveOptions.password == nil && keychainCandidate != nil)
+        if let keychainCandidate {
+            effectiveOptions.password = keychainCandidate
+        }
+
+        if effectiveOptions.overwritePolicy == .overwrite {
+            let finalOpts = effectiveOptions
             Task.detached(priority: .userInitiated) {
-                let conflicts = try? BoltArchiveEngine.detectExtractConflicts(archiveURL: archiveURL, options: options)
-                await MainActor.run {
-                    if let conflicts, conflicts.hasConflicts {
-                        self.pendingExtractConflict = PendingExtractConflict(
+                do {
+                    let conflicts = try BoltArchiveEngine.detectExtractConflicts(archiveURL: archiveURL, options: finalOpts)
+                    await MainActor.run {
+                        if let pw = finalOpts.password, !pw.isEmpty {
+                            self.commitPendingKeychainSaveIfMatching(password: pw, for: archiveURL)
+                        }
+                        if conflicts.hasConflicts {
+                            self.pendingExtractConflict = PendingExtractConflict(
+                                archiveURL: archiveURL,
+                                options: finalOpts,
+                                destinationRoot: conflicts.destinationRoot,
+                                conflictingNames: conflicts.conflictingNames,
+                                trashArchiveOnCompletion: trashArchiveOnCompletion
+                            )
+                        } else {
+                            self.enqueueInAppExtract(
+                                archiveURL: archiveURL,
+                                options: finalOpts,
+                                trashArchiveOnCompletion: trashArchiveOnCompletion
+                            )
+                        }
+                    }
+                } catch {
+                    await MainActor.run {
+                        var promptError: any Error = error
+                        if usedKeychain, case BoltZipError.wrongPassword = error {
+                            _ = self.invalidateStaleKeychainPasswordIfNeeded(for: archiveURL, attemptedPassword: finalOpts.password)
+                            promptError = BoltZipError.passwordRequired(archiveURL.lastPathComponent)
+                        }
+                        var retryOpts = finalOpts
+                        if usedKeychain { retryOpts.password = nil }
+                        let purpose = PasswordPurpose.extract(
                             archiveURL: archiveURL,
-                            options: options,
-                            destinationRoot: conflicts.destinationRoot,
-                            conflictingNames: conflicts.conflictingNames,
+                            options: retryOpts,
                             trashArchiveOnCompletion: trashArchiveOnCompletion
                         )
-                    } else {
-                        self.enqueueInAppExtract(
-                            archiveURL: archiveURL,
-                            options: options,
-                            trashArchiveOnCompletion: trashArchiveOnCompletion
-                        )
+                        if let prompt = purpose.prompt(for: promptError) {
+                            self.activeSheet = prompt
+                        } else {
+                            self.alertMessage = self.l10n.operationErrorMessage(error)
+                        }
                     }
                 }
             }
             return
         }
-        enqueueInAppExtract(archiveURL: archiveURL, options: options, trashArchiveOnCompletion: trashArchiveOnCompletion)
+        enqueueInAppExtract(archiveURL: archiveURL, options: effectiveOptions, trashArchiveOnCompletion: trashArchiveOnCompletion)
     }
 
     private func enqueueInAppExtract(archiveURL: URL, options: ExtractOptions, trashArchiveOnCompletion: Bool = false) {
@@ -113,40 +146,51 @@ extension WorkspaceViewModel {
         savePanel.nameFieldStringValue = "Selected_Export.zip"
         guard savePanel.runModal() == .OK, let destZip = savePanel.url else { return }
 
-        let pw = savedPassword
-        let enc = encodingOption
-        let strip = defaultStripMacJunk
+        let request = SelectedZipExport(source: sourceArchive, destination: destZip, entryPaths: entryIDs,
+                                        encoding: encodingOption, stripMacJunk: defaultStripMacJunk)
+        runSelectedZipExport(request, password: savedPassword)
+    }
+
+    func runSelectedZipExport(_ request: SelectedZipExport, password: String?) {
+        let keychainCandidate = (password == nil) ? keychainPassword(for: request.source) : nil
+        let effectivePassword = password ?? keychainCandidate
+        let usedKeychain = (password == nil && keychainCandidate != nil)
+
         isBusy = true
-        progress = OperationProgress(fractionCompleted: 0.1, currentItem: destZip.lastPathComponent)
+        progress = OperationProgress(fractionCompleted: 0.1, currentItem: request.destination.lastPathComponent)
 
         Task.detached(priority: .userInitiated) {
-            let tempStage = FileManager.default.temporaryDirectory
-                .appendingPathComponent("BoltZipExport-\(UUID().uuidString)", isDirectory: true)
-            defer { try? FileManager.default.removeItem(at: tempStage) }
             do {
-                let extOpts = ExtractOptions(
-                    destinationURL: tempStage,
-                    mode: .selected(entryIDs),
-                    overwritePolicy: .overwrite,
-                    password: pw,
-                    encoding: enc,
-                    stripMacJunk: strip
+                try BoltArchiveEngine.exportSelectedEntriesAsZip(
+                    at: request.source, to: request.destination, entryPaths: request.entryPaths,
+                    password: effectivePassword, encoding: request.encoding, stripMacJunk: request.stripMacJunk
                 )
-                _ = try BoltArchiveEngine.extract(archiveURL: sourceArchive, options: extOpts)
-                let children = try FileManager.default.contentsOfDirectory(at: tempStage, includingPropertiesForKeys: nil)
-                let createOpts = CreateArchiveOptions(format: .zip, algorithm: .deflate, excludeMacJunk: strip)
-                _ = try BoltArchiveEngine.createArchive(from: children, to: destZip, options: createOpts)
                 await MainActor.run {
                     self.isBusy = false
                     self.progress = nil
-                    self.statusMessage = destZip.lastPathComponent
-                    NSWorkspace.shared.activateFileViewerSelecting([destZip])
+                    if let effectivePassword, !effectivePassword.isEmpty {
+                        if self.listing?.archiveURL == request.source {
+                            self.savedPassword = effectivePassword
+                        }
+                        self.commitPendingKeychainSaveIfMatching(password: effectivePassword, for: request.source)
+                    }
+                    self.statusMessage = request.destination.lastPathComponent
+                    NSWorkspace.shared.activateFileViewerSelecting([request.destination])
                 }
             } catch {
                 await MainActor.run {
                     self.isBusy = false
                     self.progress = nil
-                    self.alertMessage = self.l10n.operationErrorMessage(error)
+                    var promptError: any Error = error
+                    if usedKeychain, case BoltZipError.wrongPassword = error {
+                        _ = self.invalidateStaleKeychainPasswordIfNeeded(for: request.source, attemptedPassword: effectivePassword)
+                        promptError = BoltZipError.passwordRequired(request.source.lastPathComponent)
+                    }
+                    if let prompt = PasswordPurpose.exportSelectedZip(request).prompt(for: promptError) {
+                        self.activeSheet = prompt
+                    } else {
+                        self.alertMessage = self.l10n.operationErrorMessage(error)
+                    }
                 }
             }
         }

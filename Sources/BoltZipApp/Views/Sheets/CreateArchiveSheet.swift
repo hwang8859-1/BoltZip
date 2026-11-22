@@ -16,6 +16,7 @@ struct CreateArchiveSheet: View {
     @State private var preset: CompressionPreset = .balanced
     @State private var level: Int = 6
     @State private var encryption: EncryptionMethod = .none
+    @State private var encryptFileNames = true
     @State private var password: String = ""
     @State private var confirmPassword: String = ""
     @State private var splitPreset: SplitPreset = .none
@@ -27,6 +28,13 @@ struct CreateArchiveSheet: View {
     @State private var isDropTargeted: Bool = false
     /// `-1` = follow global `BoltConcurrency`, `0` = auto, `>= 1` = explicit core count.
     @State private var workerSelection: Int = -1
+    @State private var selectedProfileID: UUID? = nil
+    @State private var namingTemplate: String = "{name}"
+    @State private var excludePatternsText: String = ""
+    @State private var compressIndividually: Bool = false
+    @State private var showManagePresets: Bool = false
+    @State private var showSavePresetAlert: Bool = false
+    @State private var newPresetName: String = ""
 
     private static let unifiedControlWidth: CGFloat = 248
 
@@ -128,6 +136,19 @@ struct CreateArchiveSheet: View {
             isStandaloneWindow: isStandaloneWindow,
             glassEnabled: glassEnabled
         ))
+        .onAppear {
+            vm.refreshCompressionProfiles()
+        }
+        .sheet(isPresented: $showManagePresets) {
+            CompressionProfilesSheet(vm: vm)
+        }
+        .alert(l.presetSaveCurrentBtn, isPresented: $showSavePresetAlert) {
+            TextField(l.presetNamePromptPlaceholder, text: $newPresetName)
+            Button(l.saveBtn) {
+                saveCurrentSettingsAsPreset()
+            }
+            Button(l.cancel, role: .cancel) {}
+        }
     }
 
     // MARK: - Top Header & Bottom Footer
@@ -182,7 +203,7 @@ struct CreateArchiveSheet: View {
             Image(systemName: "doc.zipper")
                 .font(BoltType.captionMedium)
                 .foregroundStyle(Color.accentColor)
-            Text("\(l.willGeneratePrefix)\(resolvedOutputURL.lastPathComponent)")
+            Text("\(l.willGeneratePrefix)\(outputDisplayName)")
                 .font(BoltType.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -209,6 +230,51 @@ struct CreateArchiveSheet: View {
             glassEnabled: glassEnabled,
             contentSpacing: 7
         ) {
+            BoltFormMenuRow(
+                title: l.presetMenuTitle,
+                selectedTitle: selectedPresetTitle(l)
+            ) {
+                BoltMenuOptionButton(
+                    title: l.presetNoneLabel,
+                    isSelected: selectedProfileID == nil
+                ) {
+                    selectedProfileID = nil
+                }
+
+                if !vm.compressionProfiles.isEmpty {
+                    Divider()
+                    ForEach(vm.compressionProfiles) { prof in
+                        BoltMenuOptionButton(
+                            title: "\(prof.name) (\(prof.format.rawValue.uppercased()))",
+                            isSelected: selectedProfileID == prof.id
+                        ) {
+                            applyCompressionProfile(prof)
+                        }
+                    }
+                }
+
+                Divider()
+                ForEach(CompressionProfile.starterTemplates) { tpl in
+                    BoltMenuOptionButton(
+                        title: "\(tpl.name) (\(tpl.format.rawValue.uppercased()))",
+                        isSelected: false
+                    ) {
+                        applyCompressionProfile(tpl)
+                    }
+                }
+
+                Divider()
+                Button(l.presetSaveCurrentBtn) {
+                    newPresetName = archiveName
+                    showSavePresetAlert = true
+                }
+                Button(l.presetManageBtn) {
+                    showManagePresets = true
+                }
+            }
+
+            BoltSectionDivider(glassEnabled: glassEnabled)
+
             CompressInputRow(
                 title: l.archiveNameField,
                 trailingSuffix: ".\(format.fileExtension)",
@@ -216,6 +282,14 @@ struct CreateArchiveSheet: View {
             ) {
                 TextField(l.archiveNameField, text: $archiveName)
                     .textFieldStyle(.roundedBorder)
+            }
+
+            if inputs.count > 1 {
+                BoltSectionDivider(glassEnabled: glassEnabled)
+                BoltFormSwitchRow(
+                    title: l.compressIndividuallyLabel(inputs.count),
+                    isOn: $compressIndividually
+                )
             }
 
             BoltSectionDivider(glassEnabled: glassEnabled)
@@ -261,6 +335,13 @@ struct CreateArchiveSheet: View {
                         selectFormat(fmt)
                     }
                 }
+            }
+
+            if format.isSingleFileStream && !isSingleStreamInputValid {
+                Text(l.singleStreamFileOnlyNote)
+                    .font(BoltType.caption)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             BoltSectionDivider(glassEnabled: glassEnabled)
@@ -341,9 +422,9 @@ struct CreateArchiveSheet: View {
                 title: l.encryptionMethodLabel,
                 selectedTitle: l.encryptionCompactTitle(encryption)
             ) {
-                ForEach(EncryptionMethod.allCases) { enc in
+                ForEach(availableEncryptionMethods) { enc in
                     BoltMenuOptionButton(
-                        title: enc.displayName,
+                        title: format.supportsFilenameEncryption ? l.encryptionCompactTitle(enc) : enc.displayName,
                         isSelected: encryption == enc
                     ) {
                         encryption = enc
@@ -376,6 +457,16 @@ struct CreateArchiveSheet: View {
                     Text(l.passwordMismatch)
                         .font(BoltType.caption)
                         .foregroundStyle(.red)
+                }
+
+                if format.supportsFilenameEncryption {
+                    BoltSectionDivider(glassEnabled: glassEnabled)
+
+                    BoltFormSwitchRow(
+                        title: l.encryptFileNames,
+                        subtitle: l.encryptFileNamesDescription,
+                        isOn: $encryptFileNames
+                    )
                 }
             }
         }
@@ -426,6 +517,31 @@ struct CreateArchiveSheet: View {
                 subtitle: l.stripMacJunkSubtitle,
                 isOn: $excludeMacJunk
             )
+
+            BoltSectionDivider(glassEnabled: glassEnabled)
+
+            CompressInputRow(
+                title: l.excludePatternsLabel,
+                controlWidth: Self.unifiedControlWidth
+            ) {
+                TextField(l.excludePatternsPlaceholder, text: $excludePatternsText)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            BoltSectionDivider(glassEnabled: glassEnabled)
+
+            CompressInputRow(
+                title: l.namingTemplateLabel,
+                controlWidth: Self.unifiedControlWidth
+            ) {
+                TextField(l.namingTemplatePlaceholder, text: $namingTemplate)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            Text(l.namingTokensHint)
+                .font(BoltType.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             if format == .zip {
                 BoltSectionDivider(glassEnabled: glassEnabled)
@@ -504,13 +620,88 @@ struct CreateArchiveSheet: View {
     // MARK: - Actions & Logic
 
     private func selectFormat(_ newFmt: ArchiveFormat) {
+        let wasSingleStream = format.isSingleFileStream
         format = newFmt
+        if inputs.count == 1, let single = inputs.first {
+            let isDir = (try? single.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+            if !isDir {
+                if !wasSingleStream && newFmt.isSingleFileStream && archiveName == single.deletingPathExtension().lastPathComponent {
+                    archiveName = single.lastPathComponent
+                } else if wasSingleStream && !newFmt.isSingleFileStream && archiveName == single.lastPathComponent {
+                    archiveName = single.deletingPathExtension().lastPathComponent
+                }
+            }
+        }
         if !newFmt.supportedAlgorithms.contains(algorithm) {
             algorithm = newFmt.defaultAlgorithm
         }
         level = preset.level(for: algorithm)
-        if !newFmt.supportsEncryption { encryption = .none }
+        if !availableEncryptionMethods.contains(encryption) { encryption = .none }
         if !newFmt.supportsSplitVolumes { splitPreset = .none }
+    }
+
+    private func selectedPresetTitle(_ l: L10n) -> String {
+        guard let selectedProfileID,
+              let prof = vm.compressionProfiles.first(where: { $0.id == selectedProfileID }) else {
+            return l.presetNoneLabel
+        }
+        return prof.name
+    }
+
+    private func applyCompressionProfile(_ profile: CompressionProfile) {
+        let clean = profile.sanitized()
+        selectedProfileID = vm.compressionProfiles.contains(where: { $0.id == clean.id }) ? clean.id : nil
+        selectFormat(clean.format)
+        algorithm = clean.algorithm
+        level = clean.level
+        encryption = clean.encryption
+        encryptFileNames = clean.encryptFileNames
+        excludeMacJunk = clean.excludeMacJunk
+        excludePatternsText = clean.excludePatterns.joined(separator: ", ")
+        namingTemplate = clean.namingTemplate
+        encoding = clean.encoding
+        if let split = clean.splitVolumeSizeBytes {
+            let mb = split / (1024 * 1024)
+            switch mb {
+            case 10: splitPreset = .mb10
+            case 100: splitPreset = .mb100
+            case 700: splitPreset = .mb700
+            case 4096: splitPreset = .gb4
+            default:
+                splitPreset = .custom
+                customSplitMB = String(max(1, mb))
+            }
+        } else {
+            splitPreset = .none
+        }
+    }
+
+    private func saveCurrentSettingsAsPreset() {
+        let trimmedName = newPresetName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        let profile = CompressionProfile(
+            name: trimmedName,
+            format: format,
+            algorithm: algorithm,
+            level: level,
+            encryption: encryption,
+            encryptFileNames: format.supportsFilenameEncryption && encryption == .aes256 && encryptFileNames,
+            splitVolumeSizeBytes: resolvedSplitBytes,
+            excludeMacJunk: excludeMacJunk,
+            excludePatterns: ArchiveExcludeMatcher.parse(excludePatternsText),
+            preserveSymlinks: vm.preserveSymlinksOnCreate,
+            encoding: encoding,
+            namingTemplate: namingTemplate,
+            isDefaultQuickPreset: vm.compressionProfiles.isEmpty
+        )
+        let saved = try? CompressionProfileStore.shared.upsert(profile)
+        vm.refreshCompressionProfiles()
+        selectedProfileID = saved?.id ?? vm.compressionProfiles.first(where: { $0.name == profile.name })?.id
+    }
+
+    private var availableEncryptionMethods: [EncryptionMethod] {
+        if format.supportsFilenameEncryption { return [.none, .aes256] }
+        return format.supportsEncryption ? EncryptionMethod.allCases : [.none]
     }
 
     private func selectedWorkersSummary(_ l: L10n) -> String {
@@ -526,11 +717,38 @@ struct CreateArchiveSheet: View {
     private var resolvedOutputURL: URL {
         let cleanName = archiveName.trimmingCharacters(in: .whitespacesAndNewlines)
         let base = cleanName.isEmpty ? "Archive" : cleanName
-        return destinationDir.appendingPathComponent("\(base).\(format.fileExtension)")
+        let renderedStem = CompressionProfile.resolveBaseStem(
+            template: namingTemplate,
+            defaultStem: base,
+            format: format
+        )
+        return destinationDir.appendingPathComponent("\(renderedStem).\(format.fileExtension)")
+    }
+
+    private var outputDisplayName: String {
+        let baseName = resolvedOutputURL.lastPathComponent
+        if format == .sevenZip && resolvedSplitBytes != nil {
+            return "\(baseName).001"
+        }
+        return baseName
+    }
+
+    private func isRegularNonSymlinkFile(_ url: URL) -> Bool {
+        let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return (attrs?[.type] as? FileAttributeType) == .typeRegular
+    }
+
+    private var isSingleStreamInputValid: Bool {
+        guard format.isSingleFileStream else { return true }
+        if compressIndividually && inputs.count > 1 {
+            return inputs.allSatisfy(isRegularNonSymlinkFile)
+        }
+        return inputs.count == 1 && isRegularNonSymlinkFile(inputs[0])
     }
 
     private var isValidInput: Bool {
         guard !inputs.isEmpty else { return false }
+        if !isSingleStreamInputValid { return false }
         if encryption != .none {
             return !password.isEmpty && password == confirmPassword
         }
@@ -545,8 +763,10 @@ struct CreateArchiveSheet: View {
         case .mb700: return 700 * 1024 * 1024
         case .gb4: return 4 * 1024 * 1024 * 1024
         case .custom:
-            guard let mb = UInt64(customSplitMB), mb >= 1 else { return nil }
-            return mb * 1024 * 1024
+            let mib: UInt64 = 1024 * 1024
+            guard let mb = UInt64(customSplitMB.trimmingCharacters(in: .whitespacesAndNewlines)),
+                  mb >= 1, mb <= UInt64.max / mib else { return nil }
+            return mb * mib
         }
     }
 
@@ -593,6 +813,7 @@ struct CreateArchiveSheet: View {
 
     private func startCompress() {
         let overrideWorkers: Int? = workerSelection < 0 ? nil : workerSelection
+        let excludes = ArchiveExcludeMatcher.parse(excludePatternsText)
         let opts = CreateArchiveOptions(
             format: format,
             algorithm: algorithm,
@@ -601,22 +822,38 @@ struct CreateArchiveSheet: View {
             password: encryption == .none ? nil : password,
             splitVolumeSizeBytes: resolvedSplitBytes,
             excludeMacJunk: excludeMacJunk,
+            excludePatterns: excludes,
             encoding: encoding,
             archiveComment: format == .zip ? archiveComment : "",
             workerCount: overrideWorkers,
-            preserveSymlinks: vm.preserveSymlinksOnCreate
+            preserveSymlinks: vm.preserveSymlinksOnCreate,
+            encryptFileNames: format.supportsFilenameEncryption && encryption == .aes256 && encryptFileNames
         )
         let out = resolvedOutputURL
         let useFloatingHUD = isStandaloneWindow && !vm.hasVisibleMainWindow
         let trashSources = moveSourcesToTrash
+        let isIndividual = compressIndividually && inputs.count > 1
+        let activeTemplate = namingTemplate
+        let destDir = destinationDir
         closeSheetOrWindow()
-        vm.createArchive(
-            inputs: inputs,
-            outputURL: out,
-            options: opts,
-            useFloatingHUD: useFloatingHUD,
-            trashSourcesOnCompletion: trashSources
-        )
+        if isIndividual {
+            vm.createArchivesIndividually(
+                inputs: inputs,
+                destinationDirectory: destDir,
+                options: opts,
+                namingTemplate: activeTemplate,
+                useFloatingHUD: useFloatingHUD,
+                trashSourcesOnCompletion: trashSources
+            )
+        } else {
+            vm.createArchive(
+                inputs: inputs,
+                outputURL: out,
+                options: opts,
+                useFloatingHUD: useFloatingHUD,
+                trashSourcesOnCompletion: trashSources
+            )
+        }
     }
 }
 

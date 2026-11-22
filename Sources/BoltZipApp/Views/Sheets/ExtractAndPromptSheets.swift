@@ -197,8 +197,29 @@ struct ExtractOptionsSheet: View {
 struct PasswordPromptSheet: View {
     @Bindable var vm: WorkspaceViewModel
     let purpose: PasswordPurpose
+    let wrongAttempt: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var password: String = ""
+    @State private var saveToKeychain: Bool = false
+
+    private var keychainTargetURL: URL? {
+        switch purpose {
+        case .openArchive(let url, _, let isNestedOpening, _, _):
+            return isNestedOpening ? nil : url
+        case .returnToParent:
+            return vm.archiveBackStack.last?.archiveURL
+        case .openNested, .preview, .unlockForEdit, .unlockEditOperations, .editText:
+            return vm.archiveBackStack.isEmpty ? vm.listing?.archiveURL : nil
+        case .openNestedContents:
+            return nil
+        case .extract(let archiveURL, _, _):
+            return archiveURL
+        case .exportSelectedZip(let request):
+            return request.source
+        case .testIntegrity(let archiveURL):
+            return archiveURL
+        }
+    }
 
     var body: some View {
         let l = vm.l10n
@@ -215,40 +236,65 @@ struct PasswordPromptSheet: View {
 
             Text(l.passwordPromptTitle)
                 .font(BoltType.windowTitle)
-            Text(l.passwordPromptDesc)
+            Text(wrongAttempt ? l.retryArchivePassword : l.passwordPromptDesc)
                 .font(BoltType.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(wrongAttempt ? Color.red : Color.secondary)
                 .multilineTextAlignment(.center)
 
             SecureField(l.passwordPlaceholder, text: $password)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 260)
 
+            if keychainTargetURL != nil {
+                Toggle(l.rememberPasswordKeychainToggle, isOn: $saveToKeychain)
+                    .toggleStyle(.checkbox)
+                    .font(BoltType.caption)
+                    .frame(width: 260, alignment: .leading)
+            }
+
             BoltGlassContainer(spacing: 10) {
                 HStack {
-                    Button(l.cancel) { dismiss() }
-                        .boltGlassButton()
-                        .keyboardShortcut(.cancelAction)
+                    Button(l.cancel) {
+                        vm.clearPendingKeychainSave()
+                        dismiss()
+                    }
+                    .boltGlassButton()
+                    .keyboardShortcut(.cancelAction)
                     Button(l.confirm) {
                         let pw = password
-                        dismiss()
+                        vm.stagePendingKeychainSave(password: pw, save: saveToKeychain, for: keychainTargetURL)
+                        vm.activeSheet = nil
                         switch purpose {
-                        case .openArchive(let url, let fromExternalFinder):
-                            vm.openArchive(url: url, fromExternalFinder: fromExternalFinder, password: pw)
+                        case .openArchive(let url, let fromExternalFinder, let isNestedOpening, let initialFolder, let encoding):
+                            vm.openArchive(
+                                url: url,
+                                fromExternalFinder: fromExternalFinder,
+                                password: pw,
+                                isNestedOpening: isNestedOpening,
+                                initialFolder: initialFolder,
+                                encoding: encoding
+                            )
+                        case .returnToParent(let frameID):
+                            vm.navigateBackFromNestedArchive(password: pw, expectedFrameID: frameID)
                         case .openNested(let entry):
                             vm.openNestedArchiveEntry(entry, password: pw)
+                        case .openNestedContents(let entry, let parentPassword):
+                            vm.openNestedArchiveEntry(entry, password: parentPassword, nestedPassword: pw)
                         case .preview(let entry):
                             vm.previewOrOpenEntry(entry, password: pw)
-                        case .extract(let archiveURL, var opts):
+                        case .extract(let archiveURL, var opts, let trashArchiveOnCompletion):
                             opts.password = pw
-                            vm.runExtract(options: opts, archiveURL: archiveURL, skipConflictCheck: true)
+                            vm.runExtract(options: opts, archiveURL: archiveURL, trashArchiveOnCompletion: trashArchiveOnCompletion)
+                        case .exportSelectedZip(let request):
+                            vm.runSelectedZipExport(request, password: pw)
                         case .testIntegrity(let archiveURL):
                             vm.testIntegrity(password: pw, archiveURL: archiveURL)
                         case .unlockForEdit(let urls, let targetFolder):
                             vm.unlockForEditAndAdd(urls: urls, targetFolder: targetFolder, password: pw)
+                        case .unlockEditOperations(let ops):
+                            vm.unlockEditOperations(ops, password: pw)
                         case .editText(let entry):
-                            vm.savedPassword = pw
-                            vm.editEntryText(entry)
+                            vm.editEntryText(entry, password: pw)
                         }
                     }
                     .boltGlassProminentButton()

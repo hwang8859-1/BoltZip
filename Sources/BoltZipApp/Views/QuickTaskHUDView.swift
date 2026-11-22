@@ -161,7 +161,7 @@ struct QuickTaskHUDView: View {
             Divider().opacity(0.45)
 
             if wrongAttempt {
-                Text(l10n.hudNeedsPassword)
+                Text(l10n.retryArchivePassword)
                     .font(BoltType.captionMedium)
                     .foregroundStyle(.red)
             }
@@ -191,6 +191,10 @@ struct QuickTaskHUDView: View {
                     }
                 }
             }
+
+            Toggle(l10n.rememberPasswordKeychainToggle, isOn: $hud.rememberPasswordInKeychain)
+                .toggleStyle(.checkbox)
+                .font(BoltType.caption)
         }
     }
 

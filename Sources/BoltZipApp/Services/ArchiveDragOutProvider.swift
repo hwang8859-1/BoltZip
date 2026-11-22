@@ -12,38 +12,89 @@ final class ExplorerPointerTracker {
 @MainActor
 private final class DragBatchPasswordState {
     var resolvedPassword: String?
+    var saveToKeychain = false
     var didPromptOrResolve = false
+    private var rejectedPasswords: Set<String> = []
+    private var cancelled = false
+    private var checkedKeychain = false
 
-    func resolvePasswordIfNeeded(archiveURL: URL, initialPassword: String?, hasEncrypted: Bool, l: L10n) -> (password: String?, cancelled: Bool) {
-        if let initialPassword, !initialPassword.isEmpty {
+    func resolvePasswordIfNeeded(
+        archiveURL: URL,
+        initialPassword: String?,
+        hasEncrypted: Bool,
+        wrongAttempt: Bool,
+        l: L10n
+    ) -> (password: String?, saveToKeychain: Bool, usedKeychain: Bool, cancelled: Bool) {
+        if cancelled {
+            return (nil, false, false, true)
+        }
+        if !wrongAttempt,
+           let initialPassword, !initialPassword.isEmpty,
+           !rejectedPasswords.contains(initialPassword) {
             resolvedPassword = initialPassword
             didPromptOrResolve = true
-            return (initialPassword, false)
+            return (initialPassword, false, false, false)
         }
-        if didPromptOrResolve {
-            return (resolvedPassword, false)
+        if !wrongAttempt, didPromptOrResolve, let resolvedPassword, !rejectedPasswords.contains(resolvedPassword) {
+            return (resolvedPassword, saveToKeychain, false, false)
+        }
+        if !wrongAttempt, !checkedKeychain, hasEncrypted {
+            checkedKeychain = true
+            if let kc = ArchiveKeychainService.shared.password(for: archiveURL),
+               !kc.isEmpty,
+               !rejectedPasswords.contains(kc) {
+                resolvedPassword = kc
+                didPromptOrResolve = true
+                return (kc, false, true, false)
+            }
         }
         didPromptOrResolve = true
-        guard hasEncrypted else {
-            return (nil, false)
+        guard hasEncrypted || wrongAttempt else {
+            return (nil, false, false, false)
         }
 
         boltActivateAppToForeground()
         let alert = NSAlert()
-        alert.alertStyle = .informational
+        alert.alertStyle = wrongAttempt ? .warning : .informational
         alert.messageText = l.passwordPromptTitle
-        alert.informativeText = "\(archiveURL.lastPathComponent) — \(l.passwordPromptDesc)"
-        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        alert.informativeText = wrongAttempt
+            ? "\(archiveURL.lastPathComponent) — \(l.retryArchivePassword)"
+            : "\(archiveURL.lastPathComponent) — \(l.passwordPromptDesc)"
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        stack.frame = NSRect(x: 0, y: 0, width: 260, height: 50)
+
+        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
         field.placeholderString = l.passwordPlaceholder
-        alert.accessoryView = field
+        let keychainCheck = NSButton(checkboxWithTitle: l.rememberPasswordKeychainToggle, target: nil, action: nil)
+        keychainCheck.state = saveToKeychain ? .on : .off
+
+        stack.addArrangedSubview(field)
+        stack.addArrangedSubview(keychainCheck)
+        alert.accessoryView = stack
         alert.addButton(withTitle: l.confirm)
         alert.addButton(withTitle: l.cancel)
+        alert.window.initialFirstResponder = field
+
         if alert.runModal() == .alertFirstButtonReturn {
             let pw = field.stringValue
+            saveToKeychain = (keychainCheck.state == .on)
             resolvedPassword = pw.isEmpty ? nil : pw
-            return (resolvedPassword, false)
+            return (resolvedPassword, saveToKeychain, false, false)
         }
-        return (nil, true)
+        cancelled = true
+        return (nil, false, false, true)
+    }
+
+    func reject(_ password: String?) {
+        if let password, !password.isEmpty {
+            rejectedPasswords.insert(password)
+        }
+        resolvedPassword = nil
+        didPromptOrResolve = false
     }
 }
 
@@ -124,95 +175,107 @@ final class DragOutCoordinator: NSObject, NSDraggingSource, NSFilePromiseProvide
 
         Task { @MainActor in
             let vm = payload.vm
-            let needsPw = payload.entry.isEncrypted || payload.hasEncryptedEntries
-            let pwResult = payload.batchPasswordState.resolvePasswordIfNeeded(
-                archiveURL: payload.archiveURL,
-                initialPassword: vm?.savedPassword ?? payload.initialPassword,
-                hasEncrypted: needsPw,
-                l: vm?.l10n ?? L10n(language: .system)
-            )
-            if pwResult.cancelled {
-                completion.finish(BoltZipError.cancelled)
-                return
-            }
-            if let pw = pwResult.password, !pw.isEmpty, vm?.savedPassword == nil {
-                vm?.savedPassword = pw
-            }
+            let needsPw = payload.entry.isEncrypted || (payload.entry.isDirectory && payload.hasEncryptedEntries)
+            var wrongAttempt = false
 
-            let entry = payload.entry
-            let archiveURL = payload.archiveURL
-            let enc = payload.encoding
-            let strip = payload.stripMacJunk
-            let restoreLinks = payload.restoreSymlinks
-            let password = pwResult.password
-            let destFileURL = url
-
-            vm?.isBusy = true
-            vm?.progress = OperationProgress(fractionCompleted: 0.1, currentItem: entry.name)
-
-            do {
-                try await Task.detached(priority: .userInitiated) {
-                    let fm = FileManager.default
-                    let stageRoot = fm.temporaryDirectory.appendingPathComponent("BoltZipDragOut-\(UUID().uuidString)", isDirectory: true)
-                    try fm.createDirectory(at: stageRoot, withIntermediateDirectories: true)
-                    defer { try? fm.removeItem(at: stageRoot) }
-
-                    let opts = ExtractOptions(
-                        destinationURL: stageRoot,
-                        mode: .selected([entry.path]),
-                        overwritePolicy: .overwrite,
-                        password: password,
-                        encoding: enc,
-                        stripMacJunk: strip,
-                        restoreSymlinks: restoreLinks
-                    )
-                    _ = try BoltArchiveEngine.extract(archiveURL: archiveURL, options: opts) { prog in
-                        Task { @MainActor in
-                            vm?.progress = prog
-                        }
-                    }
-
-                    let cleanRel = entry.path.hasSuffix("/") ? String(entry.path.dropLast()) : entry.path
-                    let stagedItemURL = stageRoot.appendingPathComponent(cleanRel)
-                    guard fm.fileExists(atPath: stagedItemURL.path) else {
-                        throw BoltZipError.entryNotFound(entry.path)
-                    }
-                    if let existingAttrs = try? fm.attributesOfItem(atPath: destFileURL.path) {
-                        let existingIsDir = (existingAttrs[.type] as? FileAttributeType) == .typeDirectory
-                        let stagedIsDir = ((try? fm.attributesOfItem(atPath: stagedItemURL.path)[.type] as? FileAttributeType) == .typeDirectory)
-                        if existingIsDir != stagedIsDir {
-                            // Never silently delete a folder when replacing with a file (or vice versa)
-                            throw BoltZipError.externalToolFailed("Cannot overwrite item of mismatched type: \(destFileURL.lastPathComponent)")
-                        }
-                        if existingIsDir {
-                            try fm.removeItem(at: destFileURL)
-                            try fm.moveItem(at: stagedItemURL, to: destFileURL)
-                        } else {
-                            _ = try fm.replaceItemAt(
-                                destFileURL,
-                                withItemAt: stagedItemURL,
-                                backupItemName: nil,
-                                options: [.usingNewMetadataOnly]
-                            )
-                        }
-                    } else {
-                        try fm.moveItem(at: stagedItemURL, to: destFileURL)
-                    }
-                }.value
-
-                vm?.isBusy = false
-                vm?.progress = nil
-                vm?.statusMessage = "-> \(destFileURL.lastPathComponent)"
-                completion.finish(nil)
-            } catch {
-                vm?.isBusy = false
-                vm?.progress = nil
-                if case BoltZipError.cancelled = error {
-                    // Cancelled by user
-                } else {
-                    vm?.alertMessage = error.localizedDescription
+            while true {
+                let pwResult = payload.batchPasswordState.resolvePasswordIfNeeded(
+                    archiveURL: payload.archiveURL,
+                    initialPassword: vm?.savedPassword ?? payload.initialPassword,
+                    hasEncrypted: needsPw,
+                    wrongAttempt: wrongAttempt,
+                    l: vm?.l10n ?? L10n(language: .system)
+                )
+                if pwResult.cancelled {
+                    vm?.isBusy = false
+                    vm?.progress = nil
+                    completion.finish(BoltZipError.cancelled)
+                    return
                 }
-                completion.finish(error)
+                let entry = payload.entry
+                let archiveURL = payload.archiveURL
+                let enc = payload.encoding
+                let strip = payload.stripMacJunk
+                let restoreLinks = payload.restoreSymlinks
+                let password = pwResult.password
+                let destFileURL = url
+
+                vm?.isBusy = true
+                vm?.progress = OperationProgress(fractionCompleted: 0.1, currentItem: entry.name)
+
+                do {
+                    try await Task.detached(priority: .userInitiated) {
+                        let fm = FileManager.default
+                        let stageRoot = fm.temporaryDirectory.appendingPathComponent("BoltZipDragOut-\(UUID().uuidString)", isDirectory: true)
+                        try fm.createDirectory(at: stageRoot, withIntermediateDirectories: true)
+                        defer { try? fm.removeItem(at: stageRoot) }
+
+                        let opts = ExtractOptions(
+                            destinationURL: stageRoot,
+                            mode: .selected([entry.path]),
+                            overwritePolicy: .overwrite,
+                            password: password,
+                            encoding: enc,
+                            stripMacJunk: strip,
+                            restoreSymlinks: restoreLinks
+                        )
+                        _ = try BoltArchiveEngine.extract(archiveURL: archiveURL, options: opts) { prog in
+                            Task { @MainActor in
+                                vm?.progress = prog
+                            }
+                        }
+
+                        let cleanRel = entry.path.hasSuffix("/") ? String(entry.path.dropLast()) : entry.path
+                        let stagedItemURL = stageRoot.appendingPathComponent(cleanRel)
+                        guard fm.fileExists(atPath: stagedItemURL.path) else {
+                            throw BoltZipError.entryNotFound(entry.path)
+                        }
+                        try BoltArchiveEngine.publishPromisedItem(
+                            from: stagedItemURL, to: destFileURL,
+                            protectedSources: BoltArchiveEngine.extractionSourceURLs(archiveURL: archiveURL, password: password)
+                        )
+                    }.value
+                    if let password, !password.isEmpty {
+                        if vm?.listing?.archiveURL == archiveURL { vm?.savedPassword = password }
+                        if pwResult.saveToKeychain {
+                            try? ArchiveKeychainService.shared.savePassword(password, for: archiveURL)
+                            vm?.refreshKeychainPasswordCount()
+                        }
+                    }
+                    vm?.isBusy = false
+                    vm?.progress = nil
+                    vm?.statusMessage = "-> \(destFileURL.lastPathComponent)"
+                    completion.finish(nil)
+                    return
+                } catch {
+                    vm?.isBusy = false
+                    vm?.progress = nil
+                    if let archiveError = error as? BoltZipError {
+                        switch archiveError {
+                        case .wrongPassword, .passwordRequired:
+                            payload.batchPasswordState.reject(password)
+                            if vm?.listing?.archiveURL == archiveURL, vm?.savedPassword == password {
+                                vm?.savedPassword = nil
+                            }
+                            if pwResult.usedKeychain {
+                                _ = vm?.invalidateStaleKeychainPasswordIfNeeded(for: archiveURL, attemptedPassword: password)
+                                wrongAttempt = false
+                            } else {
+                                wrongAttempt = true
+                            }
+                            continue
+                        default:
+                            break
+                        }
+                    }
+                    if case BoltZipError.cancelled = error {
+                        // Cancelled by user
+                    } else {
+                        vm?.alertMessage = vm?.l10n.operationErrorMessage(error)
+                    }
+                    completion.finish(error)
+                    return
+                }
             }
         }
     }

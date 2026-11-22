@@ -22,6 +22,7 @@ extension BoltArchiveEngine {
     public static func testIntegrityBatch(
         archiveURLs: [URL],
         password: String? = nil,
+        passwordProvider: (@Sendable (URL) -> String?)? = nil,
         encoding: FilenameEncodingOption = .auto,
         workerCount: Int? = nil,
         batchTitle: String? = nil,
@@ -44,8 +45,9 @@ extension BoltArchiveEngine {
                 totalBytes: UInt64(totalArchives)
             ))
 
+            let effectivePW = password ?? passwordProvider?(url)
             do {
-                let single = try testIntegrity(archiveURL: url, password: password, encoding: encoding, workerCount: workerCount) { sub in
+                let single = try testIntegrity(archiveURL: url, password: effectivePW, encoding: encoding, workerCount: workerCount) { sub in
                     progress?(OperationProgress(
                         fractionCompleted: min(1.0, baseFrac + sub.fractionCompleted * spanFrac),
                         currentItem: "\(url.lastPathComponent): \(sub.currentItem)",

@@ -86,7 +86,9 @@ public enum TarCodec {
             throw BoltZipError.unsupportedFormat(format.displayName)
         }
         try ArchiveExtractionDestination.commitExtractedItem(stagedItem, to: destinationFileURL, under: root,
-                                                  policy: .overwrite, controller: controller)
+                                                  policy: .overwrite,
+                                                  protectedSourcePaths: [ArchiveExtractionDestination.pathKey(url)],
+                                                  controller: controller)
     }
 
     public static func readEntryData(at url: URL, format: ArchiveFormat, path: String) throws -> Data {
@@ -122,11 +124,13 @@ public enum TarCodec {
         restoreSymlinks: Bool,
         topLevelDirRenameMap: [String: String],
         totalExpectedBytes: UInt64,
+        protectedSourcePaths: Set<String> = [],
         controller: ArchiveTaskController? = nil,
         progress: (@Sendable (OperationProgress) -> Void)? = nil
     ) throws {
         try controller?.checkpoint()
         let fm = FileManager.default
+        let protected = protectedSourcePaths.union([ArchiveExtractionDestination.pathKey(url)])
 
         switch format {
         case .gz, .zst, .xz, .bz2, .lz4:
@@ -162,7 +166,7 @@ public enum TarCodec {
             }
 
             try ArchiveExtractionDestination.commitExtractedItem(stageURL, to: targetURL, under: destinationURL,
-                                                      policy: overwritePolicy, controller: controller)
+                                                      policy: overwritePolicy, protectedSourcePaths: protected, controller: controller)
             let attrs: [FileAttributeKey: Any] = [
                 .modificationDate: first.modifiedDate,
                 .posixPermissions: NSNumber(value: first.permissions)
@@ -192,6 +196,7 @@ public enum TarCodec {
                     topLevelDirRenameMap: topLevelDirRenameMap,
                     baseFrac: format == .tar ? 0.0 : 0.4,
                     totalExpectedBytes: totalExpectedBytes,
+                    protectedSourcePaths: protected,
                     controller: controller,
                     progress: progress
                 )
@@ -214,6 +219,7 @@ public enum TarCodec {
             from: inputURLs,
             excludeMacJunk: options.excludeMacJunk,
             preserveSymlinks: options.preserveSymlinks,
+            excludePatterns: options.excludePatterns,
             excluding: [outputURL], controller: controller
         )
         let totalBytes = items.reduce(UInt64(0)) { $0 + $1.fileSize }
@@ -297,6 +303,97 @@ public enum TarCodec {
         try controller?.checkpoint()
         try ArchiveOutputTransaction.publish([stageCompURL], to: [outputURL])
         progress?(OperationProgress(fractionCompleted: 1.0, currentItem: outputURL.lastPathComponent, processedBytes: totalBytes, totalBytes: totalBytes))
+    }
+
+    public static func createSingleStream(
+        from inputURLs: [URL],
+        to outputURL: URL,
+        options: CreateArchiveOptions,
+        controller: ArchiveTaskController? = nil,
+        progress: (@Sendable (OperationProgress) -> Void)? = nil
+    ) throws {
+        try controller?.checkpoint()
+        try ArchiveOutputTransaction.validate(outputURL)
+        guard inputURLs.count == 1, let sourceURL = inputURLs.first else {
+            throw ArchiveOperationError.singleStreamRequiresSingleRegularFile(options.format.displayName)
+        }
+        guard sourceURL.standardizedFileURL.path != outputURL.standardizedFileURL.path else {
+            throw ArchiveOperationError.outputIsInput
+        }
+
+        let fm = FileManager.default
+        let attrs: [FileAttributeKey: Any]
+        do {
+            attrs = try fm.attributesOfItem(atPath: sourceURL.path)
+        } catch {
+            throw BoltZipError.ioError(BoltCoreLocalization.t(
+                "找不到文件：\(sourceURL.path)",
+                "找不到檔案：\(sourceURL.path)",
+                "File not found: \(sourceURL.path)",
+                "ファイルが見つかりません: \(sourceURL.path)"
+            ))
+        }
+        guard (attrs[.type] as? FileAttributeType) == .typeRegular else {
+            throw ArchiveOperationError.singleStreamRequiresSingleRegularFile(options.format.displayName)
+        }
+
+        let totalBytes = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
+        let modDate = (attrs[.modificationDate] as? Date) ?? Date()
+        let stage = try ArchiveOutputTransaction.makeStage(for: outputURL)
+        defer { try? fm.removeItem(at: stage) }
+        let stagedOutput = stage.appendingPathComponent("stream.\(options.format.fileExtension)")
+        let workers = BoltConcurrency.resolvedWorkerCount(override: options.workerCount)
+
+        let reportProgress: (UInt64, UInt64) -> Void = { bytesRead, total in
+            let denominator = max(1, total > 0 ? total : totalBytes)
+            let frac = min(0.99, Double(bytesRead) / Double(denominator))
+            progress?(OperationProgress(
+                fractionCompleted: frac,
+                currentItem: sourceURL.lastPathComponent,
+                processedBytes: bytesRead,
+                totalBytes: total > 0 ? total : totalBytes
+            ))
+        }
+
+        switch options.format {
+        case .gz:
+            try CompressionCodec.compressFile(
+                sourceURL: sourceURL,
+                destinationURL: stagedOutput,
+                algorithm: .deflate,
+                gzipContainer: true,
+                gzipOriginalFilename: sourceURL.lastPathComponent,
+                gzipModifiedDate: modDate,
+                level: options.level,
+                allowMultiThread: false,
+                workerCount: 1,
+                controller: controller,
+                progress: reportProgress
+            )
+        case .xz:
+            try CompressionCodec.compressFile(
+                sourceURL: sourceURL,
+                destinationURL: stagedOutput,
+                algorithm: .xz,
+                gzipContainer: false,
+                level: options.level,
+                allowMultiThread: workers > 1,
+                workerCount: workers,
+                controller: controller,
+                progress: reportProgress
+            )
+        default:
+            throw BoltZipError.unsupportedFormat(options.format.displayName)
+        }
+
+        try controller?.checkpoint()
+        try ArchiveOutputTransaction.publish([stagedOutput], to: [outputURL])
+        progress?(OperationProgress(
+            fractionCompleted: 1.0,
+            currentItem: outputURL.lastPathComponent,
+            processedBytes: totalBytes,
+            totalBytes: totalBytes
+        ))
     }
 
     public static func testIntegrity(at url: URL, format: ArchiveFormat) throws -> IntegrityReport {
@@ -454,7 +551,18 @@ public enum TarCodec {
             guard pos < data.count else { return nil }
             if let end = data[pos...].firstIndex(of: 0) {
                 let nameData = data.subdata(in: pos..<end)
-                return String(data: nameData, encoding: .utf8) ?? String(data: nameData, encoding: .isoLatin1)
+                guard let raw = String(data: nameData, encoding: .utf8) ?? String(data: nameData, encoding: .isoLatin1) else {
+                    return nil
+                }
+                // RFC 1952 stores a single filename without directory components; strip any untrusted path separators
+                let parts = raw.split(whereSeparator: { $0 == "/" || $0 == "\\" })
+                guard let last = parts.last else { return nil }
+                let clean = String(last.unicodeScalars.filter { $0.value >= 0x20 && $0.value != 0x7F })
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !clean.isEmpty, clean != ".", clean != ".." else {
+                    return nil
+                }
+                return clean
             }
         }
         return nil
@@ -630,6 +738,7 @@ public enum TarCodec {
         topLevelDirRenameMap: [String: String],
         baseFrac: Double,
         totalExpectedBytes: UInt64,
+        protectedSourcePaths: Set<String> = [],
         controller: ArchiveTaskController?,
         progress: (@Sendable (OperationProgress) -> Void)?
     ) throws {
@@ -661,7 +770,8 @@ public enum TarCodec {
                         at: initialDest,
                         target: info.symlinkTarget,
                         under: destinationURL,
-                        overwritePolicy: overwritePolicy
+                        overwritePolicy: overwritePolicy,
+                        protectedSourcePaths: protectedSourcePaths
                     )
                 }
                 return true
@@ -714,7 +824,7 @@ public enum TarCodec {
             ]
             try? fm.setAttributes(attrs, ofItemAtPath: stagedFile.path)
             try ArchiveExtractionDestination.commitExtractedItem(stagedFile, to: targetURL, under: destinationURL,
-                                                      policy: overwritePolicy, controller: controller)
+                                                      policy: overwritePolicy, protectedSourcePaths: protectedSourcePaths, controller: controller)
             return true
         }
     }
