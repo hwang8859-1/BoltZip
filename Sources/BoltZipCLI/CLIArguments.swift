@@ -11,7 +11,8 @@ struct CLIArguments {
     var password: String? { options["password"] }
     var allowInteractivePasswordPrompt: Bool {
         guard password == nil && !flags.contains("password-stdin") else { return false }
-        return flags.contains("ask-password") || CLIPasswordInput.isInteractiveTTY
+        if flags.contains("ask-password") { return true }
+        return !useJSON && CLIPasswordInput.isInteractiveTTY
     }
     var encoding: FilenameEncodingOption {
         options["encoding"].flatMap(FilenameEncodingOption.init(rawValue:)) ?? .auto

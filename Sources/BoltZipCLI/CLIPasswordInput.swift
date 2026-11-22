@@ -4,7 +4,7 @@ import Foundation
 
 enum CLIPasswordInput {
     static var isInteractiveTTY: Bool {
-        isatty(STDIN_FILENO) != 0 && isatty(STDERR_FILENO) != 0
+        isatty(STDIN_FILENO) != 0 && isatty(STDOUT_FILENO) != 0 && isatty(STDERR_FILENO) != 0
     }
 
     static func resolveInitialPassword(
