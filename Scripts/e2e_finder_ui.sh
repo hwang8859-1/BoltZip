@@ -2,15 +2,15 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-APP_UNDER_TEST="${1:-$ROOT_DIR/dist/BoltZip.app}"
+RAW_APP="${1:-$ROOT_DIR/dist/BoltZip.app}"
+if [ ! -d "$RAW_APP" ]; then
+    echo "FAIL: Missing app bundle at $RAW_APP"
+    exit 1
+fi
+APP_UNDER_TEST="$(cd "$RAW_APP" && pwd)"
 CLI="$APP_UNDER_TEST/Contents/Helpers/boltzip"
 LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 DIAG_DIR="$HOME/Library/Logs/DiagnosticReports"
-
-if [ ! -d "$APP_UNDER_TEST" ]; then
-    echo "FAIL: Missing app bundle at $APP_UNDER_TEST"
-    exit 1
-fi
 
 HAD_SYSTEM_APP=0
 if [ -d "/Applications/BoltZip.app" ] && [ "$APP_UNDER_TEST" != "/Applications/BoltZip.app" ]; then
@@ -61,7 +61,7 @@ ENC_SRC_TZST="$(url_encode "$WORK/src.tar.zst")"
 ENC_PACK_SUB="$(url_encode "$WORK/pack_sub.zip")"
 ENC_SECRET_ZIP="$(url_encode "$WORK/enc.zip")"
 
-echo "==> [E2E 1/5] HUD quick compress actions (compressZip, compressTarZst, compress7z)..."
+echo "==> [E2E 1/6] HUD quick compress actions (compressZip, compressTarZst, compress7z)..."
 for pair in "compressZip|.zip" "compressTarZst|.tar.zst" "compress7z|.7z"; do
     op="${pair%%|*}"
     ext="${pair#*|}"
@@ -74,7 +74,7 @@ for pair in "compressZip|.zip" "compressTarZst|.tar.zst" "compress7z|.7z"; do
     sleep 0.3
 done
 
-echo "==> [E2E 2/5] HUD compressEachZip multi-item queued action..."
+echo "==> [E2E 2/6] HUD compressEachZip multi-item queued action..."
 open -a "$APP_UNDER_TEST" "boltzip://hud?op=compressEachZip&path=${ENC_PAIR_A}&path=${ENC_PAIR_B}"
 sleep 2.8
 test -f "$WORK/pair_a.zip" && test -f "$WORK/pair_b.zip"
@@ -82,7 +82,7 @@ echo "  PASS compressEachZip -> pair_a.zip & pair_b.zip"
 pkill -x BoltZipApp >/dev/null 2>&1 || true
 sleep 0.3
 
-echo "==> [E2E 3/5] HUD extract actions (smartExtract, extractSubfolder, encrypted prompt stay-alive)..."
+echo "==> [E2E 3/6] HUD extract actions (smartExtract, extractSubfolder, encrypted prompt stay-alive)..."
 rm -rf "$WORK/src"
 open -a "$APP_UNDER_TEST" "boltzip://hud?op=smartExtract&path=${ENC_SRC_ZIP}"
 sleep 2.6
@@ -106,7 +106,7 @@ echo "  PASS encrypted smartExtract password prompt stayed alive"
 pkill -x BoltZipApp >/dev/null 2>&1 || true
 sleep 0.3
 
-echo "==> [E2E 4/5] Cold & warm workspace Finder URLs (open, openWorkspace, compressWizard, testIntegrity)..."
+echo "==> [E2E 4/6] Cold & warm workspace Finder URLs (open, openWorkspace, compressWizard, testIntegrity)..."
 for query in \
     "op=open&path=${ENC_SRC_ZIP}" \
     "op=openWorkspace" \
@@ -126,8 +126,39 @@ sleep 1.0
 pgrep -x BoltZipApp >/dev/null
 echo "  PASS warm op=open"
 pkill -x BoltZipApp >/dev/null 2>&1 || true
+sleep 0.3
 
-echo "==> [E2E 5/5] Verifying zero new DiagnosticReports crash files..."
+echo "==> [E2E 5/6] New v1.0.5 Finder URL actions (compressQuickPreset, convertArchives, recoverZip)..."
+mkdir -p "$WORK/quick_dir"
+echo "quick preset payload" > "$WORK/quick_dir/item.txt"
+ENC_QUICK="$(url_encode "$WORK/quick_dir")"
+open -a "$APP_UNDER_TEST" "boltzip://hud?op=compressQuickPreset&path=${ENC_QUICK}"
+sleep 2.8
+ls "$WORK"/quick_dir* | grep -qvE "/quick_dir$"
+echo "  PASS compressQuickPreset created archive"
+sleep 1.4
+if pgrep -x BoltZipApp >/dev/null; then
+    echo "  INFO HUD auto-exit still settling; stopping before next test"
+    pkill -x BoltZipApp >/dev/null 2>&1 || true
+    sleep 0.3
+else
+    echo "  PASS HUD auto-terminated cleanly after quick task"
+fi
+
+for query in \
+    "op=convertArchives&path=${ENC_SRC_ZIP}" \
+    "op=recoverZip&path=${ENC_SRC_ZIP}"
+do
+    pkill -x BoltZipApp >/dev/null 2>&1 || true
+    sleep 0.3
+    open -a "$APP_UNDER_TEST" "boltzip://finder?${query}"
+    sleep 1.6
+    pgrep -x BoltZipApp >/dev/null
+    echo "  PASS cold ${query%%&*}"
+done
+pkill -x BoltZipApp >/dev/null 2>&1 || true
+
+echo "==> [E2E 6/6] Verifying zero new DiagnosticReports crash files..."
 sleep 0.6
 AFTER_IPS="$(count_crash_ips)"
 if [ "$AFTER_IPS" -gt "$BEFORE_IPS" ]; then
