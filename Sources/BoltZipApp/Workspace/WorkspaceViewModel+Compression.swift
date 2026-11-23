@@ -94,4 +94,8 @@ extension WorkspaceViewModel {
             activeSheet = .recoverZip(initialSource: url)
         }
     }
+
+    func openMCPHelpPanel() {
+        activeSheet = .mcpHelp
+    }
 }

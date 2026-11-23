@@ -773,4 +773,84 @@ struct L10n: Sendable {
           "“\(name)” is damaged (can be recovered anytime via menu 'Repair Damaged ZIP Archive…')",
           "「\(name)」は破損しています（メニューの「破損した ZIP アーカイブを復元…」からいつでも復元できます）")
     }
+
+    // MARK: - MCP Server
+    var mcpMenuTitle: String {
+        t("AI Agent 连接 (MCP)…", "AI Agent 連線 (MCP)…", "AI Agent Connection (MCP)…", "AI Agent 連携 (MCP)…")
+    }
+    var mcpSheetTitle: String {
+        t("AI Agent 连接 (Model Context Protocol)", "AI Agent 連線 (Model Context Protocol)", "AI Agent Connection (Model Context Protocol)", "AI Agent 連携 (Model Context Protocol)")
+    }
+    var mcpSheetSubtitle: String {
+        t("让 Claude Desktop、Cursor、Antigravity 等 AI Agent 直接调用 BoltZip 原生压缩、解压与批量处理工具。",
+          "讓 Claude Desktop、Cursor、Antigravity 等 AI Agent 直接調用 BoltZip 原生壓縮、解壓與批量處理工具。",
+          "Connect AI Agents (Claude Desktop, Cursor, Antigravity) directly to BoltZip for compression, extraction, and batch workflows.",
+          "Claude Desktop、Cursor、Antigravity などの AI Agent から BoltZip の圧縮・展開・一括処理ツールを直接利用できます。")
+    }
+    var mcpConfigSectionTitle: String {
+        t("MCP 客户端配置", "MCP 客戶端設定", "MCP Client Configuration", "MCP クライアント設定")
+    }
+    var mcpConfigSectionSubtitle: String {
+        t("可直接复制并粘贴到 claude_desktop_config.json 或 Cursor MCP 设置中：",
+          "可直接複製並貼上至 claude_desktop_config.json 或 Cursor MCP 設定中：",
+          "Copy and paste into claude_desktop_config.json or Cursor MCP settings:",
+          "claude_desktop_config.json や Cursor の MCP 設定に直接貼り付けられます:")
+    }
+    var mcpCopyConfigBtn: String {
+        t("复制 MCP 配置 (JSON)", "複製 MCP 設定 (JSON)", "Copy MCP Config (JSON)", "MCP 設定をコピー (JSON)")
+    }
+    var mcpCommandSectionTitle: String {
+        t("终端启动命令", "終端機啟動命令", "Terminal Command", "ターミナル起動コマンド")
+    }
+    var mcpCopyCommandBtn: String {
+        t("复制启动命令", "複製啟動命令", "Copy Command", "起動コマンドをコピー")
+    }
+    var mcpCopiedToast: String {
+        t("已复制到剪贴板", "已複製到剪貼簿", "Copied to Clipboard", "クリップボードにコピーしました")
+    }
+    var mcpToolsSectionTitle: String {
+        t("内置开放工具 (7 个)", "內建開放工具 (7 個)", "Included Tools (7)", "提供ツール (7 個)")
+    }
+    var mcpToolCompressDesc: String {
+        t("创建 ZIP / 7z / TAR 等格式归档包，支持密码与算法设置",
+          "建立 ZIP / 7z / TAR 等格式封存檔，支援密碼與演算法設定",
+          "Create ZIP, 7z, TAR archives with passwords and codecs",
+          "ZIP / 7z / TAR 書庫の作成（パスワード・圧縮方式対応）")
+    }
+    var mcpToolExtractDesc: String {
+        t("解压各种归档包，智能识别目录结构并支持覆盖策略",
+          "解壓各種封存檔，智能識別目錄結構並支援覆蓋策略",
+          "Extract archives with smart layout and collision policies",
+          "書庫の展開（スマート配置・上書き保護対応）")
+    }
+    var mcpToolBatchCompressDesc: String {
+        t("将多个文件或目录批量分别打包为独立归档",
+          "將多個檔案或目錄批次分別打包為獨立封存檔",
+          "Batch compress multiple files/folders into individual archives",
+          "複数ファイル・フォルダを個別書庫へ一括圧縮")
+    }
+    var mcpToolBatchExtractDesc: String {
+        t("批量解压多个归档文件到指定目录",
+          "批次解壓多個封存檔至指定目錄",
+          "Batch extract multiple archives into a destination directory",
+          "複数書庫を指定ディレクトリへ一括展開")
+    }
+    var mcpToolListDesc: String {
+        t("读取归档内文件清单及大小、目录层级、加密状态",
+          "讀取封存檔內檔案清單及大小、目錄層級、加密狀態",
+          "Inspect archive contents, sizes, hierarchy, and encryption",
+          "書庫内のファイル一覧・サイズ・暗号化状態の取得")
+    }
+    var mcpToolTestDesc: String {
+        t("免解压验证归档完整性及 CRC 校验和",
+          "免解壓驗證封存檔完整性及 CRC 校驗碼",
+          "Verify archive integrity and CRC32 without extracting",
+          "展開せずに書庫の破損や CRC32 チェックを検証")
+    }
+    var mcpToolRecoverZipDesc: String {
+        t("底层扫描受损 ZIP 归档，尽可能抢救并提取可读文件",
+          "底層掃描受損 ZIP 封存檔，盡可能搶救並擷取可讀檔案",
+          "Salvage damaged ZIP archives via raw Local File Header scanning",
+          "破損した ZIP を低レベルスキャンして救出復元")
+    }
 }

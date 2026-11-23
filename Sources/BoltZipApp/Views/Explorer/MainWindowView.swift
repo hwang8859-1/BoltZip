@@ -466,6 +466,8 @@ struct MainWindowView: View {
             ArchiveTextEditorSheet(vm: vm, document: document)
         case .recoverZip(let initialSource):
             ZipRecoverySheet(vm: vm, initialSource: initialSource)
+        case .mcpHelp:
+            MCPHelpSheet(vm: vm)
         }
     }
 }

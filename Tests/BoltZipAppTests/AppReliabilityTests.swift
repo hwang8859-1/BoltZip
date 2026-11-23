@@ -142,4 +142,36 @@ final class AppReliabilityTests: XCTestCase {
             XCTAssertTrue(l.recoverZipDamagedStatusNotice("bad.zip").contains("bad.zip"))
         }
     }
+
+    @MainActor
+    func testMCPMenuAndHelpPanelWorkflow() {
+        let vm = WorkspaceViewModel()
+        XCTAssertNil(vm.activeSheet)
+        vm.openMCPHelpPanel()
+        if case .mcpHelp = vm.activeSheet {
+            // Success
+        } else {
+            XCTFail("Expected .mcpHelp activeSheet")
+        }
+
+        for lang in [AppLanguage.zhHans, .zhHant, .en, .ja] {
+            let l = L10n(language: lang)
+            XCTAssertFalse(l.mcpMenuTitle.isEmpty)
+            XCTAssertFalse(l.mcpSheetTitle.isEmpty)
+            XCTAssertFalse(l.mcpSheetSubtitle.isEmpty)
+            XCTAssertFalse(l.mcpConfigSectionTitle.isEmpty)
+            XCTAssertFalse(l.mcpCopyConfigBtn.isEmpty)
+            XCTAssertFalse(l.mcpCommandSectionTitle.isEmpty)
+            XCTAssertFalse(l.mcpCopyCommandBtn.isEmpty)
+            XCTAssertFalse(l.mcpCopiedToast.isEmpty)
+            XCTAssertFalse(l.mcpToolsSectionTitle.isEmpty)
+            XCTAssertFalse(l.mcpToolCompressDesc.isEmpty)
+            XCTAssertFalse(l.mcpToolExtractDesc.isEmpty)
+            XCTAssertFalse(l.mcpToolBatchCompressDesc.isEmpty)
+            XCTAssertFalse(l.mcpToolBatchExtractDesc.isEmpty)
+            XCTAssertFalse(l.mcpToolListDesc.isEmpty)
+            XCTAssertFalse(l.mcpToolTestDesc.isEmpty)
+            XCTAssertFalse(l.mcpToolRecoverZipDesc.isEmpty)
+        }
+    }
 }

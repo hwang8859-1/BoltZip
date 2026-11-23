@@ -46,6 +46,7 @@ final class MergedMenuActionTarget: NSObject {
     var onNewArchive: (() -> Void)?
     var onOpenArchive: (() -> Void)?
     var onRepairZip: (() -> Void)?
+    var onOpenMCPHelp: (() -> Void)?
     var onCheckUpdates: (() -> Void)?
     var onOpenAbout: (() -> Void)?
 
@@ -59,6 +60,10 @@ final class MergedMenuActionTarget: NSObject {
 
     @objc func performRepairZip(_ sender: Any?) {
         onRepairZip?()
+    }
+
+    @objc func performOpenMCPHelp(_ sender: Any?) {
+        onOpenMCPHelp?()
     }
 
     @objc func performCheckUpdates(_ sender: Any?) {
@@ -104,6 +109,11 @@ final class MainMenuManager {
         item.target = actionTarget
         return item
     }()
+    private lazy var mcpHelpItem: NSMenuItem = {
+        let item = NSMenuItem(title: "", action: #selector(MergedMenuActionTarget.performOpenMCPHelp(_:)), keyEquivalent: "")
+        item.target = actionTarget
+        return item
+    }()
     private lazy var checkUpdatesItem: NSMenuItem = {
         let item = NSMenuItem(title: "", action: #selector(MergedMenuActionTarget.performCheckUpdates(_:)), keyEquivalent: "")
         item.target = actionTarget
@@ -121,12 +131,14 @@ final class MainMenuManager {
         onNewArchive: @escaping () -> Void,
         onOpenArchive: @escaping () -> Void,
         onRepairZip: @escaping () -> Void,
+        onOpenMCPHelp: @escaping () -> Void,
         onCheckUpdates: @escaping () -> Void,
         onOpenAbout: @escaping () -> Void
     ) {
         actionTarget.onNewArchive = onNewArchive
         actionTarget.onOpenArchive = onOpenArchive
         actionTarget.onRepairZip = onRepairZip
+        actionTarget.onOpenMCPHelp = onOpenMCPHelp
         actionTarget.onCheckUpdates = onCheckUpdates
         actionTarget.onOpenAbout = onOpenAbout
     }
@@ -195,6 +207,7 @@ final class MainMenuManager {
         if newArchiveItem.title != l.newArchive { newArchiveItem.title = l.newArchive }
         if openArchiveItem.title != l.openArchive { openArchiveItem.title = l.openArchive }
         if repairZipItem.title != l.recoverZipMenuTitle { repairZipItem.title = l.recoverZipMenuTitle }
+        if mcpHelpItem.title != l.mcpMenuTitle { mcpHelpItem.title = l.mcpMenuTitle }
         if checkUpdatesItem.title != l.checkForUpdatesMenuTitle { checkUpdatesItem.title = l.checkForUpdatesMenuTitle }
         if aboutItem.title != l.aboutMenuTitle { aboutItem.title = l.aboutMenuTitle }
 
@@ -221,11 +234,12 @@ final class MainMenuManager {
             quitItem.title = l.quitMenuTitle
         }
 
-        // Required order: 新建压缩包、打开压缩包、修复损坏的 ZIP 归档，设置，关于，退出
+        // Required order: 新建压缩包、打开压缩包、修复损坏的 ZIP 归档，AI Agent (MCP) 服务，设置，关于，退出
         var desired: [NSMenuItem] = [
             newArchiveItem,
             openArchiveItem,
             repairZipItem,
+            mcpHelpItem,
             actionsSeparator
         ]
         if let settingsItem { desired.append(settingsItem) }
