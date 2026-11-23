@@ -33,6 +33,7 @@ enum ActiveSheet: Identifiable {
     case updateAvailable(UpdateReleaseInfo)
     case editEntryText(ArchiveTextDocument)
     case recoverZip(initialSource: URL? = nil)
+    case mcpHelp
 
     var id: String {
         switch self {
@@ -48,6 +49,7 @@ enum ActiveSheet: Identifiable {
         case .updateAvailable(let info): return "update-\(info.version)"
         case .editEntryText(let document): return "edit-entry-\(document.entryPath)"
         case .recoverZip(let src): return "recoverZip-\(src?.path ?? "picker")"
+        case .mcpHelp: return "mcpHelp"
         }
     }
 }

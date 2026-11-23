@@ -18,6 +18,7 @@ func printUsage() {
       boltzip t <archive> [--password PW|--password-stdin|--ask-password] [--threads auto|N] [--json]
       boltzip associate [--status] [--restore] [--include-iso]
       boltzip bench [--threads auto|N] [--json]
+      boltzip mcp
       boltzip engines
       boltzip version
 

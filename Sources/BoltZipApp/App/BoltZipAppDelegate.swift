@@ -182,6 +182,16 @@ final class BoltZipAppDelegate: NSObject, NSApplicationDelegate {
                 boltActivateAppToForeground()
                 self?.viewModel.openArchivePanel()
             },
+            onRepairZip: { [weak self] in
+                boltActivateAppToForeground()
+                self?.showMainWindow()
+                self?.viewModel.openRecoverZipPanel()
+            },
+            onOpenMCPHelp: { [weak self] in
+                boltActivateAppToForeground()
+                self?.showMainWindow()
+                self?.viewModel.openMCPHelpPanel()
+            },
             onCheckUpdates: { [weak self] in
                 boltActivateAppToForeground()
                 self?.showMainWindow()

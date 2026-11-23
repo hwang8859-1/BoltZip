@@ -2,6 +2,19 @@
 
 All notable changes to **BoltZip** will be documented in this file.
 
+## [1.0.6] - 2026-11-23
+
+### Added
+- **Built-in Model Context Protocol (MCP) Server**:
+  - Integrated native JSON-RPC 2.0 stdio MCP server into `BoltZipCore` and `boltzip mcp` CLI.
+  - Exposes 7 tools to AI agents (Claude Desktop, Cursor, Antigravity): `boltzip_compress`, `boltzip_extract`, `boltzip_batch_compress`, `boltzip_batch_extract`, `boltzip_list`, `boltzip_test`, and `boltzip_recover_zip`.
+  - Complete zero-external-dependency execution on Apple Silicon.
+- **AI Agent Connection (MCP) System Menu & Interactive Sheet**:
+  - Added "AI Agent 连接 (MCP)…" entry under the primary `BoltZip` system menu.
+  - Added interactive Liquid Glass `MCPHelpSheet` with dynamic bundle path detection, one-click copy for Claude/Cursor JSON configuration, and one-click copy for terminal commands with animated toast feedback.
+- **Damaged ZIP Recovery Ergonomics**:
+  - Added "修复损坏的 ZIP 归档…" (`⌥⌘R`) shortcut to system menu and smart one-click jump prompt upon opening damaged ZIP containers.
+
 ## [1.0.5] - 2026-11-23
 
 ### Added

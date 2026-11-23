@@ -741,6 +741,8 @@ struct L10n: Sendable {
     }
 
     var recoverZipBtn: String { t("修复 ZIP…", "修復 ZIP…", "Recover ZIP…", "ZIP 修復…") }
+    var recoverZipMenuTitle: String { t("修复损坏的 ZIP 归档…", "修復損毀的 ZIP 封存檔…", "Repair Damaged ZIP Archive…", "破損した ZIP アーカイブを復元…") }
+    var recoverZipDamagedTitle: String { t("ZIP 归档已受损", "ZIP 封存檔已損毀", "Corrupted ZIP Archive", "破損した ZIP アーカイブ") }
     var recoverZipTitle: String { t("损坏 ZIP 可读条目恢复", "損毀 ZIP 可讀項目復原", "Recover Damaged ZIP", "破損 ZIP の復元") }
     var recoverZipSubtitle: String {
         t("逐条扫描并校验可读取内容，无损写入新归档，原损坏文件保持不变。",
@@ -758,11 +760,97 @@ struct L10n: Sendable {
         t("已扫描 \(scanned) 个 · 成功恢复 \(recovered) 个 · 无法恢复 \(failed) 个", "已掃描 \(scanned) 個 · 成功復原 \(recovered) 個 · 無法復原 \(failed) 個", "Scanned \(scanned) · Recovered \(recovered) · Unrecoverable \(failed)", "スキャン \(scanned) 件 · 復元 \(recovered) 件 · 復元不可 \(failed) 件")
     }
     var recoverZipUnrecoverableSection: String { t("无法恢复的条目及原因", "無法復原的項目與原因", "Unrecoverable Entries & Reasons", "復元できない項目と理由") }
-    var recoverZipOfferBtn: String { t("提取完好条目恢复…", "擷取完好項目復原…", "Recover Readable Entries…", "正常項目を復元…") }
+    var recoverZipOfferBtn: String { t("跳转到修复页面…", "跳轉至修復頁面…", "Go to Repair…", "復元画面へ移動…") }
     func recoverZipInspectFailedOffer(_ name: String) -> String {
-        t("“\(name)”的 ZIP 目录或数据可能已损坏，是否打开损坏恢复工具扫描可抢救的条目？",
-          "「\(name)」的 ZIP 目錄或資料可能已損毀，是否開啟損毀復原工具掃描可搶救的項目？",
-          "“\(name)” appears damaged. Scan for recoverable entries into a new ZIP?",
-          "「\(name)」は破損しているようです。復元可能な項目をスキャンして別の ZIP に救出しますか？")
+        t("“\(name)”已受损无法正常读取，是否跳转到修复页面以扫描并抢救其中的文件？",
+          "「\(name)」已損毀無法正常讀取，是否跳轉至修復頁面以掃描並搶救其中的檔案？",
+          "“\(name)” is damaged and cannot be opened normally. Jump to the repair tool to scan and recover files?",
+          "「\(name)」は破損しているため正常に開けません。復元画面に移動して救出可能な項目をスキャンしますか？")
+    }
+    func recoverZipDamagedStatusNotice(_ name: String) -> String {
+        t("“\(name)”已受损（可随时通过菜单“修复损坏的 ZIP 归档…”进行恢复）",
+          "「\(name)」已損毀（可隨時透過選單「修復損毀的 ZIP 封存檔…」進行復原）",
+          "“\(name)” is damaged (can be recovered anytime via menu 'Repair Damaged ZIP Archive…')",
+          "「\(name)」は破損しています（メニューの「破損した ZIP アーカイブを復元…」からいつでも復元できます）")
+    }
+
+    // MARK: - MCP Server
+    var mcpMenuTitle: String {
+        t("AI Agent 连接 (MCP)…", "AI Agent 連線 (MCP)…", "AI Agent Connection (MCP)…", "AI Agent 連携 (MCP)…")
+    }
+    var mcpSheetTitle: String {
+        t("AI Agent 连接 (Model Context Protocol)", "AI Agent 連線 (Model Context Protocol)", "AI Agent Connection (Model Context Protocol)", "AI Agent 連携 (Model Context Protocol)")
+    }
+    var mcpSheetSubtitle: String {
+        t("让 Claude Desktop、Cursor、Antigravity 等 AI Agent 直接调用 BoltZip 原生压缩、解压与批量处理工具。",
+          "讓 Claude Desktop、Cursor、Antigravity 等 AI Agent 直接調用 BoltZip 原生壓縮、解壓與批量處理工具。",
+          "Connect AI Agents (Claude Desktop, Cursor, Antigravity) directly to BoltZip for compression, extraction, and batch workflows.",
+          "Claude Desktop、Cursor、Antigravity などの AI Agent から BoltZip の圧縮・展開・一括処理ツールを直接利用できます。")
+    }
+    var mcpConfigSectionTitle: String {
+        t("MCP 客户端配置", "MCP 客戶端設定", "MCP Client Configuration", "MCP クライアント設定")
+    }
+    var mcpConfigSectionSubtitle: String {
+        t("可直接复制并粘贴到 claude_desktop_config.json 或 Cursor MCP 设置中：",
+          "可直接複製並貼上至 claude_desktop_config.json 或 Cursor MCP 設定中：",
+          "Copy and paste into claude_desktop_config.json or Cursor MCP settings:",
+          "claude_desktop_config.json や Cursor の MCP 設定に直接貼り付けられます:")
+    }
+    var mcpCopyConfigBtn: String {
+        t("复制 MCP 配置 (JSON)", "複製 MCP 設定 (JSON)", "Copy MCP Config (JSON)", "MCP 設定をコピー (JSON)")
+    }
+    var mcpCommandSectionTitle: String {
+        t("终端启动命令", "終端機啟動命令", "Terminal Command", "ターミナル起動コマンド")
+    }
+    var mcpCopyCommandBtn: String {
+        t("复制启动命令", "複製啟動命令", "Copy Command", "起動コマンドをコピー")
+    }
+    var mcpCopiedToast: String {
+        t("已复制到剪贴板", "已複製到剪貼簿", "Copied to Clipboard", "クリップボードにコピーしました")
+    }
+    var mcpToolsSectionTitle: String {
+        t("内置开放工具 (7 个)", "內建開放工具 (7 個)", "Included Tools (7)", "提供ツール (7 個)")
+    }
+    var mcpToolCompressDesc: String {
+        t("创建 ZIP / 7z / TAR 等格式归档包，支持密码与算法设置",
+          "建立 ZIP / 7z / TAR 等格式封存檔，支援密碼與演算法設定",
+          "Create ZIP, 7z, TAR archives with passwords and codecs",
+          "ZIP / 7z / TAR 書庫の作成（パスワード・圧縮方式対応）")
+    }
+    var mcpToolExtractDesc: String {
+        t("解压各种归档包，智能识别目录结构并支持覆盖策略",
+          "解壓各種封存檔，智能識別目錄結構並支援覆蓋策略",
+          "Extract archives with smart layout and collision policies",
+          "書庫の展開（スマート配置・上書き保護対応）")
+    }
+    var mcpToolBatchCompressDesc: String {
+        t("将多个文件或目录批量分别打包为独立归档",
+          "將多個檔案或目錄批次分別打包為獨立封存檔",
+          "Batch compress multiple files/folders into individual archives",
+          "複数ファイル・フォルダを個別書庫へ一括圧縮")
+    }
+    var mcpToolBatchExtractDesc: String {
+        t("批量解压多个归档文件到指定目录",
+          "批次解壓多個封存檔至指定目錄",
+          "Batch extract multiple archives into a destination directory",
+          "複数書庫を指定ディレクトリへ一括展開")
+    }
+    var mcpToolListDesc: String {
+        t("读取归档内文件清单及大小、目录层级、加密状态",
+          "讀取封存檔內檔案清單及大小、目錄層級、加密狀態",
+          "Inspect archive contents, sizes, hierarchy, and encryption",
+          "書庫内のファイル一覧・サイズ・暗号化状態の取得")
+    }
+    var mcpToolTestDesc: String {
+        t("免解压验证归档完整性及 CRC 校验和",
+          "免解壓驗證封存檔完整性及 CRC 校驗碼",
+          "Verify archive integrity and CRC32 without extracting",
+          "展開せずに書庫の破損や CRC32 チェックを検証")
+    }
+    var mcpToolRecoverZipDesc: String {
+        t("底层扫描受损 ZIP 归档，尽可能抢救并提取可读文件",
+          "底層掃描受損 ZIP 封存檔，盡可能搶救並擷取可讀檔案",
+          "Salvage damaged ZIP archives via raw Local File Header scanning",
+          "破損した ZIP を低レベルスキャンして救出復元")
     }
 }

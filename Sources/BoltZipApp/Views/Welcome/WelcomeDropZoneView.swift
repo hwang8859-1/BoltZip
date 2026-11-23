@@ -71,14 +71,6 @@ struct WelcomeDropZoneView: View {
                 HStack(spacing: 8) { archiveButtons(l: l) }
                 VStack(spacing: 6) { archiveButtons(l: l) }
             }
-
-            Button {
-                vm.openRecoverZipPanel()
-            } label: {
-                Label(l.recoverZipBtn, systemImage: "bandage")
-            }
-            .controlSize(.small)
-            .boltGlassButton()
         }
         .padding(.horizontal, 16)
         .padding(.vertical, minHeight == nil ? 18 : 14)
