@@ -52,7 +52,10 @@
   - 智慧解壓縮 / 解壓至同名資料夾 / 解壓到指定目錄 / 開啟瀏覽 / 完整性驗證 / 損毀 ZIP 復原
   - `ZIP` / `TAR.ZST (Zstd)` / `7z` / 多選個別打包為 ZIP / 加密與分卷進階壓縮
 - **Windows Zip 級封存檔工作台**：雙擊或按下空白鍵即可呼叫 macOS Quick Look 預覽內部檔案，支援樹狀瀏覽與**巢狀壓縮檔層級返回**、拖曳直接匯出至 Finder、單獨匯出為新 ZIP、封存檔註解檢視與編輯，以及 **ZIP 與非分卷 `.7z` 封存檔原地新增、重新命名與刪除**（ZIP 未變動項目零重新壓縮）。
-- **損毀 ZIP 深度復原與純淨架構**：支援中央目錄損毀時自動深度掃描本地標頭救出完好 ZIP 項目，並提供 `boltzip recover` CLI 命令；輕量純淨安全設計，無常駐背景鑰匙圈，密碼僅在目前工作階段按需解密，零多餘複雜度。
+- **損毀 ZIP 深度復原與系統選單獨立入口**：支援中央目錄損毀時自動深度掃描本地標頭救出完好 ZIP 項目，主選單提供「修復損毀的 ZIP 封存檔…」（`⌥⌘R`）快捷入口與開啟受損檔案時的智慧跳轉指引，並提供 `boltzip recover` CLI 命令；輕量純淨安全設計，無常駐背景鑰匙圈，密碼僅在目前工作階段按需解密，零多餘複雜度。
+- **內建 Model Context Protocol (MCP) Server 與 AI Agent 接入**：
+  - 原生整合 JSON-RPC 2.0 stdio MCP 服務，向 AI Agent（Claude Desktop、Cursor、Antigravity 等）開放 7 項封存工具：`boltzip_compress`、`boltzip_extract`、`boltzip_batch_compress`、`boltzip_batch_extract`、`boltzip_list`、`boltzip_test` 與 `boltzip_recover_zip`；
+  - 應用選單提供「**AI Agent 連線 (MCP)…**」原生液態玻璃引導面板，支援一鍵複製設定 JSON 與除錯指令，亦可直接執行 `boltzip mcp`。
 - **JAR / APK 等套件內編輯與儲存**：以右鍵編輯 UTF-8／UTF-16 文字或替換檔案，保留原副檔名、項目順序、原演算法與 Store 狀態；未知壓縮等級使用介面說明的預設值，其他項目直接複製壓縮資料。不支援原方式時可取消或另存新的一般 ZIP。APK 無需設定金鑰或 SDK；目前不處理簽章，儲存後不保證可安裝或執行。
 - **大檔分塊串流、安全符號連結與內建更新**：`>= 64 MB` 項目支援全流程分塊串流讀寫（ZIP / WinZip AE-2 / ZipCrypto / TAR.*）、符號連結安全保留還原與越界防範、依實際位元組回報進度的串流 `.7z` 封裝、17 組分格式專屬圖示，以及應用內 GitHub Releases 檢查更新（含 SHA-256 校驗）。
 - **液態玻璃原生體驗**：
