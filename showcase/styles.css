@@ -1317,15 +1317,229 @@ code, pre {
   gap: 10px;
 }
 
+/* Hero What's New Strip */
+.hero-whats-new {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  margin-bottom: 18px;
+  line-height: 1.45;
+}
+
+.hero-whats-new strong {
+  color: var(--cyan);
+  font-weight: 600;
+}
+
+.hero-whats-new code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 0.76rem;
+  color: #e0f2fe;
+}
+
+/* Downloads Latest Version Release Highlights */
+.release-highlights {
+  border-radius: 18px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  border-color: rgba(56, 189, 248, 0.28);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(99, 102, 241, 0.05) 60%, rgba(16, 22, 39, 0.65));
+}
+
+.release-highlights-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin-bottom: 14px;
+}
+
+.release-highlights-head h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.release-highlights-head p {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.release-highlights-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.rh-item {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rh-item strong {
+  display: block;
+  font-size: 0.88rem;
+  color: #e0f2fe;
+  margin-bottom: 4px;
+}
+
+.rh-item p {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.rh-item code {
+  font-size: 0.75rem;
+  color: #bae6fd;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* Concentrated Unified Core Capabilities Matrix */
+.cap-board {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border-color: rgba(56, 189, 248, 0.26);
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.cap-pillar {
+  padding: 26px 28px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background 0.2s ease;
+}
+
+.cap-pillar:nth-child(2n) {
+  border-right: none;
+}
+
+.cap-pillar:nth-child(n+3) {
+  border-bottom: none;
+}
+
+.cap-pillar:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.cap-pillar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.cap-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cap-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.26);
+  flex-shrink: 0;
+}
+
+.cap-pillar-head h3 {
+  font-size: 1.06rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text-main);
+}
+
+.cap-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--cyan);
+  white-space: nowrap;
+}
+
+.cap-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cap-list li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.cap-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.65);
+}
+
+.cap-list li strong {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.cap-list code {
+  font-size: 0.78rem;
+  color: #bae6fd;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+
 @media (max-width: 960px) {
   .hero-grid,
   .bento-grid,
   .download-grid,
   .track-grid,
+  .release-highlights-grid,
+  .cap-board,
   .quickstart-grid,
   .app-body,
   .algo-row {
     grid-template-columns: 1fr;
+  }
+  .cap-pillar {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 22px 20px;
+  }
+  .cap-pillar:last-child {
+    border-bottom: none;
   }
   .bento-card.span-2 {
     grid-column: span 1;

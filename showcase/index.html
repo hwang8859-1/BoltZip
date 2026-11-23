@@ -73,6 +73,9 @@
               <span data-i18n-html="quickLegacyPill"><strong>v0.9.3 兼容版</strong> · Intel Mac / macOS 12–15</span>
             </button>
           </div>
+          <div class="hero-whats-new" data-i18n-html="heroWhatsNew">
+            <strong>✨ v1.0.6 最新亮点：</strong>内置 AI Agent (MCP) 服务与一键配置面板 · 损坏 ZIP 快捷修复入口 (<code>⌥⌘R</code>) · 7z 分卷读写与单流压缩
+          </div>
           <div class="hero-stats">
             <div class="stat-item">
               <div class="stat-val" data-i18n="stat1Val">全格式 + 多核并行</div>
@@ -110,7 +113,7 @@
                 <div class="layer-tag">Archive Core</div>
                 <div class="layer-body">
                   <strong>BoltZipCore (Multi-Core Swift Engine)</strong>
-                  <span data-i18n="archLayer2">ZIP64 / 分卷 .z01 / 原地增删改 / RAR5 / WinZip AE-2 / GB18030 自动识别</span>
+                  <span data-i18n="archLayer2">ZIP64 / 7z 分卷 / 原地增删改 / RAR5 / WinZip AE-2 / MCP Server</span>
                 </div>
               </div>
               <div class="arch-connector">▼</div>
@@ -136,6 +139,27 @@
           <span class="eyebrow">RELEASE CENTER · V1.0.6 &amp; V0.9.3</span>
           <h2 data-i18n="dlTitle">选择适合你 Mac 的 BoltZip 版本</h2>
           <p data-i18n="dlSub">全版本均已打包带「拖拽至 Applications」引导页面的 .dmg 安装镜像、便携 .zip 与 SHA-256 校验清单</p>
+        </div>
+
+        <div class="release-highlights glass-surface">
+          <div class="release-highlights-head">
+            <h3 data-i18n="dlNewHead">✨ v1.0.6 最新版本核心特性</h3>
+            <p data-i18n="dlNewSub">专注 Apple Silicon 与 macOS 26+，带来原生 AI 自动化接入与更完备的归档抢救能力</p>
+          </div>
+          <div class="release-highlights-grid">
+            <div class="rh-item">
+              <strong data-i18n="dlNew1Title">🤖 AI Agent 原生接入 (MCP Server)</strong>
+              <p data-i18n-html="dlNew1Desc">集成 JSON-RPC 2.0 stdio MCP 服务，支持 Claude / Cursor 调用 7 项归档工具；主菜单「AI Agent 连接 (MCP)…」一键复制配置。</p>
+            </div>
+            <div class="rh-item">
+              <strong data-i18n="dlNew2Title">🩹 损坏 ZIP 智能修复体系</strong>
+              <p data-i18n-html="dlNew2Desc">系统菜单新增「修复损坏的 ZIP 归档…」（<code>⌥⌘R</code>），开启受损 ZIP 时智能引导恢复，本地头深扫无损抢救完好条目。</p>
+            </div>
+            <div class="rh-item">
+              <strong data-i18n="dlNew3Title">📦 7z 分卷读写与极简纯净架构</strong>
+              <p data-i18n-html="dlNew3Desc">支持 <code>.7z.001+</code> 分卷、非分卷 <code>.7z</code> 包内编辑、独立 <code>.gz/.xz</code> 流压缩与多选分别打包；纯内存按需解密，零后台常驻。</p>
+            </div>
+          </div>
         </div>
 
         <div class="track-matcher-bar glass-surface">
@@ -364,6 +388,79 @@
       </div>
     </section>
 
+    <!-- Concentrated Core Capabilities Matrix (Directly Below #features) -->
+    <section id="capabilities" class="section">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">COMPLETE CAPABILITIES</span>
+          <h2 data-i18n="capHead">核心特性全景 · 专注高效与纯粹</h2>
+          <p data-i18n="capSub">从桌面交互、多格式内核到安全防护与 AI Agent 自动化，一站式汇总 BoltZip 最核心的工程能力</p>
+        </div>
+
+        <div class="cap-board glass-surface">
+          <div class="cap-pillar">
+            <div class="cap-pillar-head">
+              <div class="cap-title-group">
+                <div class="cap-icon">🗂️</div>
+                <h3 data-i18n="capP1Title">包内直览与原位无损编辑</h3>
+              </div>
+              <span class="cap-badge" data-i18n="capP1Badge">桌面级工作台</span>
+            </div>
+            <ul class="cap-list">
+              <li data-i18n-html="capP1B1"><strong>零解压浏览与嵌套钻取</strong>：目录树浏览、空格 Quick Look 原生预览，支持嵌套压缩包逐层深入与面包屑返回。</li>
+              <li data-i18n-html="capP1B2"><strong>原地增删改与零重压缩</strong>：ZIP 与非分卷 <code>.7z</code> 支持包内加减、重命名及文本编辑；ZIP 未改动条目直接复制原压缩流。</li>
+              <li data-i18n-html="capP1B3"><strong>直接拖出与注释/包编辑</strong>：拖拽文件直出访达，支持单独导出选中项、编辑 ZIP 注释及 JAR/APK 包内文本文件更新。</li>
+            </ul>
+          </div>
+
+          <div class="cap-pillar">
+            <div class="cap-pillar-head">
+              <div class="cap-title-group">
+                <div class="cap-icon">⚡</div>
+                <h3 data-i18n="capP2Title">全格式开源引擎与系统深度融合</h3>
+              </div>
+              <span class="cap-badge" data-i18n="capP2Badge">Apple Silicon</span>
+            </div>
+            <ul class="cap-list">
+              <li data-i18n-html="capP2B1"><strong>主流与分卷全覆盖</strong>：支持 ZIP64、<code>.z01+</code> / <code>.7z.001+</code> 分卷、RAR/RAR5 解压、TAR.* 系列及独立 <code>.gz / .xz</code> 单流压缩。</li>
+              <li data-i18n-html="capP2B2"><strong>访达一级菜单与智能解压</strong>：原生沙盒 <code>Bolt ›</code> 右键直达智能解压（单目录不套娃）、多选分别打包与独立悬浮进度窗。</li>
+              <li data-i18n-html="capP2B3"><strong>64 MB+ 真流式与专属图标</strong>：大文件分块低内存流式读写，多核硬件加速，自带 17 套分格式文件专属图标并支持一键关联默认应用。</li>
+            </ul>
+          </div>
+
+          <div class="cap-pillar">
+            <div class="cap-pillar-head">
+              <div class="cap-title-group">
+                <div class="cap-icon">🛡️</div>
+                <h3 data-i18n="capP3Title">痛点自愈、安全加密与损坏修复</h3>
+              </div>
+              <span class="cap-badge" data-i18n="capP3Badge">安全可靠</span>
+            </div>
+            <ul class="cap-list">
+              <li data-i18n-html="capP3B1"><strong>自动净包与编码自愈</strong>：默认过滤 <code>.DS_Store / __MACOSX / ._*</code>，智能识别 GB18030 / Big5 / Shift-JIS / EUC-KR 彻底告别乱码。</li>
+              <li data-i18n-html="capP3B2"><strong>AES-256 加密与纯内存密钥</strong>：支持 WinZip AE-2 与 7z 文件名隐藏加密；会话密码仅留内存按需销毁，无后台钥匙串残留。</li>
+              <li data-i18n-html="capP3B3"><strong>受损 ZIP 深度无损恢复</strong>：支持本地文件头深度扫描抢救完好条目并报告失败原因，配合 <code>⌥⌘R</code> 快捷键与异常时一键跳转恢复。</li>
+            </ul>
+          </div>
+
+          <div class="cap-pillar">
+            <div class="cap-pillar-head">
+              <div class="cap-title-group">
+                <div class="cap-icon">🤖</div>
+                <h3 data-i18n="capP4Title">AI Agent (MCP)、CLI 与液态玻璃</h3>
+              </div>
+              <span class="cap-badge" data-i18n="capP4Badge">AI &amp; 开发者</span>
+            </div>
+            <ul class="cap-list">
+              <li data-i18n-html="capP4B1"><strong>内置 MCP Server 赋能 AI</strong>：通过 <code>boltzip mcp</code> 开放压缩、解压、批处理、列表、校验与 ZIP 修复等 7 大标准 MCP 工具。</li>
+              <li data-i18n-html="capP4B2"><strong>全功能 CLI 与桌面一键配置</strong>：随包内置 <code>boltzip</code> CLI（含 <code>add/rm/mv/recover/--json</code>），并在菜单栏提供 MCP JSON 一键拷贝面板。</li>
+              <li data-i18n-html="capP4B3"><strong>三层液态玻璃与多语言更新</strong>：macOS 26+ 支持通透度调节与板块隐藏，4 语种随系统切换，内置 GitHub Releases + SHA-256 自动更新。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Open Source Algorithms Lab -->
     <section id="algorithms" class="section">
       <div class="container">
@@ -431,12 +528,12 @@ git checkout legacy/macos-12
 
           <div class="code-card glass-surface">
             <div class="code-head">
-              <span data-i18n="qsStep3">3. 使用 boltzip CLI</span>
-              <button class="copy-btn" data-copy="swift run -c release boltzip a release.zip ./src --algo zstd --aes256 --password Secret" data-i18n="copyBtn">复制</button>
+              <span data-i18n="qsStep3">3. 使用 boltzip CLI &amp; MCP</span>
+              <button class="copy-btn" data-copy="swift run -c release boltzip mcp" data-i18n="copyBtn">复制</button>
             </div>
             <pre><code>swift run -c release boltzip a release.zip ./src --algo zstd --aes256 --password Secret
 swift run -c release boltzip t release.zip --password Secret
-swift run -c release boltzip bench</code></pre>
+swift run -c release boltzip mcp</code></pre>
           </div>
         </div>
       </div>
