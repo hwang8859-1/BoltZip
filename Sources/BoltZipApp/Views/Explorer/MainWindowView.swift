@@ -462,12 +462,8 @@ struct MainWindowView: View {
             UpdateAvailableSheet(vm: vm, release: info)
         case .editEntryText(let document):
             ArchiveTextEditorSheet(vm: vm, document: document)
-        case .managePresets(let profileID):
-            CompressionProfilesSheet(vm: vm, initialProfileID: profileID)
         case .recoverZip(let initialSource):
             ZipRecoverySheet(vm: vm, initialSource: initialSource)
-        case .convertArchives(let sources):
-            ConvertArchivesSheet(vm: vm, initialSources: sources)
         }
     }
 }

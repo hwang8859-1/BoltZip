@@ -128,34 +128,13 @@ echo "  PASS warm op=open"
 pkill -x BoltZipApp >/dev/null 2>&1 || true
 sleep 0.3
 
-echo "==> [E2E 5/6] New v1.0.5 Finder URL actions (compressQuickPreset, convertArchives, recoverZip)..."
-mkdir -p "$WORK/quick_dir"
-echo "quick preset payload" > "$WORK/quick_dir/item.txt"
-ENC_QUICK="$(url_encode "$WORK/quick_dir")"
-open -a "$APP_UNDER_TEST" "boltzip://hud?op=compressQuickPreset&path=${ENC_QUICK}"
-sleep 2.8
-ls "$WORK"/quick_dir* | grep -qvE "/quick_dir$"
-echo "  PASS compressQuickPreset created archive"
-sleep 1.4
-if pgrep -x BoltZipApp >/dev/null; then
-    echo "  INFO HUD auto-exit still settling; stopping before next test"
-    pkill -x BoltZipApp >/dev/null 2>&1 || true
-    sleep 0.3
-else
-    echo "  PASS HUD auto-terminated cleanly after quick task"
-fi
-
-for query in \
-    "op=convertArchives&path=${ENC_SRC_ZIP}" \
-    "op=recoverZip&path=${ENC_SRC_ZIP}"
-do
-    pkill -x BoltZipApp >/dev/null 2>&1 || true
-    sleep 0.3
-    open -a "$APP_UNDER_TEST" "boltzip://finder?${query}"
-    sleep 1.6
-    pgrep -x BoltZipApp >/dev/null
-    echo "  PASS cold ${query%%&*}"
-done
+echo "==> [E2E 5/6] New v1.0.5 Finder URL action (recoverZip)..."
+pkill -x BoltZipApp >/dev/null 2>&1 || true
+sleep 0.3
+open -a "$APP_UNDER_TEST" "boltzip://finder?op=recoverZip&path=${ENC_SRC_ZIP}"
+sleep 1.6
+pgrep -x BoltZipApp >/dev/null
+echo "  PASS cold op=recoverZip"
 pkill -x BoltZipApp >/dev/null 2>&1 || true
 
 echo "==> [E2E 6/6] Verifying zero new DiagnosticReports crash files..."

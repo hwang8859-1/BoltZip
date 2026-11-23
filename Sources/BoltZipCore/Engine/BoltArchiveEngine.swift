@@ -163,6 +163,59 @@ public enum BoltArchiveEngine {
         }
     }
 
+    public static func defaultBaseStem(for inputs: [URL], format: ArchiveFormat = .zip) -> String {
+        guard let first = inputs.first else { return "Archive" }
+        if inputs.count == 1 {
+            let name = first.deletingPathExtension().lastPathComponent
+            return name.isEmpty ? "Archive" : name
+        }
+        let parentName = first.deletingLastPathComponent().lastPathComponent
+        return parentName.isEmpty ? "Archive" : parentName
+    }
+
+    public static func makeOutputURL(
+        stem: String,
+        format: ArchiveFormat,
+        splitVolumeSizeBytes: UInt64? = nil,
+        in directory: URL,
+        deduplicating: Bool = true,
+        reservedPaths: Set<String> = []
+    ) -> URL {
+        let fm = FileManager.default
+        let isSplit = format.supportsSplitVolumes && (splitVolumeSizeBytes ?? 0) >= 65536
+        func candidatePaths(index: Int) -> (output: URL, collisionURLs: [URL]) {
+            let suffixedStem = index == 0 ? stem : "\(stem) (\(index))"
+            let mainURL = directory.appendingPathComponent("\(suffixedStem).\(format.fileExtension)")
+            if isSplit && format == .sevenZip {
+                let firstVol = directory.appendingPathComponent("\(suffixedStem).7z.001")
+                return (firstVol, [mainURL, firstVol])
+            }
+            if isSplit && format == .zip {
+                let firstVol = directory.appendingPathComponent("\(suffixedStem).z01")
+                return (mainURL, [mainURL, firstVol])
+            }
+            return (mainURL, [mainURL])
+        }
+
+        if !deduplicating {
+            return candidatePaths(index: 0).output
+        }
+
+        var idx = 0
+        while idx < 10_000 {
+            let candidate = candidatePaths(index: idx)
+            let collides = candidate.collisionURLs.contains { url in
+                fm.fileExists(atPath: url.path)
+                    || reservedPaths.contains(ArchiveExtractionDestination.pathKey(url))
+            }
+            if !collides {
+                return candidate.output
+            }
+            idx += 1
+        }
+        return directory.appendingPathComponent("\(stem)-\(UUID().uuidString.prefix(6)).\(format.fileExtension)")
+    }
+
     static func makeListing(
         archiveURL: URL,
         format: ArchiveFormat,

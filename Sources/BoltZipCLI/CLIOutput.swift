@@ -6,7 +6,7 @@ func printUsage() {
     print("""
     BoltZip CLI v\(BoltZipVersion.current) (Open-Source macOS Compression Engine)
     Usage:
-      boltzip a <output.zip|tar.zst|tar.gz|tar.xz|tar.bz2|tar.lz4|tar|7z|gz|xz|dir> <input1> [input2...] [--preset NAME] [--algo deflate|zstd|bzip2|xz|lz4|store] [--level N] [--exclude PATTERN] [--name-pattern TPL] [--password PW|--password-stdin|--ask-password] [--aes256|--zipcrypto] [--encrypt-filenames] [--split MB] [--comment TEXT] [--threads auto|N] [--keep-junk] [--no-symlinks]
+      boltzip a <output.zip|tar.zst|tar.gz|tar.xz|tar.bz2|tar.lz4|tar|7z|gz|xz|dir> <input1> [input2...] [--algo deflate|zstd|bzip2|xz|lz4|store] [--level N] [--exclude PATTERN] [--password PW|--password-stdin|--ask-password] [--aes256|--zipcrypto] [--encrypt-filenames] [--split MB] [--comment TEXT] [--threads auto|N] [--keep-junk] [--no-symlinks]
       boltzip x <archive> [dest_dir] [--mode smart|here|subfolder] [--overwrite overwrite|skip|rename] [--password PW|--password-stdin|--ask-password] [--encoding auto|utf8|gb18030|big5|shiftjis|euckr|cp437] [--threads auto|N] [--keep-junk] [--no-symlinks]
       boltzip e <archive> [dest_dir] [--overwrite overwrite|skip|rename] [--password PW|--password-stdin|--ask-password] [--encoding auto|utf8|gb18030|big5|shiftjis|euckr|cp437] [--threads auto|N] [--keep-junk]
       boltzip add <archive.zip|.7z> <input...> [--target folder/] [--algo ...] [--level N] [--exclude PATTERN] [--password PW|--password-stdin|--ask-password] [--aes256|--zipcrypto] [--encrypt-filenames] [--comment TEXT]
@@ -14,8 +14,6 @@ func printUsage() {
       boltzip mkdir <archive.zip|.7z> <folderPath> [--password PW|--password-stdin|--ask-password]
       boltzip mv <archive.zip|.7z> <oldPath> <newPath> [--password PW|--password-stdin|--ask-password]
       boltzip recover <damaged.zip> <output.zip> [--password PW|--password-stdin|--ask-password] [--encoding ...] [--json]
-      boltzip convert <archive1> [archive2...] --to <dest_dir> [--format zip|7z|tar.zst|...] [--preset NAME] [--algo ...] [--level N] [--split MB] [--exclude PATTERN] [--name-pattern TPL] [--overwrite rename|overwrite|skip] [--password PW|--password-stdin|--ask-password] [--json]
-      boltzip preset <list|save|rm> [name] [--format ...] [--algo ...] [--level N] [--split MB] [--exclude ...] [--name-pattern ...] [--aes256|--zipcrypto] [--encrypt-filenames] [--keep-junk] [--no-symlinks] [--quick] [--json]
       boltzip l <archive> [--encoding ...] [--password PW|--password-stdin|--ask-password] [--json]
       boltzip t <archive> [--password PW|--password-stdin|--ask-password] [--threads auto|N] [--json]
       boltzip associate [--status] [--restore] [--include-iso]

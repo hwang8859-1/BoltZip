@@ -62,10 +62,6 @@ final class WorkspaceViewModel {
     var pendingRecoverZipURL: URL?
     var activeSheet: ActiveSheet?
     var savedPassword: String?
-    var pendingKeychainSaveTargetURL: URL?
-    var pendingKeychainSavePassword: String?
-    var savedKeychainPasswordCount: Int = 0
-    var compressionProfiles: [CompressionProfile] = []
     var preferredZipEditAlgorithm: CompressionAlgorithm = .deflate
     var archiveEditErrorMessage: String?
 
@@ -530,68 +526,6 @@ final class WorkspaceViewModel {
         let fm = FileManager.default
         for url in urls where fm.fileExists(atPath: url.path) {
             try? fm.trashItem(at: url, resultingItemURL: nil)
-        }
-    }
-
-    // MARK: - Keychain Password & Preset Store Coordination
-
-    func refreshCompressionProfiles() {
-        compressionProfiles = CompressionProfileStore.shared.load()
-    }
-
-    func refreshKeychainPasswordCount() {
-        savedKeychainPasswordCount = ArchiveKeychainService.shared.savedCount()
-    }
-
-    func keychainPassword(for archiveURL: URL) -> String? {
-        ArchiveKeychainService.shared.password(for: archiveURL)
-    }
-
-    func stagePendingKeychainSave(password: String, save: Bool, for archiveURL: URL?) {
-        guard save, !password.isEmpty, let archiveURL else {
-            clearPendingKeychainSave()
-            return
-        }
-        pendingKeychainSaveTargetURL = archiveURL
-        pendingKeychainSavePassword = password
-    }
-
-    func commitPendingKeychainSaveIfMatching(password: String?, for archiveURL: URL) {
-        guard let password, !password.isEmpty,
-              let target = pendingKeychainSaveTargetURL,
-              let stagedPw = pendingKeychainSavePassword,
-              stagedPw == password,
-              ArchiveKeychainService.accountKey(for: target) == ArchiveKeychainService.accountKey(for: archiveURL) else {
-            return
-        }
-        try? ArchiveKeychainService.shared.savePassword(password, for: archiveURL)
-        clearPendingKeychainSave()
-        refreshKeychainPasswordCount()
-    }
-
-    func clearPendingKeychainSave() {
-        pendingKeychainSaveTargetURL = nil
-        pendingKeychainSavePassword = nil
-    }
-
-    func invalidateStaleKeychainPasswordIfNeeded(for archiveURL: URL, attemptedPassword: String?) -> Bool {
-        guard let attemptedPassword,
-              let stored = ArchiveKeychainService.shared.password(for: archiveURL),
-              stored == attemptedPassword else {
-            return false
-        }
-        try? ArchiveKeychainService.shared.removePassword(for: archiveURL)
-        refreshKeychainPasswordCount()
-        return true
-    }
-
-    func clearAllSavedKeychainPasswords() {
-        do {
-            let count = try ArchiveKeychainService.shared.removeAllPasswords()
-            refreshKeychainPasswordCount()
-            statusMessage = l10n.savedPasswordsClearedStatus(count)
-        } catch {
-            alertMessage = l10n.operationErrorMessage(error)
         }
     }
 }

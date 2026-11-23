@@ -35,9 +35,7 @@ extension WorkspaceViewModel {
             return openedArchiveFromHome
         }()
 
-        let keychainCandidate = (password == nil && !isNestedOpening) ? keychainPassword(for: url) : nil
-        let effectivePassword = password ?? keychainCandidate
-        let usedKeychain = (password == nil && keychainCandidate != nil)
+        let effectivePassword = password
 
         isBusy = true
         statusMessage = "\(url.lastPathComponent)..."
@@ -72,7 +70,6 @@ extension WorkspaceViewModel {
                     self.preferredZipEditAlgorithm = detectedAlgo
                     if let effectivePassword, !effectivePassword.isEmpty {
                         self.savedPassword = effectivePassword
-                        self.commitPendingKeychainSaveIfMatching(password: effectivePassword, for: url)
                     } else {
                         self.savedPassword = nil
                     }
@@ -84,18 +81,6 @@ extension WorkspaceViewModel {
             } catch {
                 await MainActor.run {
                     self.isBusy = false
-                    if usedKeychain, case BoltZipError.wrongPassword = error {
-                        _ = self.invalidateStaleKeychainPasswordIfNeeded(for: url, attemptedPassword: effectivePassword)
-                        let freshPromptError = BoltZipError.passwordRequired(url.lastPathComponent)
-                        let purpose: PasswordPurpose = parentFrame != nil
-                            ? .returnToParent(frameID: parentFrame!.id)
-                            : .openArchive(url: url, fromExternalFinder: fromExternalFinder,
-                                           isNestedOpening: isNestedOpening, initialFolder: initialFolder, encoding: encoding)
-                        if let prompt = purpose.prompt(for: freshPromptError) {
-                            self.activeSheet = prompt
-                            return
-                        }
-                    }
                     let purpose: PasswordPurpose
                     if let parentFrame {
                         guard self.archiveBackStack.last?.id == parentFrame.id else { return }

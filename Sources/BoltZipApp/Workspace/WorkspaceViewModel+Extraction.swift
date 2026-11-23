@@ -44,12 +44,7 @@ extension WorkspaceViewModel {
         trashArchiveOnCompletion: Bool = false
     ) {
         guard let archiveURL = overrideURL ?? listing?.archiveURL else { return }
-        var effectiveOptions = options
-        let keychainCandidate = (effectiveOptions.password == nil) ? keychainPassword(for: archiveURL) : nil
-        let usedKeychain = (effectiveOptions.password == nil && keychainCandidate != nil)
-        if let keychainCandidate {
-            effectiveOptions.password = keychainCandidate
-        }
+        let effectiveOptions = options
 
         if effectiveOptions.overwritePolicy == .overwrite {
             let finalOpts = effectiveOptions
@@ -57,9 +52,6 @@ extension WorkspaceViewModel {
                 do {
                     let conflicts = try BoltArchiveEngine.detectExtractConflicts(archiveURL: archiveURL, options: finalOpts)
                     await MainActor.run {
-                        if let pw = finalOpts.password, !pw.isEmpty {
-                            self.commitPendingKeychainSaveIfMatching(password: pw, for: archiveURL)
-                        }
                         if conflicts.hasConflicts {
                             self.pendingExtractConflict = PendingExtractConflict(
                                 archiveURL: archiveURL,
@@ -78,19 +70,12 @@ extension WorkspaceViewModel {
                     }
                 } catch {
                     await MainActor.run {
-                        var promptError: any Error = error
-                        if usedKeychain, case BoltZipError.wrongPassword = error {
-                            _ = self.invalidateStaleKeychainPasswordIfNeeded(for: archiveURL, attemptedPassword: finalOpts.password)
-                            promptError = BoltZipError.passwordRequired(archiveURL.lastPathComponent)
-                        }
-                        var retryOpts = finalOpts
-                        if usedKeychain { retryOpts.password = nil }
                         let purpose = PasswordPurpose.extract(
                             archiveURL: archiveURL,
-                            options: retryOpts,
+                            options: finalOpts,
                             trashArchiveOnCompletion: trashArchiveOnCompletion
                         )
-                        if let prompt = purpose.prompt(for: promptError) {
+                        if let prompt = purpose.prompt(for: error) {
                             self.activeSheet = prompt
                         } else {
                             self.alertMessage = self.l10n.operationErrorMessage(error)
@@ -152,9 +137,7 @@ extension WorkspaceViewModel {
     }
 
     func runSelectedZipExport(_ request: SelectedZipExport, password: String?) {
-        let keychainCandidate = (password == nil) ? keychainPassword(for: request.source) : nil
-        let effectivePassword = password ?? keychainCandidate
-        let usedKeychain = (password == nil && keychainCandidate != nil)
+        let effectivePassword = password
 
         isBusy = true
         progress = OperationProgress(fractionCompleted: 0.1, currentItem: request.destination.lastPathComponent)
@@ -172,7 +155,6 @@ extension WorkspaceViewModel {
                         if self.listing?.archiveURL == request.source {
                             self.savedPassword = effectivePassword
                         }
-                        self.commitPendingKeychainSaveIfMatching(password: effectivePassword, for: request.source)
                     }
                     self.statusMessage = request.destination.lastPathComponent
                     NSWorkspace.shared.activateFileViewerSelecting([request.destination])
@@ -181,12 +163,7 @@ extension WorkspaceViewModel {
                 await MainActor.run {
                     self.isBusy = false
                     self.progress = nil
-                    var promptError: any Error = error
-                    if usedKeychain, case BoltZipError.wrongPassword = error {
-                        _ = self.invalidateStaleKeychainPasswordIfNeeded(for: request.source, attemptedPassword: effectivePassword)
-                        promptError = BoltZipError.passwordRequired(request.source.lastPathComponent)
-                    }
-                    if let prompt = PasswordPurpose.exportSelectedZip(request).prompt(for: promptError) {
+                    if let prompt = PasswordPurpose.exportSelectedZip(request).prompt(for: error) {
                         self.activeSheet = prompt
                     } else {
                         self.alertMessage = self.l10n.operationErrorMessage(error)

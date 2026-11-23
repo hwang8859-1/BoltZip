@@ -9,7 +9,6 @@ private struct ArchiveEditRequest: Sendable {
     let options: CreateArchiveOptions
     let encoding: FilenameEncodingOption
     let temporaryDirectory: URL?
-    let usedKeychain: Bool
 
     func discardDraft() {
         if let temporaryDirectory { try? FileManager.default.removeItem(at: temporaryDirectory) }
@@ -31,17 +30,13 @@ extension WorkspaceViewModel {
     func addItemsToCurrentZip(_ urls: [URL], targetFolder: String? = nil) {
         let folder = targetFolder ?? currentFolder
         if let listing, listing.hasEncryptedEntries, (savedPassword ?? "").isEmpty {
-            if let kc = keychainPassword(for: listing.archiveURL), !kc.isEmpty {
-                unlockForEditAndAdd(urls: urls, targetFolder: folder, password: kc, usedKeychain: true)
-            } else {
-                activeSheet = .passwordPrompt(.unlockForEdit(urls: urls, targetFolder: folder))
-            }
+            activeSheet = .passwordPrompt(.unlockForEdit(urls: urls, targetFolder: folder))
             return
         }
         editCurrentZip([.addItems(urls: urls, targetFolder: folder)])
     }
 
-    func unlockForEditAndAdd(urls: [URL], targetFolder: String, password: String, usedKeychain: Bool = false) {
+    func unlockForEditAndAdd(urls: [URL], targetFolder: String, password: String) {
         guard let archiveURL = listing?.archiveURL else { return }
         let enc = encodingOption
         isBusy = true
@@ -54,18 +49,12 @@ extension WorkspaceViewModel {
                 await MainActor.run {
                     self.isBusy = false
                     self.savedPassword = password
-                    self.commitPendingKeychainSaveIfMatching(password: password, for: archiveURL)
                     self.editCurrentZip([.addItems(urls: urls, targetFolder: targetFolder)])
                 }
             } catch {
                 await MainActor.run {
                     self.isBusy = false
-                    var promptError: any Error = error
-                    if usedKeychain, case BoltZipError.wrongPassword = error {
-                        _ = self.invalidateStaleKeychainPasswordIfNeeded(for: archiveURL, attemptedPassword: password)
-                        promptError = BoltZipError.passwordRequired(archiveURL.lastPathComponent)
-                    }
-                    if let prompt = PasswordPurpose.unlockForEdit(urls: urls, targetFolder: targetFolder).prompt(for: promptError) {
+                    if let prompt = PasswordPurpose.unlockForEdit(urls: urls, targetFolder: targetFolder).prompt(for: error) {
                         self.activeSheet = prompt
                     } else {
                         self.alertMessage = self.l10n.operationErrorMessage(error)
@@ -75,7 +64,7 @@ extension WorkspaceViewModel {
         }
     }
 
-    func unlockEditOperations(_ operations: [ArchiveEditOperation], password: String, usedKeychain: Bool = false) {
+    func unlockEditOperations(_ operations: [ArchiveEditOperation], password: String) {
         guard let listing else { return }
         let archiveURL = listing.archiveURL
         let enc = encodingOption
@@ -89,18 +78,12 @@ extension WorkspaceViewModel {
                 await MainActor.run {
                     self.isBusy = false
                     self.savedPassword = password
-                    self.commitPendingKeychainSaveIfMatching(password: password, for: archiveURL)
                     self.editCurrentZip(operations)
                 }
             } catch {
                 await MainActor.run {
                     self.isBusy = false
-                    var promptError: any Error = error
-                    if usedKeychain, case BoltZipError.wrongPassword = error {
-                        _ = self.invalidateStaleKeychainPasswordIfNeeded(for: archiveURL, attemptedPassword: password)
-                        promptError = BoltZipError.passwordRequired(archiveURL.lastPathComponent)
-                    }
-                    if let prompt = PasswordPurpose.unlockEditOperations(operations).prompt(for: promptError) {
+                    if let prompt = PasswordPurpose.unlockEditOperations(operations).prompt(for: error) {
                         self.activeSheet = prompt
                     } else {
                         self.alertMessage = self.l10n.operationErrorMessage(error)
@@ -155,15 +138,12 @@ extension WorkspaceViewModel {
 
     private func editCurrentZip(_ ops: [ZipEditOperation]) {
         guard let listing, listing.canEditInPlace else { return }
-        let useKeychain = (savedPassword ?? "").isEmpty && listing.hasEncryptedEntries
-        let keychainCandidate = useKeychain ? keychainPassword(for: listing.archiveURL) : nil
         runArchiveEdit(ArchiveEditRequest(
             archiveURL: listing.archiveURL,
             operations: ops,
-            options: archiveEditOptions(passwordOverride: keychainCandidate),
+            options: archiveEditOptions(),
             encoding: encodingOption,
-            temporaryDirectory: nil,
-            usedKeychain: keychainCandidate != nil
+            temporaryDirectory: nil
         ))
     }
 
@@ -171,9 +151,7 @@ extension WorkspaceViewModel {
         guard let archive = editableArchiveURL(for: entry) else { return }
         guard entry.uncompressedSize <= 2 * 1024 * 1024 else { alertMessage = l10n.archiveTextEditorLimit; return }
         let encoding = encodingOption
-        let keychainCandidate = (overridePassword == nil && savedPassword == nil) ? keychainPassword(for: archive) : nil
-        let password = overridePassword ?? savedPassword ?? keychainCandidate
-        let usedKeychain = (overridePassword == nil && savedPassword == nil && keychainCandidate != nil)
+        let password = overridePassword ?? savedPassword
         isBusy = true
         archiveEditErrorMessage = nil
         Task.detached(priority: .userInitiated) {
@@ -186,7 +164,6 @@ extension WorkspaceViewModel {
                     guard self.listing?.archiveURL == archive else { return }
                     if let password, !password.isEmpty {
                         self.savedPassword = password
-                        self.commitPendingKeychainSaveIfMatching(password: password, for: archive)
                     }
                     guard let document else { self.alertMessage = self.l10n.archiveTextEncodingUnsupported; return }
                     self.activeSheet = .editEntryText(document)
@@ -194,12 +171,7 @@ extension WorkspaceViewModel {
             } catch BoltZipError.wrongPassword {
                 await MainActor.run {
                     self.isBusy = false
-                    if usedKeychain {
-                        _ = self.invalidateStaleKeychainPasswordIfNeeded(for: archive, attemptedPassword: password)
-                        self.activeSheet = .passwordPrompt(.editText(entry), wrongAttempt: false)
-                    } else {
-                        self.activeSheet = .passwordPrompt(.editText(entry), wrongAttempt: true)
-                    }
+                    self.activeSheet = .passwordPrompt(.editText(entry), wrongAttempt: true)
                 }
             } catch BoltZipError.passwordRequired {
                 await MainActor.run { self.isBusy = false; self.activeSheet = .passwordPrompt(.editText(entry)) }
@@ -223,7 +195,7 @@ extension WorkspaceViewModel {
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: replacement.path)
             runArchiveEdit(ArchiveEditRequest(archiveURL: listing.archiveURL,
                 operations: [.replaceEntry(path: document.entryPath, fileURL: replacement)], options: archiveEditOptions(),
-                encoding: encodingOption, temporaryDirectory: directory, usedKeychain: false))
+                encoding: encodingOption, temporaryDirectory: directory))
         } catch {
             if let draftDirectory { try? FileManager.default.removeItem(at: draftDirectory) }
             archiveEditErrorMessage = l10n.operationErrorMessage(error)
@@ -301,12 +273,7 @@ extension WorkspaceViewModel {
                 await MainActor.run {
                     self.isBusy = false
                     self.progress = nil
-                    var promptError: any Error = error
-                    if request.usedKeychain, case BoltZipError.wrongPassword = error {
-                        _ = self.invalidateStaleKeychainPasswordIfNeeded(for: request.archiveURL, attemptedPassword: request.options.password)
-                        promptError = BoltZipError.passwordRequired(request.archiveURL.lastPathComponent)
-                    }
-                    if let prompt = PasswordPurpose.unlockEditOperations(request.operations).prompt(for: promptError) {
+                    if let prompt = PasswordPurpose.unlockEditOperations(request.operations).prompt(for: error) {
                         request.discardDraft()
                         self.activeSheet = prompt
                     } else if error is ArchiveEditCompatibilityError {

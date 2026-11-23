@@ -140,7 +140,6 @@ final class QuickTaskHUDModel {
     private(set) var estimatedRemainingSeconds: Double?
 
     var passwordInput: String = ""
-    var rememberPasswordInKeychain: Bool = false
     private(set) var isHovering: Bool = false
 
     // MARK: - Window Coordination & Completion Hooks
@@ -160,8 +159,6 @@ final class QuickTaskHUDModel {
     private var uiTimerTask: Task<Void, Never>?
     private var autoDismissTask: Task<Void, Never>?
     private var activeGeneration: Int = 0
-    private var keychainAttemptedOpIDs: Set<UUID> = []
-    private var pendingKeychainSaves: [UUID: (url: URL, password: String)] = [:]
 
     private var accumulatedActiveSeconds: Double = 0
     private var segmentStartDate: Date?
@@ -267,25 +264,15 @@ final class QuickTaskHUDModel {
     }
 
     func submitPassword() {
-        guard case .needsPassword(let archiveURL, _) = phase, let op = currentOperation else { return }
+        guard case .needsPassword = phase, let op = currentOperation else { return }
         let entered = passwordInput
         guard !entered.isEmpty else { return }
-        if rememberPasswordInKeychain {
-            pendingKeychainSaves[op.id] = (archiveURL, entered)
-        } else {
-            pendingKeychainSaves.removeValue(forKey: op.id)
-        }
         passwordInput = ""
-        rememberPasswordInKeychain = false
         start(op.withPassword(entered), preserveElapsed: false)
     }
 
     func cancelPasswordPrompt() {
-        if let op = currentOperation {
-            pendingKeychainSaves.removeValue(forKey: op.id)
-        }
         passwordInput = ""
-        rememberPasswordInKeychain = false
         stop()
     }
 
@@ -332,14 +319,7 @@ final class QuickTaskHUDModel {
         runningTask?.cancel()
         stopUITimer()
 
-        var operation = rawOperation
-        if case .extract(let opID, let archiveURL, let opts) = operation,
-           opts.password == nil,
-           !keychainAttemptedOpIDs.contains(opID),
-           let kc = ArchiveKeychainService.shared.password(for: archiveURL) {
-            keychainAttemptedOpIDs.insert(opID)
-            operation = operation.withPassword(kc)
-        }
+        let operation = rawOperation
 
         activeGeneration &+= 1
         let generation = activeGeneration
@@ -353,7 +333,6 @@ final class QuickTaskHUDModel {
         smoothedBytesPerSec = 0
         estimatedRemainingSeconds = nil
         passwordInput = ""
-        rememberPasswordInKeychain = false
         lastSpeedSampleDate = nil
         lastSpeedSampleBytes = 0
 
@@ -480,10 +459,6 @@ final class QuickTaskHUDModel {
         }
 
         if let completedOp = currentOperation {
-            if let saveEntry = pendingKeychainSaves.removeValue(forKey: completedOp.id) {
-                try? ArchiveKeychainService.shared.savePassword(saveEntry.password, for: saveEntry.url)
-            }
-            keychainAttemptedOpIDs.remove(completedOp.id)
             onOperationSucceeded?(completedOp, resultURL)
         }
 
@@ -518,18 +493,8 @@ final class QuickTaskHUDModel {
                     return
                 }
             case .wrongPassword:
-                if case .extract(let opID, let archiveURL, let opts) = operation {
-                    pendingKeychainSaves.removeValue(forKey: opID)
-                    let usedStaleKC = keychainAttemptedOpIDs.contains(opID) && opts.password != nil
-                    if usedStaleKC {
-                        try? ArchiveKeychainService.shared.removePassword(for: archiveURL)
-                        currentOperation = .extract(id: opID, archiveURL: archiveURL, options: {
-                            var cleared = opts
-                            cleared.password = nil
-                            return cleared
-                        }())
-                    }
-                    phase = .needsPassword(archiveURL: archiveURL, wrongAttempt: !usedStaleKC)
+                if case .extract(_, let archiveURL, _) = operation {
+                    phase = .needsPassword(archiveURL: archiveURL, wrongAttempt: true)
                     onKeyFocusRequested?()
                     return
                 }

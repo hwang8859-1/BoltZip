@@ -727,49 +727,7 @@ struct L10n: Sendable {
         t("预览已跳过（超过 50 MB）：\(name)", "預覽已跳過（超過 50 MB）：\(name)", "Quick Look skipped (> 50 MB): \(name)", "プレビューをスキップ (50 MB 超): \(name)")
     }
 
-    // MARK: - Presets, Recovery, Conversion, Keychain & Standalone Streams
-    var rememberPasswordKeychainToggle: String {
-        t("记住密码到系统钥匙串", "將密碼記住到系統鑰匙圈", "Remember in macOS Keychain", "macOS キーチェーンに保存")
-    }
-    var savedPasswordsSection: String {
-        t("安全与密码", "安全性與密碼", "Security & Passwords", "セキュリティとパスワード")
-    }
-    func savedPasswordsCountLabel(_ count: Int) -> String {
-        t("钥匙串中已保存 \(count) 个压缩包密码", "鑰匙圈中已儲存 \(count) 個封存檔密碼", "\(count) archive password(s) saved in Keychain", "キーチェーンに \(count) 件の書庫パスワードを保存中")
-    }
-    var savedPasswordsSubtitle: String {
-        t("仅在解锁时主动勾选保存；绝不在预设方案或日志中存储明文密码", "僅在解鎖時主動勾選儲存；絕不在預設方案或紀錄中儲存明文密碼", "Only saved when opted in; presets never store plaintext passwords", "手動で許可した場合のみ保存し、プリセットには平文パスワードを残しません")
-    }
-    var clearSavedPasswordsBtn: String {
-        t("清除已保存密码", "清除已儲存密碼", "Clear Saved Passwords", "保存済みパスワードを消去")
-    }
-    func savedPasswordsClearedStatus(_ count: Int) -> String {
-        t("已清除 \(count) 个保存的压缩包密码", "已清除 \(count) 個已儲存的封存檔密碼", "Cleared \(count) saved password(s)", "\(count) 件の保存済みパスワードを消去しました")
-    }
-
-    var presetMenuTitle: String { t("压缩方案", "壓縮方案", "Preset", "プリセット") }
-    var presetManageSubtitle: String {
-        t("保存常用压缩参数与排除规则（不存储明文密码），支持访达一键默认压缩",
-          "儲存常用壓縮參數與排除規則（不儲存明文密碼），支援 Finder 一鍵預設壓縮",
-          "Save compression parameters & exclude rules cleanly (never stores passwords)",
-          "よく使う圧縮設定や除外ルールを保存（パスワードは保存されません）")
-    }
-    var presetSaveCurrentBtn: String { t("保存当前为方案…", "將目前設定另存為方案…", "Save Current as Preset…", "現在の設定をプリセット保存…") }
-    var presetManageBtn: String { t("管理方案与批量压缩…", "管理方案與批次壓縮…", "Manage Presets & Batch…", "プリセット管理・一括圧縮…") }
-    var presetNoneLabel: String { t("未选择方案", "未選擇方案", "Custom Settings", "カスタム設定") }
-    var presetNamePromptPlaceholder: String { t("方案名称（例如：工作归档）", "方案名稱（例如：工作封存）", "Preset name (e.g. Work Backup)", "プリセット名 (例: 仕事バックアップ)") }
-    var presetQuickDefaultTitle: String { t("设为访达“默认方案快速压缩”", "設為 Finder「預設方案快速壓縮」", "Default Quick Preset for Finder", "Finder クイック圧縮の既定にする") }
-    var presetStarterBtn: String { t("导入推荐方案", "匯入推薦方案", "Add Starter Presets", "おすすめを追加") }
-    var presetApplyBatchBtn: String { t("选择文件并按此方案批量压缩…", "選擇檔案並套用此方案批次壓縮…", "Batch Compress Files with Preset…", "ファイルを選んでこのプリセットで一括圧縮…") }
-    var presetEmptyState: String { t("尚未保存压缩方案。可点击上方导入推荐模板或新建方案。", "尚未儲存壓縮方案。可點擊上方匯入推薦範本或新增方案。", "No saved presets yet. Add starter templates or create one.", "保存済みプリセットはありません。テンプレートを追加するか新規作成してください。") }
-    var presetNewBtn: String { t("新建方案", "新增方案", "New Preset", "新規プリセット") }
-    var presetQuickBadge: String { t("访达默认", "Finder 預設", "Finder Default", "Finder 既定") }
-
-    var namingTemplateLabel: String { t("命名模板", "命名範本", "Naming Rule", "命名テンプレート") }
-    var namingTemplatePlaceholder: String { "{name} / {name}_{date}" }
-    var namingTokensHint: String {
-        t("可用变量：{name} 原名 · {date} 日期 · {datetime} 时间戳", "可用變數：{name} 原名 · {date} 日期 · {datetime} 時間戳", "Tokens: {name} · {date} · {datetime}", "変数: {name} · {date} · {datetime}")
-    }
+    // MARK: - Recovery, Streams & Exclusion
     var excludePatternsLabel: String { t("排除规则", "排除規則", "Exclude Rules", "除外ルール") }
     var excludePatternsPlaceholder: String { "*.tmp, *.log, .git, node_modules" }
     func compressIndividuallyLabel(_ count: Int) -> String {
@@ -807,24 +765,4 @@ struct L10n: Sendable {
           "“\(name)” appears damaged. Scan for recoverable entries into a new ZIP?",
           "「\(name)」は破損しているようです。復元可能な項目をスキャンして別の ZIP に救出しますか？")
     }
-
-    var convertArchivesBtn: String { t("批量转换…", "批次轉換…", "Batch Convert…", "一括変換…") }
-    var convertArchivesTitle: String { t("归档批量格式转换", "封存檔批次格式轉換", "Batch Convert Archives", "書庫フォーマットの一括変換") }
-    var convertArchivesSubtitle: String {
-        t("保持目录结构批量转换格式并生成新归档，不删除原文件。",
-          "保持目錄結構批次轉換格式並產生新封存檔，不刪除原檔案。",
-          "Convert archives to a target format into new files without altering originals.",
-          "元のファイルを保持したまま、指定の形式へ一括変換します。")
-    }
-    var convertTargetFormatLabel: String { t("目标格式", "目標格式", "Target Format", "変換後の形式") }
-    var convertDestDirLabel: String { t("输出目录", "輸出目錄", "Destination Folder", "出力先フォルダ") }
-    var convertSourceCountLabel: String { t("源压缩包", "來源封存檔", "Source Archives", "変換元の書庫") }
-    var convertStartBtn: String { t("开始批量转换", "開始批次轉換", "Start Conversion", "一括変換を開始") }
-    var convertOptionalPasswordPlaceholder: String { t("可选密码（用于加密或解密）", "選填密碼（用於加密或解密）", "Optional password (source/target)", "任意のパスワード（復号・暗号化）") }
-    func convertSummaryLine(_ ok: Int, _ total: Int) -> String {
-        t("成功转换 \(ok)/\(total) 个压缩包", "成功轉換 \(ok)/\(total) 個封存檔", "Converted \(ok)/\(total) archive(s)", "\(ok)/\(total) 件の書庫を変換しました")
-    }
-    var batchOverwriteRename: String { t("自动重命名避免覆盖", "自動重新命名避免覆蓋", "Rename to Keep Both", "自動リネーム（上書きしない）") }
-    var batchOverwriteSkip: String { t("跳过已存在目标", "略過已存在目標", "Skip Existing", "既存ファイルをスキップ") }
-    var batchOverwriteReplace: String { t("覆盖同目标（保护源文件）", "覆蓋同目標（保護來源檔案）", "Overwrite (Protect Source)", "上書き（元書庫は保護）") }
 }
