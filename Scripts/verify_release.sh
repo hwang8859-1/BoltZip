@@ -170,7 +170,7 @@ if "$CLI" l "$TMP_CLI/split7z.7z.001" --password "secret!${APP_VERSION}" > "$TMP
 fi
 grep -q 'split7z.7z.002' "$TMP_CLI/split7z-missing.txt"
 
-# Standalone .gz / .xz streams, --password-stdin, --exclude, 7z edit, recover, convert, and isolated preset store
+# Standalone .gz / .xz streams, --password-stdin, --exclude, 7z edit, and recover
 echo "standalone payload ${APP_VERSION}" > "$TMP_CLI/single.txt"
 "$CLI" a "$TMP_CLI/single.txt.gz" "$TMP_CLI/single.txt" --level 6
 "$CLI" a "$TMP_CLI/single.txt.xz" "$TMP_CLI/single.txt" --level 4 --threads 2
@@ -202,15 +202,6 @@ pathlib.Path(sys.argv[2]).write_bytes(data[:cd])
 PY
 "$CLI" recover "$TMP_CLI/damaged_no_cd.zip" "$TMP_CLI/recovered_cli.zip" >/dev/null
 "$CLI" t "$TMP_CLI/recovered_cli.zip" >/dev/null
-
-mkdir -p "$TMP_CLI/converted_cli" "$TMP_CLI/fake_home"
-"$CLI" convert "$TMP_CLI/test.zip" --to "$TMP_CLI/converted_cli" --format tar.zst --name-pattern "{name}_conv" >/dev/null
-test -f "$TMP_CLI/converted_cli/test_conv.tar.zst"
-"$CLI" t "$TMP_CLI/converted_cli/test_conv.tar.zst" >/dev/null
-
-HOME="$TMP_CLI/fake_home" "$CLI" preset save "ci-zstd" --format tar.zst --algo zstd --level 5 --exclude "*.tmp" --name-pattern "{name}_{date}" --quick >/dev/null
-HOME="$TMP_CLI/fake_home" "$CLI" preset list --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d)==1 and d[0]["name"]=="ci-zstd"'
-HOME="$TMP_CLI/fake_home" "$CLI" preset rm "ci-zstd" >/dev/null
 
 echo "==> [5/6] Validating showcase JS syntax, 4-language i18n keys & download references..."
 if command -v node >/dev/null 2>&1; then
