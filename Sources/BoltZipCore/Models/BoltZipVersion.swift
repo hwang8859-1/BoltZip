@@ -1,6 +1,6 @@
 import Foundation
 
 public enum BoltZipVersion: Sendable {
-    public static let current = "1.0.5"
-    public static let build = "20"
+    public static let current = "1.0.6"
+    public static let build = "21"
 }
