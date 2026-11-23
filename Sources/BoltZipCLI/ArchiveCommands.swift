@@ -12,7 +12,7 @@ enum ArchiveCommands {
 
         let targetIsDir = (try? targetArg.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
         let fmt: ArchiveFormat
-        if let explicitFmt = arguments.options["format"].flatMap(parseArchiveFormat) {
+        if let explicitFmt = arguments.options["format"].flatMap(ArchiveFormat.parse) {
             fmt = explicitFmt
         } else if let detected = ArchiveFormat.detect(from: targetArg) {
             fmt = detected
@@ -308,24 +308,6 @@ enum ArchiveCommands {
         return report.recoveredCount > 0 ? 0 : 2
     }
 
-    private static func parseArchiveFormat(_ raw: String) -> ArchiveFormat? {
-        let lower = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        switch lower {
-        case "zip": return .zip
-        case "7z", "sevenzip": return .sevenZip
-        case "tar": return .tar
-        case "tar.gz", "tgz", "targz": return .tarGz
-        case "tar.zst", "tzst", "tarzst": return .tarZst
-        case "tar.xz", "txz", "tarxz": return .tarXz
-        case "tar.bz2", "tbz2", "tbz", "tarbz2": return .tarBz2
-        case "tar.lz4", "tlz4", "tarlz4": return .tarLz4
-        case "gz", "gzip": return .gz
-        case "xz": return .xz
-        default:
-            return ArchiveFormat(rawValue: lower).flatMap { ArchiveFormat.creatableFormats.contains($0) ? $0 : nil }
-        }
-    }
 
     private static func publishFlatFiles(from staging: URL, to destURL: URL, policy: OverwritePolicy,
                                          protectedSources: [URL]) throws -> Int {

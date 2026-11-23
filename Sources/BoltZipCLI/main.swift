@@ -17,6 +17,8 @@ func runCLI(_ args: [String]) async -> Int32 {
         case "version", "--version", "-v":
             print("BoltZip \(BoltZipVersion.current)")
             return 0
+        case "mcp", "--mcp":
+            return await MCPServer.run()
         case "associate":
             return await runAssociateCommand(flags: arguments.flags)
         case "engines":

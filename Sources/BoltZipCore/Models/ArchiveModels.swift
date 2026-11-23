@@ -49,6 +49,25 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
         [.zip, .tarZst, .tarGz, .tarXz, .tarBz2, .tarLz4, .tar, .sevenZip, .gz, .xz]
     }
 
+    public static func parse(_ raw: String) -> ArchiveFormat? {
+        let lower = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        switch lower {
+        case "zip": return .zip
+        case "7z", "sevenzip": return .sevenZip
+        case "tar": return .tar
+        case "tar.gz", "tgz", "targz": return .tarGz
+        case "tar.zst", "tzst", "tarzst": return .tarZst
+        case "tar.xz", "txz", "tarxz": return .tarXz
+        case "tar.bz2", "tbz2", "tbz", "tarbz2": return .tarBz2
+        case "tar.lz4", "tlz4", "tarlz4": return .tarLz4
+        case "gz", "gzip": return .gz
+        case "xz": return .xz
+        default:
+            return ArchiveFormat(rawValue: lower).flatMap { ArchiveFormat.creatableFormats.contains($0) ? $0 : nil }
+        }
+    }
+
     public var supportsInPlaceEditing: Bool { self == .zip || self == .sevenZip }
     public var supportsArchiveComment: Bool { self == .zip }
     public var isSingleFileStream: Bool {
