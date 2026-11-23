@@ -21,10 +21,7 @@ extension WorkspaceViewModel {
             alertMessage = l10n.quickLookTooLargeStatus(entry.name)
             return
         }
-        let explicitOrSessionPW = password ?? savedPassword
-        let keychainCandidate = (explicitOrSessionPW == nil) ? keychainPassword(for: archiveURL) : nil
-        let pw = explicitOrSessionPW ?? keychainCandidate
-        let usedKeychain = (explicitOrSessionPW == nil && keychainCandidate != nil)
+        let pw = password ?? savedPassword
         let enc = encodingOption
         let previewRoot = previewTempRoot
 
@@ -40,7 +37,6 @@ extension WorkspaceViewModel {
                     self.isBusy = false
                     if let pw, !pw.isEmpty {
                         self.savedPassword = pw
-                        self.commitPendingKeychainSaveIfMatching(password: pw, for: archiveURL)
                     }
                     self.statusMessage = entry.name
                     QuickLookPreviewController.shared.preview(url: fileURL)
@@ -57,12 +53,7 @@ extension WorkspaceViewModel {
                 try? FileManager.default.removeItem(at: subDir)
                 await MainActor.run {
                     self.isBusy = false
-                    var promptError: any Error = error
-                    if usedKeychain, case BoltZipError.wrongPassword = error {
-                        _ = self.invalidateStaleKeychainPasswordIfNeeded(for: archiveURL, attemptedPassword: pw)
-                        promptError = BoltZipError.passwordRequired(archiveURL.lastPathComponent)
-                    }
-                    if let prompt = PasswordPurpose.preview(entry).prompt(for: promptError) {
+                    if let prompt = PasswordPurpose.preview(entry).prompt(for: error) {
                         self.activeSheet = prompt
                     } else {
                         self.alertMessage = self.l10n.operationErrorMessage(error)

@@ -12,6 +12,4 @@
 "finder.compress7z" = "Compress to 7z";
 "finder.encryptSplitCompress" = "Encrypt & Split Archive...";
 "finder.repackEncryptCompress" = "Repack / Encrypt Archive...";
-"finder.compressQuickPreset" = "Quick Compress with Default Preset";
-"finder.convertArchives" = "Convert Format...";
 "finder.recoverZip" = "Recover Damaged ZIP...";

@@ -12,6 +12,4 @@
 "finder.compress7z" = "壓縮為 7z";
 "finder.encryptSplitCompress" = "加密 / 分卷進階壓縮...";
 "finder.repackEncryptCompress" = "重新打包 / 加密壓縮...";
-"finder.compressQuickPreset" = "依預設方案快速壓縮";
-"finder.convertArchives" = "批次轉換格式...";
 "finder.recoverZip" = "修復損毀 ZIP...";

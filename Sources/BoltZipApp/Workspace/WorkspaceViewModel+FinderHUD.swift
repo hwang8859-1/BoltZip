@@ -78,7 +78,6 @@ extension WorkspaceViewModel {
         hudModel.onOperationSucceeded = { [weak self] operation, _ in
             guard let self else { return }
             self.applyTrashCleanupIfScheduled(for: operation.id)
-            self.refreshKeychainPasswordCount()
         }
     }
 
@@ -90,7 +89,6 @@ extension WorkspaceViewModel {
         inAppTaskHUD.onOperationSucceeded = { [weak self] operation, resultURL in
             guard let self else { return }
             self.applyTrashCleanupIfScheduled(for: operation.id)
-            self.refreshKeychainPasswordCount()
             switch operation {
             case .compress(_, _, _, let options):
                 if self.inAppTaskHUD.pendingQueue.isEmpty {
@@ -198,21 +196,6 @@ extension WorkspaceViewModel {
             if !paths.isEmpty { quickCompressInHUD(inputs: paths, format: .tarZst, algorithm: .zstd) }
         case "compress7z":
             if !paths.isEmpty { quickCompressInHUD(inputs: paths, format: .sevenZip, algorithm: .xz) }
-        case "compressQuickPreset":
-            if !paths.isEmpty {
-                if let preset = CompressionProfileStore.shared.defaultQuickPreset() {
-                    batchCompressWithProfile(preset, inputs: paths, useFloatingHUD: true)
-                } else {
-                    quickCompressInHUD(inputs: paths, format: .zip, algorithm: .deflate)
-                }
-            }
-        case "convertArchives":
-            let archives = BoltArchiveEngine.filterArchiveURLs(paths)
-            if !archives.isEmpty {
-                onRequestShowMainWindow?()
-                boltActivateAppToForeground()
-                openConvertArchivesPanel(prefilled: archives)
-            }
         case "recoverZip":
             let archives = BoltArchiveEngine.filterArchiveURLs(paths)
             if let first = archives.first ?? paths.first {

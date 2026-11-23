@@ -12,6 +12,4 @@
 "finder.compress7z" = "7z に圧縮";
 "finder.encryptSplitCompress" = "暗号化・分割して圧縮...";
 "finder.repackEncryptCompress" = "再圧縮・暗号化...";
-"finder.compressQuickPreset" = "既定プリセットでクイック圧縮";
-"finder.convertArchives" = "フォーマット変換...";
 "finder.recoverZip" = "破損 ZIP を復元...";

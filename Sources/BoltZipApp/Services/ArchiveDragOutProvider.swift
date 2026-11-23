@@ -12,11 +12,9 @@ final class ExplorerPointerTracker {
 @MainActor
 private final class DragBatchPasswordState {
     var resolvedPassword: String?
-    var saveToKeychain = false
     var didPromptOrResolve = false
     private var rejectedPasswords: Set<String> = []
     private var cancelled = false
-    private var checkedKeychain = false
 
     func resolvePasswordIfNeeded(
         archiveURL: URL,
@@ -24,33 +22,23 @@ private final class DragBatchPasswordState {
         hasEncrypted: Bool,
         wrongAttempt: Bool,
         l: L10n
-    ) -> (password: String?, saveToKeychain: Bool, usedKeychain: Bool, cancelled: Bool) {
+    ) -> (password: String?, cancelled: Bool) {
         if cancelled {
-            return (nil, false, false, true)
+            return (nil, true)
         }
         if !wrongAttempt,
            let initialPassword, !initialPassword.isEmpty,
            !rejectedPasswords.contains(initialPassword) {
             resolvedPassword = initialPassword
             didPromptOrResolve = true
-            return (initialPassword, false, false, false)
+            return (initialPassword, false)
         }
         if !wrongAttempt, didPromptOrResolve, let resolvedPassword, !rejectedPasswords.contains(resolvedPassword) {
-            return (resolvedPassword, saveToKeychain, false, false)
-        }
-        if !wrongAttempt, !checkedKeychain, hasEncrypted {
-            checkedKeychain = true
-            if let kc = ArchiveKeychainService.shared.password(for: archiveURL),
-               !kc.isEmpty,
-               !rejectedPasswords.contains(kc) {
-                resolvedPassword = kc
-                didPromptOrResolve = true
-                return (kc, false, true, false)
-            }
+            return (resolvedPassword, false)
         }
         didPromptOrResolve = true
         guard hasEncrypted || wrongAttempt else {
-            return (nil, false, false, false)
+            return (nil, false)
         }
 
         boltActivateAppToForeground()
@@ -61,32 +49,20 @@ private final class DragBatchPasswordState {
             ? "\(archiveURL.lastPathComponent) — \(l.retryArchivePassword)"
             : "\(archiveURL.lastPathComponent) — \(l.passwordPromptDesc)"
 
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 8
-        stack.frame = NSRect(x: 0, y: 0, width: 260, height: 50)
-
         let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
         field.placeholderString = l.passwordPlaceholder
-        let keychainCheck = NSButton(checkboxWithTitle: l.rememberPasswordKeychainToggle, target: nil, action: nil)
-        keychainCheck.state = saveToKeychain ? .on : .off
-
-        stack.addArrangedSubview(field)
-        stack.addArrangedSubview(keychainCheck)
-        alert.accessoryView = stack
+        alert.accessoryView = field
         alert.addButton(withTitle: l.confirm)
         alert.addButton(withTitle: l.cancel)
         alert.window.initialFirstResponder = field
 
         if alert.runModal() == .alertFirstButtonReturn {
             let pw = field.stringValue
-            saveToKeychain = (keychainCheck.state == .on)
             resolvedPassword = pw.isEmpty ? nil : pw
-            return (resolvedPassword, saveToKeychain, false, false)
+            return (resolvedPassword, false)
         }
         cancelled = true
-        return (nil, false, false, true)
+        return (nil, true)
     }
 
     func reject(_ password: String?) {
@@ -237,10 +213,6 @@ final class DragOutCoordinator: NSObject, NSDraggingSource, NSFilePromiseProvide
                     }.value
                     if let password, !password.isEmpty {
                         if vm?.listing?.archiveURL == archiveURL { vm?.savedPassword = password }
-                        if pwResult.saveToKeychain {
-                            try? ArchiveKeychainService.shared.savePassword(password, for: archiveURL)
-                            vm?.refreshKeychainPasswordCount()
-                        }
                     }
                     vm?.isBusy = false
                     vm?.progress = nil
@@ -257,12 +229,7 @@ final class DragOutCoordinator: NSObject, NSDraggingSource, NSFilePromiseProvide
                             if vm?.listing?.archiveURL == archiveURL, vm?.savedPassword == password {
                                 vm?.savedPassword = nil
                             }
-                            if pwResult.usedKeychain {
-                                _ = vm?.invalidateStaleKeychainPasswordIfNeeded(for: archiveURL, attemptedPassword: password)
-                                wrongAttempt = false
-                            } else {
-                                wrongAttempt = true
-                            }
+                            wrongAttempt = true
                             continue
                         default:
                             break
