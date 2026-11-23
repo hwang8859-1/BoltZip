@@ -44,12 +44,10 @@ BoltZip/
 │   ├── BoltZipCore/                     # Platform-agnostic Swift archive engine (Sendable)
 │   │   ├── Models/
 │   │   │   ├── ArchiveModels.swift      # Formats, CompressionAlgorithm, EncryptionMethod, Entry, Options
-│   │   │   ├── CompressionProfile.swift # Reusable compression presets, naming templates & JSON store
 │   │   │   ├── BoltZipError.swift
 │   │   │   └── BoltZipVersion.swift     # Shared application, CLI and packaging version
 │   │   ├── Codecs/
 │   │   │   ├── CompressionCodec.swift   # Swift bridge over CBoltCompression + CRC32
-│   │   │   ├── ArchiveKeychainService.swift # Opt-in per-archive macOS Keychain password storage
 │   │   │   ├── FilenameEncoding.swift   # Auto-detection for UTF-8, GB18030/GBK, Big5, Shift-JIS, EUC-KR, CP437
 │   │   │   └── ZipCrypto.swift          # WinZip AE-2/AE-1 AES-256 (CommonCrypto/CryptoKit) + legacy ZipCrypto
 │   │   ├── Formats/
@@ -62,7 +60,6 @@ BoltZip/
 │   │   │   └── ExtendedArchiveDriver.swift # System libarchive reader for extended formats
 │   │   ├── Engine/
 │   │   │   ├── ArchiveAssociationService.swift # Shared LaunchServices UTI & default app association logic
-│   │   │   ├── ArchiveConversion.swift  # Cross-format batch archive conversion with source volume protection
 │   │   │   ├── BoltArchiveEngine.swift  # Public archive interface and format dispatch for inspection, creation and editing
 │   │   │   ├── ArchiveIntegrity.swift   # Integrity verification across formats
 │   │   │   ├── ArchiveInputCollector.swift # Shared filesystem traversal & glob exclude matcher
