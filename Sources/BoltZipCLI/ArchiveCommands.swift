@@ -2,16 +2,6 @@ import BoltZipCore
 import Foundation
 
 enum ArchiveCommands {
-    private static func resolvePreset(for arguments: CLIArguments) throws -> CompressionProfile? {
-        guard let key = arguments.presetName?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty else {
-            return nil
-        }
-        guard let profile = CompressionProfileStore.shared.find(namedOrID: key) else {
-            throw BoltZipError.entryNotFound("Preset '\(key)'")
-        }
-        return profile
-    }
-
     static func create(_ arguments: CLIArguments, progress: CLIProgress?) throws -> Int32 {
         guard arguments.positional.count >= 2 else {
             printUsage()
@@ -19,39 +9,27 @@ enum ArchiveCommands {
         }
         let targetArg = URL(fileURLWithPath: arguments.positional[0])
         let inputs = arguments.positional.dropFirst().map { URL(fileURLWithPath: $0) }
-        let preset = try resolvePreset(for: arguments)
 
         let targetIsDir = (try? targetArg.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
         let fmt: ArchiveFormat
         if let explicitFmt = arguments.options["format"].flatMap(parseArchiveFormat) {
             fmt = explicitFmt
-        } else if targetIsDir, let preset {
-            fmt = preset.format
         } else if let detected = ArchiveFormat.detect(from: targetArg) {
             fmt = detected
         } else {
-            fmt = preset?.format ?? .zip
+            fmt = .zip
         }
 
-        let splitBytes = try arguments.splitVolumeSizeBytes() ?? preset?.splitVolumeSizeBytes
-        let effectivePattern = arguments.namePattern ?? preset?.namingTemplate ?? "{name}"
+        let splitBytes = try arguments.splitVolumeSizeBytes()
         let resolvedOutURL: URL
         if targetIsDir {
-            var tempProfile = preset ?? CompressionProfile(name: "cli", format: fmt)
-            tempProfile.format = fmt
-            tempProfile.namingTemplate = effectivePattern
-            tempProfile.splitVolumeSizeBytes = splitBytes
-            resolvedOutURL = tempProfile.resolveOutputURL(for: inputs, in: targetArg)
-        } else if let pattern = arguments.namePattern {
-            let parent = targetArg.deletingLastPathComponent()
-            let baseStem = CompressionProfile.defaultBaseStem(for: inputs, format: fmt)
-            let stem = CompressionProfile.resolveBaseStem(template: pattern, defaultStem: baseStem, format: fmt)
-            resolvedOutURL = CompressionProfile.makeOutputURL(
-                stem: stem,
+            let baseStem = BoltArchiveEngine.defaultBaseStem(for: inputs, format: fmt)
+            resolvedOutURL = BoltArchiveEngine.makeOutputURL(
+                stem: baseStem,
                 format: fmt,
                 splitVolumeSizeBytes: splitBytes,
-                in: parent,
-                deduplicating: false
+                in: targetArg,
+                deduplicating: true
             )
         } else {
             resolvedOutURL = targetArg
@@ -60,18 +38,14 @@ enum ArchiveCommands {
         let password = try CLIPasswordInput.resolveInitialPassword(arguments: arguments, promptForCreationIfNeeded: true)
         let workers = try arguments.workerCount()
 
-        let defaultAlgo = preset?.algorithm ?? fmt.defaultAlgorithm
-        let algorithm = arguments.options["algo"].flatMap(CompressionAlgorithm.init(rawValue:)) ?? defaultAlgo
-        let level = arguments.options["level"].flatMap(Int.init) ?? (arguments.options["algo"] != nil ? algorithm.defaultLevel : (preset?.level ?? algorithm.defaultLevel))
+        let algorithm = arguments.options["algo"].flatMap(CompressionAlgorithm.init(rawValue:)) ?? fmt.defaultAlgorithm
+        let level = arguments.options["level"].flatMap(Int.init) ?? algorithm.defaultLevel
 
-        var excludes = preset?.excludePatterns ?? []
-        excludes.append(contentsOf: arguments.excludePatterns)
-
-        let excludeJunk = arguments.flags.contains("keep-junk") ? false : (preset?.excludeMacJunk ?? true)
-        let preserveSymlinks = arguments.flags.contains("no-symlinks") ? false : (preset?.preserveSymlinks ?? true)
-        let encryption = arguments.resolvedEncryption(password: password, defaultEncryption: preset?.encryption ?? .none)
+        let excludes = arguments.excludePatterns
+        let excludeJunk = !arguments.flags.contains("keep-junk")
+        let preserveSymlinks = !arguments.flags.contains("no-symlinks")
+        let encryption = arguments.resolvedEncryption(password: password, defaultEncryption: .none)
         let encryptNames = arguments.flags.contains("encrypt-filenames")
-            || ((preset?.encryptFileNames ?? false) && encryption == .aes256 && password != nil)
 
         let opts = CreateArchiveOptions(
             format: fmt,
@@ -82,7 +56,7 @@ enum ArchiveCommands {
             splitVolumeSizeBytes: splitBytes,
             excludeMacJunk: excludeJunk,
             excludePatterns: excludes,
-            encoding: arguments.options["encoding"].flatMap(FilenameEncodingOption.init(rawValue:)) ?? preset?.encoding ?? .utf8,
+            encoding: arguments.options["encoding"].flatMap(FilenameEncodingOption.init(rawValue:)) ?? .utf8,
             archiveComment: arguments.options["comment"] ?? "",
             workerCount: workers,
             preserveSymlinks: preserveSymlinks,
@@ -332,199 +306,6 @@ enum ArchiveCommands {
             print("  [UNRECOVERABLE] \(fail.entryPath) — \(fail.reason)")
         }
         return report.recoveredCount > 0 ? 0 : 2
-    }
-
-    static func convert(_ arguments: CLIArguments, progress: CLIProgress?) throws -> Int32 {
-        guard !arguments.positional.isEmpty else {
-            printUsage()
-            return 1
-        }
-        let destPath = arguments.options["to"] ?? "."
-        let destURL = URL(fileURLWithPath: destPath)
-        let sources = arguments.positional.map { URL(fileURLWithPath: $0) }
-        let preset = try resolvePreset(for: arguments)
-
-        let fmt: ArchiveFormat
-        if let rawFmt = arguments.options["format"] {
-            guard let parsed = parseArchiveFormat(rawFmt) else {
-                throw BoltZipError.unsupportedFormat(rawFmt)
-            }
-            fmt = parsed
-        } else {
-            fmt = preset?.format ?? .zip
-        }
-
-        let initialPassword = try CLIPasswordInput.resolveInitialPassword(arguments: arguments)
-        let workers = try arguments.workerCount()
-        let splitBytes = try arguments.splitVolumeSizeBytes() ?? preset?.splitVolumeSizeBytes
-        let overwrite = try arguments.options["overwrite"].map { _ in try arguments.overwritePolicy() } ?? .rename
-
-        let defaultAlgo = preset?.algorithm ?? fmt.defaultAlgorithm
-        let algorithm = arguments.options["algo"].flatMap(CompressionAlgorithm.init(rawValue:)) ?? defaultAlgo
-        let level = arguments.options["level"].flatMap(Int.init) ?? (arguments.options["algo"] != nil ? algorithm.defaultLevel : (preset?.level ?? algorithm.defaultLevel))
-        var excludes = preset?.excludePatterns ?? []
-        excludes.append(contentsOf: arguments.excludePatterns)
-
-        let excludeJunk = arguments.flags.contains("keep-junk") ? false : (preset?.excludeMacJunk ?? true)
-        let preserveSymlinks = arguments.flags.contains("no-symlinks") ? false : (preset?.preserveSymlinks ?? true)
-        let explicitEncryptFlag = arguments.flags.contains("aes256") || arguments.flags.contains("zipcrypto")
-        let encryption: EncryptionMethod
-        if !fmt.supportsEncryption && !explicitEncryptFlag {
-            encryption = .none
-        } else {
-            encryption = arguments.resolvedEncryption(password: initialPassword, defaultEncryption: preset?.encryption ?? .none)
-        }
-        let targetPassword = encryption == .none ? nil : initialPassword
-        let encryptNames = arguments.flags.contains("encrypt-filenames")
-            || ((preset?.encryptFileNames ?? false) && encryption == .aes256 && targetPassword != nil)
-
-        let targetOpts = CreateArchiveOptions(
-            format: fmt,
-            algorithm: algorithm,
-            level: level,
-            encryption: encryption,
-            password: targetPassword,
-            splitVolumeSizeBytes: splitBytes,
-            excludeMacJunk: excludeJunk,
-            excludePatterns: excludes,
-            encoding: arguments.encoding == .auto ? (preset?.encoding ?? .utf8) : arguments.encoding,
-            workerCount: workers,
-            preserveSymlinks: preserveSymlinks,
-            encryptFileNames: encryptNames
-        )
-
-        let allowPrompt = arguments.allowInteractivePasswordPrompt
-        let namingTemplate = arguments.namePattern ?? preset?.namingTemplate ?? "{name}"
-        let passwordProvider: (@Sendable (URL, Bool) throws -> String?)? = allowPrompt ? { @Sendable archiveURL, wrong in
-            let prompt = wrong ? "Incorrect password for \(archiveURL.lastPathComponent). Retry: " : "Enter password for \(archiveURL.lastPathComponent): "
-            return CLIPasswordInput.promptTTY(message: prompt)
-        } : nil
-        let report = try BoltArchiveEngine.convertArchives(
-            sources: sources,
-            destinationDirectory: destURL,
-            options: targetOpts,
-            sourcePassword: initialPassword,
-            sourcePasswordProvider: passwordProvider,
-            overwritePolicy: overwrite,
-            encoding: arguments.encoding,
-            namingTemplate: namingTemplate,
-            progress: progress
-        )
-
-        if arguments.useJSON {
-            try printJSON([
-                "destinationDirectory": destURL.path,
-                "succeededCount": report.succeededCount,
-                "failedCount": report.failedCount,
-                "results": report.results.map { item in
-                    [
-                        "source": item.sourceURL.path,
-                        "destinations": item.destinationURLs.map(\.path),
-                        "entryCount": item.entryCount,
-                        "succeeded": item.succeeded,
-                        "error": item.error?.localizedDescription as Any
-                    ]
-                }
-            ])
-            return report.failedCount == 0 ? 0 : 2
-        }
-
-        print("Converted \(report.succeededCount)/\(report.results.count) archive(s) in \(String(format: "%.2fs", report.elapsedSeconds))")
-        for item in report.results {
-            if item.succeeded {
-                let outs = item.destinationURLs.map(\.lastPathComponent).joined(separator: ", ")
-                print("  [OK] \(item.sourceURL.lastPathComponent) -> \(outs)")
-            } else {
-                print("  [FAIL] \(item.sourceURL.lastPathComponent): \(item.error?.localizedDescription ?? "Unknown error")")
-            }
-        }
-        return report.failedCount == 0 ? 0 : 2
-    }
-
-    static func preset(_ arguments: CLIArguments) throws -> Int32 {
-        let store = CompressionProfileStore.shared
-        let sub = arguments.positional.first?.lowercased() ?? "list"
-        switch sub {
-        case "list":
-            let all = store.load()
-            if arguments.useJSON {
-                let items: [[String: Any]] = all.map {
-                    [
-                        "id": $0.id.uuidString,
-                        "name": $0.name,
-                        "format": $0.format.rawValue,
-                        "algorithm": $0.algorithm.rawValue,
-                        "level": $0.level,
-                        "splitVolumeSizeBytes": $0.splitVolumeSizeBytes as Any,
-                        "excludePatterns": $0.excludePatterns,
-                        "namingTemplate": $0.namingTemplate,
-                        "isDefaultQuickPreset": $0.isDefaultQuickPreset
-                    ]
-                }
-                try printJSON(items)
-                return 0
-            }
-            if all.isEmpty {
-                print("No saved presets.")
-                return 0
-            }
-            for p in all {
-                let quick = p.isDefaultQuickPreset ? " [quick]" : ""
-                let split = p.splitVolumeSizeBytes.map { " split=\($0 / (1024 * 1024))MB" } ?? ""
-                let ex = p.excludePatterns.isEmpty ? "" : " exclude=\(p.excludePatterns.joined(separator: ","))"
-                print("• \(p.name)\(quick): \(p.format.rawValue) (\(p.algorithm.rawValue) lvl \(p.level)\(split)) template='\(p.namingTemplate)'\(ex)")
-            }
-            return 0
-
-        case "save":
-            guard arguments.positional.count >= 2 else {
-                printUsage()
-                return 1
-            }
-            let name = arguments.positional[1]
-            let fmt = try arguments.options["format"].map { raw -> ArchiveFormat in
-                guard let parsed = parseArchiveFormat(raw) else { throw BoltZipError.unsupportedFormat(raw) }
-                return parsed
-            } ?? .zip
-            let (algorithm, level) = arguments.compression(default: fmt.defaultAlgorithm)
-            let enc: EncryptionMethod = arguments.flags.contains("zipcrypto") ? .zipCrypto : (arguments.flags.contains("aes256") ? .aes256 : .none)
-            let split = try arguments.splitVolumeSizeBytes()
-            let profile = CompressionProfile(
-                name: name,
-                format: fmt,
-                algorithm: algorithm,
-                level: level,
-                encryption: enc,
-                encryptFileNames: arguments.flags.contains("encrypt-filenames"),
-                splitVolumeSizeBytes: split,
-                excludeMacJunk: arguments.stripMacJunk,
-                excludePatterns: arguments.excludePatterns,
-                preserveSymlinks: arguments.restoreSymlinks,
-                encoding: arguments.options["encoding"].flatMap(FilenameEncodingOption.init(rawValue:)) ?? .utf8,
-                namingTemplate: arguments.namePattern ?? "{name}",
-                isDefaultQuickPreset: arguments.flags.contains("quick")
-            )
-            try store.upsert(profile)
-            print("Saved preset '\(profile.name)' (\(profile.format.rawValue), \(profile.algorithm.rawValue) lvl \(profile.level))")
-            return 0
-
-        case "rm", "delete":
-            guard arguments.positional.count >= 2 else {
-                printUsage()
-                return 1
-            }
-            let name = arguments.positional[1]
-            let deleted = try store.delete(named: name)
-            guard deleted else {
-                throw BoltZipError.entryNotFound("Preset '\(name)'")
-            }
-            print("Removed preset '\(name)'")
-            return 0
-
-        default:
-            printUsage()
-            return 1
-        }
     }
 
     private static func parseArchiveFormat(_ raw: String) -> ArchiveFormat? {

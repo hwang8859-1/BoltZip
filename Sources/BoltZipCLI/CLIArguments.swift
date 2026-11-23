@@ -22,8 +22,6 @@ struct CLIArguments {
     var excludePatterns: [String] {
         (multiOptions["exclude"] ?? []).flatMap { ArchiveExcludeMatcher.parse($0) }
     }
-    var presetName: String? { options["preset"] }
-    var namePattern: String? { options["name-pattern"] }
 
     func resolvedEncryption(password: String?, defaultEncryption: EncryptionMethod = .none) -> EncryptionMethod {
         guard let password, !password.isEmpty else { return .none }
