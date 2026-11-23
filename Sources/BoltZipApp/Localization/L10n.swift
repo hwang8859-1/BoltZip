@@ -741,6 +741,8 @@ struct L10n: Sendable {
     }
 
     var recoverZipBtn: String { t("修复 ZIP…", "修復 ZIP…", "Recover ZIP…", "ZIP 修復…") }
+    var recoverZipMenuTitle: String { t("修复损坏的 ZIP 归档…", "修復損毀的 ZIP 封存檔…", "Repair Damaged ZIP Archive…", "破損した ZIP アーカイブを復元…") }
+    var recoverZipDamagedTitle: String { t("ZIP 归档已受损", "ZIP 封存檔已損毀", "Corrupted ZIP Archive", "破損した ZIP アーカイブ") }
     var recoverZipTitle: String { t("损坏 ZIP 可读条目恢复", "損毀 ZIP 可讀項目復原", "Recover Damaged ZIP", "破損 ZIP の復元") }
     var recoverZipSubtitle: String {
         t("逐条扫描并校验可读取内容，无损写入新归档，原损坏文件保持不变。",
@@ -758,11 +760,17 @@ struct L10n: Sendable {
         t("已扫描 \(scanned) 个 · 成功恢复 \(recovered) 个 · 无法恢复 \(failed) 个", "已掃描 \(scanned) 個 · 成功復原 \(recovered) 個 · 無法復原 \(failed) 個", "Scanned \(scanned) · Recovered \(recovered) · Unrecoverable \(failed)", "スキャン \(scanned) 件 · 復元 \(recovered) 件 · 復元不可 \(failed) 件")
     }
     var recoverZipUnrecoverableSection: String { t("无法恢复的条目及原因", "無法復原的項目與原因", "Unrecoverable Entries & Reasons", "復元できない項目と理由") }
-    var recoverZipOfferBtn: String { t("提取完好条目恢复…", "擷取完好項目復原…", "Recover Readable Entries…", "正常項目を復元…") }
+    var recoverZipOfferBtn: String { t("跳转到修复页面…", "跳轉至修復頁面…", "Go to Repair…", "復元画面へ移動…") }
     func recoverZipInspectFailedOffer(_ name: String) -> String {
-        t("“\(name)”的 ZIP 目录或数据可能已损坏，是否打开损坏恢复工具扫描可抢救的条目？",
-          "「\(name)」的 ZIP 目錄或資料可能已損毀，是否開啟損毀復原工具掃描可搶救的項目？",
-          "“\(name)” appears damaged. Scan for recoverable entries into a new ZIP?",
-          "「\(name)」は破損しているようです。復元可能な項目をスキャンして別の ZIP に救出しますか？")
+        t("“\(name)”已受损无法正常读取，是否跳转到修复页面以扫描并抢救其中的文件？",
+          "「\(name)」已損毀無法正常讀取，是否跳轉至修復頁面以掃描並搶救其中的檔案？",
+          "“\(name)” is damaged and cannot be opened normally. Jump to the repair tool to scan and recover files?",
+          "「\(name)」は破損しているため正常に開けません。復元画面に移動して救出可能な項目をスキャンしますか？")
+    }
+    func recoverZipDamagedStatusNotice(_ name: String) -> String {
+        t("“\(name)”已受损（可随时通过菜单“修复损坏的 ZIP 归档…”进行恢复）",
+          "「\(name)」已損毀（可隨時透過選單「修復損毀的 ZIP 封存檔…」進行復原）",
+          "“\(name)” is damaged (can be recovered anytime via menu 'Repair Damaged ZIP Archive…')",
+          "「\(name)」は破損しています（メニューの「破損した ZIP アーカイブを復元…」からいつでも復元できます）")
     }
 }

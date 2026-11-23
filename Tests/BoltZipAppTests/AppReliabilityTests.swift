@@ -121,4 +121,25 @@ final class AppReliabilityTests: XCTestCase {
         XCTAssertTrue(ArchiveFormat.creatableFormats.contains(.gz))
         XCTAssertTrue(ArchiveFormat.creatableFormats.contains(.xz))
     }
+
+    func testZipLikeDetectionAndDamagedZipRecoveryPromptTrigger() {
+        XCTAssertTrue(ArchiveFormat.isZipLike(url: URL(fileURLWithPath: "test.zip")))
+        XCTAssertTrue(ArchiveFormat.isZipLike(url: URL(fileURLWithPath: "test.jar")))
+        XCTAssertTrue(ArchiveFormat.isZipLike(url: URL(fileURLWithPath: "test.apk")))
+        XCTAssertTrue(ArchiveFormat.isZipLike(url: URL(fileURLWithPath: "test.cbz")))
+        XCTAssertTrue(ArchiveFormat.isZipLike(url: URL(fileURLWithPath: "test.epub")))
+        XCTAssertTrue(ArchiveFormat.isZipLike(url: URL(fileURLWithPath: "test.z01")))
+        XCTAssertFalse(ArchiveFormat.isZipLike(url: URL(fileURLWithPath: "test.tar")))
+        XCTAssertFalse(ArchiveFormat.isZipLike(url: URL(fileURLWithPath: "test.7z")))
+        XCTAssertFalse(ArchiveFormat.isZipLike(url: URL(fileURLWithPath: "test.rar")))
+
+        for lang in [AppLanguage.zhHans, .zhHant, .en, .ja] {
+            let l = L10n(language: lang)
+            XCTAssertFalse(l.recoverZipMenuTitle.isEmpty)
+            XCTAssertFalse(l.recoverZipDamagedTitle.isEmpty)
+            XCTAssertFalse(l.recoverZipOfferBtn.isEmpty)
+            XCTAssertTrue(l.recoverZipInspectFailedOffer("bad.zip").contains("bad.zip"))
+            XCTAssertTrue(l.recoverZipDamagedStatusNotice("bad.zip").contains("bad.zip"))
+        }
+    }
 }

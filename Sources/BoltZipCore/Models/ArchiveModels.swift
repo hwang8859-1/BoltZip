@@ -133,6 +133,22 @@ public enum ArchiveFormat: String, CaseIterable, Identifiable, Codable, Sendable
             return nil
         }
     }
+
+    public static func isZipLike(url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        let zipExts: Set<String> = ["zip", "zipx", "jar", "war", "ear", "apk", "ipa", "cbz", "epub", "whl"]
+        if zipExts.contains(ext) { return true }
+        if ext.count >= 2, ext.hasPrefix("z"), Int(ext.dropFirst()) != nil { return true }
+        if detect(from: url) == .zip { return true }
+        if let handle = try? FileHandle(forReadingFrom: url) {
+            defer { try? handle.close() }
+            if let head = try? handle.read(upToCount: 4),
+               head.starts(with: [0x50, 0x4b, 0x03, 0x04]) || head.starts(with: [0x50, 0x4b, 0x05, 0x06]) || head.starts(with: [0x50, 0x4b, 0x07, 0x08]) {
+                return true
+            }
+        }
+        return false
+    }
 }
 
 public enum CompressionAlgorithm: String, CaseIterable, Identifiable, Codable, Sendable {

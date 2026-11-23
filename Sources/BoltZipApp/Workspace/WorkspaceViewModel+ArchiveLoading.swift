@@ -93,7 +93,7 @@ extension WorkspaceViewModel {
                     }
                     if let prompt = purpose.prompt(for: error) {
                         self.activeSheet = prompt
-                    } else if !isNestedOpening, ArchiveFormat.detect(from: url) == .zip, Self.isRecoverableZipOpenFailure(error) {
+                    } else if !isNestedOpening, ArchiveFormat.isZipLike(url: url), Self.isRecoverableZipOpenFailure(error) {
                         self.pendingRecoverZipURL = url
                     } else {
                         self.alertMessage = self.l10n.operationErrorMessage(error)
@@ -104,12 +104,30 @@ extension WorkspaceViewModel {
     }
 
     private nonisolated static func isRecoverableZipOpenFailure(_ error: any Error) -> Bool {
-        switch error {
-        case BoltZipError.invalidArchive, BoltZipError.corruptedEntry:
-            return true
-        default:
+        if let bz = error as? BoltZipError {
+            switch bz {
+            case .passwordRequired, .wrongPassword, .cancelled:
+                return false
+            default:
+                return true
+            }
+        }
+        if let opErr = error as? ArchiveOperationError {
+            switch opErr {
+            case .noRecoverableZipEntries:
+                return true
+            default:
+                break
+            }
+        }
+        let ns = error as NSError
+        if ns.domain == NSCocoaErrorDomain && (ns.code == NSFileReadNoSuchFileError || ns.code == NSFileNoSuchFileError) {
             return false
         }
+        if ns.domain == NSPOSIXErrorDomain && ns.code == Int(ENOENT) {
+            return false
+        }
+        return true
     }
 
     private nonisolated static func loadArchiveContents(

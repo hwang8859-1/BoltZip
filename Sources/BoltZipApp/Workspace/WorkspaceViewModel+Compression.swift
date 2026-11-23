@@ -78,13 +78,18 @@ extension WorkspaceViewModel {
             activeSheet = .recoverZip(initialSource: sourceURL)
             return
         }
+        if let currentURL = listing?.archiveURL, ArchiveFormat.isZipLike(url: currentURL) {
+            activeSheet = .recoverZip(initialSource: currentURL)
+            return
+        }
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowedContentTypes = [.item]
         panel.allowsOtherFileTypes = true
-        panel.title = l10n.recoverZipTitle
+        panel.title = l10n.recoverZipMenuTitle
+        panel.prompt = l10n.confirm
         if panel.runModal() == .OK, let url = panel.url {
             activeSheet = .recoverZip(initialSource: url)
         }

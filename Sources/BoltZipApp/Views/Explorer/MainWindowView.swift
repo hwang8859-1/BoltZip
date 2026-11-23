@@ -128,7 +128,7 @@ struct MainWindowView: View {
             Text(l.confirmDeleteMessage(req.paths.count))
         }
         .alert(
-            l.recoverZipTitle,
+            l.recoverZipDamagedTitle,
             isPresented: Binding(
                 get: { vm.pendingRecoverZipURL != nil },
                 set: { if !$0 { vm.pendingRecoverZipURL = nil } }
@@ -136,10 +136,12 @@ struct MainWindowView: View {
             presenting: vm.pendingRecoverZipURL
         ) { url in
             Button(l.recoverZipOfferBtn) {
+                let target = url
                 vm.pendingRecoverZipURL = nil
-                vm.activeSheet = .recoverZip(initialSource: url)
+                vm.activeSheet = .recoverZip(initialSource: target)
             }
             Button(l.cancel, role: .cancel) {
+                vm.statusMessage = l.recoverZipDamagedStatusNotice(url.lastPathComponent)
                 vm.pendingRecoverZipURL = nil
             }
         } message: { url in
